@@ -10,6 +10,7 @@
 #include <linux/thread_info.h>
 
 #define SYSCALL_INTERCEPT_SECCOMP	0x1
+#define SYSCALL_INTERCEPT_USER_DISPATCH	0x2
 
 #ifdef TIF_SYSCALL_INTERCEPT
 
