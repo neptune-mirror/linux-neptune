@@ -872,7 +872,6 @@ __SYSCALL(__NR_futex_waitv, sys_futex_waitv)
 #undef __NR_syscalls
 #define __NR_syscalls 444
 
-
 /*
  * 32 bit systems traditionally used different
  * syscalls for off_t and loff_t arguments, while
