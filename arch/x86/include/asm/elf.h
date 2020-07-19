@@ -383,6 +383,7 @@ extern int arch_setup_additional_pages(struct linux_binprm *bprm,
 				       int uses_interp);
 extern int compat_arch_setup_additional_pages(struct linux_binprm *bprm,
 					      int uses_interp);
+extern bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs);
 #define compat_arch_setup_additional_pages compat_arch_setup_additional_pages
 
 /* Do not change the values. See get_align_mask() */
