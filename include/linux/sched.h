@@ -959,6 +959,8 @@ struct task_struct {
 	kuid_t				loginuid;
 	unsigned int			sessionid;
 #endif
+
+	unsigned int			syscall_intercept;
 	struct seccomp			seccomp;
 
 	/* Thread group tracking: */
