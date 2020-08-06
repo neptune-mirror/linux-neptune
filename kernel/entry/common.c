@@ -5,6 +5,8 @@
 #include <linux/livepatch.h>
 #include <linux/audit.h>
 
+#include "common.h"
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
@@ -45,6 +47,16 @@ static long syscall_trace_enter(struct pt_regs *regs, long syscall,
 				unsigned long work)
 {
 	long ret = 0;
+
+	/*
+	 * Handle Syscall User Dispatch.  This must comes first, since
+	 * the ABI here can be something that doesn't make sense for
+	 * other syscall_work features.
+	 */
+	if (work & SYSCALL_WORK_SYSCALL_USER_DISPATCH) {
+		if (do_syscall_user_dispatch(regs))
+			return -1L;
+	}
 
 	/* Handle ptrace */
 	if (work & (SYSCALL_WORK_SYSCALL_TRACE | SYSCALL_WORK_SYSCALL_EMU)) {
@@ -229,6 +241,11 @@ static inline bool report_single_step(unsigned long work)
 static void syscall_exit_work(struct pt_regs *regs, unsigned long work)
 {
 	bool step;
+
+	if (work & SYSCALL_WORK_SYSCALL_USER_DISPATCH) {
+		if (on_syscall_dispatch())
+			return;
+	}
 
 	audit_syscall_exit(regs);
 
