@@ -6,7 +6,9 @@
  */
 
 #include <linux/freezer.h>
+#include <linux/hugetlb.h>
 #include <linux/jhash.h>
+#include <linux/pagemap.h>
 #include <linux/sched/wake_q.h>
 #include <linux/spinlock.h>
 #include <linux/syscalls.h>
@@ -15,6 +17,7 @@
 
 /**
  * struct futex_waiter - List entry for a waiter
+ * @uaddr:        Memory address of userspace futex
  * @key.address:  Memory address of userspace futex
  * @key.mm:       Pointer to memory management struct of this process
  * @key:          Stores information that uniquely identify a futex
@@ -25,9 +28,11 @@
  * @index:        Index of waiter in futexv list
  */
 struct futex_waiter {
+	uintptr_t uaddr;
 	struct futex_key {
 		uintptr_t address;
 		struct mm_struct *mm;
+		unsigned long int offset;
 	} key;
 	struct list_head list;
 	unsigned int val;
@@ -125,16 +130,116 @@ static inline int bucket_get_waiters(struct futex_bucket *bucket)
 #endif
 }
 
+static u64 get_inode_sequence_number(struct inode *inode)
+{
+	static atomic64_t i_seq;
+	u64 old;
+
+	/* Does the inode already have a sequence number? */
+	old = atomic64_read(&inode->i_sequence);
+	if (likely(old))
+		return old;
+
+	for (;;) {
+		u64 new = atomic64_add_return(1, &i_seq);
+		if (WARN_ON_ONCE(!new))
+			continue;
+
+		old = atomic64_cmpxchg_relaxed(&inode->i_sequence, 0, new);
+		if (old)
+			return old;
+		return new;
+	}
+}
+
+#define FUT_OFF_INODE    1 /* We set bit 0 if key has a reference on inode */
+#define FUT_OFF_MMSHARED 2 /* We set bit 1 if key has a reference on mm */
+
+static int futex_get_shared_key(uintptr_t address, struct mm_struct *mm,
+				struct futex_key *key)
+{
+	int err;
+	struct page *page, *tail;
+	struct address_space *mapping;
+
+again:
+	err = get_user_pages_fast(address, 1, 0, &page);
+
+	if (err < 0)
+		return err;
+	else
+		err = 0;
+
+
+	tail = page;
+	page = compound_head(page);
+	mapping = READ_ONCE(page->mapping);
+
+
+	if (unlikely(!mapping)) {
+		int shmem_swizzled;
+
+		lock_page(page);
+		shmem_swizzled = PageSwapCache(page) || page->mapping;
+		unlock_page(page);
+		put_page(page);
+
+		if (shmem_swizzled)
+			goto again;
+
+		return -EFAULT;
+	}
+
+	if (PageAnon(page)) {
+
+		key->mm = mm;
+		key->address = address;
+
+		key->offset |= FUT_OFF_MMSHARED;
+
+	} else {
+		struct inode *inode;
+
+		rcu_read_lock();
+
+		if (READ_ONCE(page->mapping) != mapping) {
+			rcu_read_unlock();
+			put_page(page);
+
+			goto again;
+		}
+
+		inode = READ_ONCE(mapping->host);
+		if (!inode) {
+			rcu_read_unlock();
+			put_page(page);
+
+			goto again;
+		}
+
+		key->address = get_inode_sequence_number(inode);
+		key->mm = (struct mm_struct *) basepage_index(tail);
+		key->offset |= FUT_OFF_INODE;
+
+		rcu_read_unlock();
+	}
+
+	put_page(page);
+	return err;
+}
+
 /**
  * futex_get_bucket - Check if the user address is valid, prepare internal
  *                    data and calculate the hash
  * @uaddr:   futex user address
  * @key:     data that uniquely identifies a futex
+ * @shared:  is this a shared futex?
  *
  * Return: address of bucket on success, error code otherwise
  */
 static struct futex_bucket *futex_get_bucket(void __user *uaddr,
-					     struct futex_key *key)
+					     struct futex_key *key,
+					     bool shared)
 {
 	uintptr_t address = (uintptr_t) uaddr;
 	u32 hash_key;
@@ -145,8 +250,15 @@ static struct futex_bucket *futex_get_bucket(void __user *uaddr,
 	if (unlikely(!access_ok(address, sizeof(u32))))
 		return ERR_PTR(-EFAULT);
 
-	key->address = address;
-	key->mm = current->mm;
+	key->offset = address % PAGE_SIZE;
+	address -= key->offset;
+
+	if (!shared) {
+		key->address = address;
+		key->mm = current->mm;
+	} else {
+		futex_get_shared_key(address, current->mm, key);
+	}
 
 	/* Generate hash key for this futex using uaddr and current->mm */
 	hash_key = jhash2((u32 *) key, sizeof(*key) / sizeof(u32), 0);
@@ -275,9 +387,10 @@ static int futex_dequeue_multiple(struct futexv *futexv, unsigned int nr)
  * Return: 0 on success, error code otherwise
  */
 static int futex_enqueue(struct futexv *futexv, unsigned int nr_futexes,
-			 unsigned int *awaken)
+			 int *awaken)
 {
 	int i, ret;
+	bool shared, retry = false;
 	u32 uval, *uaddr, val;
 	struct futex_bucket *bucket;
 
@@ -285,8 +398,18 @@ retry:
 	set_current_state(TASK_INTERRUPTIBLE);
 
 	for (i = 0; i < nr_futexes; i++) {
-		uaddr = (u32 * __user) futexv->objects[i].key.address;
+		uaddr = (u32 * __user) futexv->objects[i].uaddr;
 		val = (u32) futexv->objects[i].val;
+		shared = (futexv->objects[i].flags & FUTEX_SHARED_FLAG) ? true : false;
+
+		if (shared && retry) {
+			futexv->objects[i].bucket =
+				futex_get_bucket((void *) uaddr,
+						 &futexv->objects[i].key, true);
+			if (IS_ERR(futexv->objects[i].bucket))
+				return PTR_ERR(futexv->objects[i].bucket);
+		}
+
 		bucket = futexv->objects[i].bucket;
 
 		bucket_inc_waiters(bucket);
@@ -301,24 +424,32 @@ retry:
 			__set_current_state(TASK_RUNNING);
 			*awaken = futex_dequeue_multiple(futexv, i);
 
+			if (shared) {
+				retry = true;
+				goto retry;
+			}
+
 			if (__get_user(uval, uaddr))
 				return -EFAULT;
 
 			if (*awaken >= 0)
-				return 0;
+				return 1;
 
+			retry = true;
 			goto retry;
 	        }
 
 		if (uval != val) {
 			spin_unlock(&bucket->lock);
 
+
 			bucket_dec_waiters(bucket);
 			__set_current_state(TASK_RUNNING);
 			*awaken = futex_dequeue_multiple(futexv, i);
 
-			if (*awaken >= 0)
-				return 0;
+			if (*awaken >= 0) {
+				return 1;
+			}
 
 			return -EWOULDBLOCK;
 		}
@@ -336,18 +467,17 @@ static int __futex_wait(struct futexv *futexv,
 			       struct hrtimer_sleeper *timeout)
 {
 	int ret;
-	unsigned int awaken = -1;
+
 
 	while (1) {
+		int awaken = -1;
+
 		ret = futex_enqueue(futexv, nr_futexes, &awaken);
-
-		if (ret < 0)
-			break;
-
-		if (awaken <= 0) {
-			return awaken;
+		if (ret) {
+			if (awaken >= 0)
+				return awaken;
+			return ret;
 		}
-
 
 		/* Before sleeping, check if someone was woken */
 		if (!futexv->hint && (!timeout || timeout->task))
@@ -419,6 +549,7 @@ static int futex_wait(struct futexv *futexv, unsigned int nr_futexes,
 		hrtimer_sleeper_start_expires(timeout, HRTIMER_MODE_ABS);
 	}
 
+
 	ret = __futex_wait(futexv, nr_futexes, timo ? timeout : NULL);
 
 
@@ -438,9 +569,10 @@ static int futex_wait(struct futexv *futexv, unsigned int nr_futexes,
 SYSCALL_DEFINE4(futex_wait, void __user *, uaddr, unsigned int, val,
 		unsigned int, flags, struct __kernel_timespec __user *, timo)
 {
+	bool shared = (flags & FUTEX_SHARED_FLAG) ? true : false;
 	unsigned int size = flags & FUTEX_SIZE_MASK;
-	struct hrtimer_sleeper timeout;
 	struct futex_single_waiter wait_single;
+	struct hrtimer_sleeper timeout;
 	struct futex_waiter *waiter;
 	struct futexv *futexv;
 	int ret;
@@ -452,6 +584,7 @@ SYSCALL_DEFINE4(futex_wait, void __user *, uaddr, unsigned int, val,
 	waiter = &wait_single.waiter;
 	waiter->index = 0;
 	waiter->val = val;
+	waiter->uaddr = (uintptr_t) uaddr;
 
 	INIT_LIST_HEAD(&waiter->list);
 
@@ -462,11 +595,14 @@ SYSCALL_DEFINE4(futex_wait, void __user *, uaddr, unsigned int, val,
 		return -EINVAL;
 
 	/* Get an unlocked hash bucket */
-	waiter->bucket = futex_get_bucket(uaddr, &waiter->key);
-	if (IS_ERR(waiter->bucket))
+	waiter->bucket = futex_get_bucket(uaddr, &waiter->key, shared);
+	if (IS_ERR(waiter->bucket)) {
 		return PTR_ERR(waiter->bucket);
+	}
 
 	ret = futex_wait(futexv, 1, timo, &timeout, flags);
+	if (ret > 0)
+		ret = 0;
 
 	return ret;
 }
@@ -486,8 +622,10 @@ static int futex_parse_waitv(struct futexv *futexv,
 	struct futex_waitv waitv;
 	unsigned int i;
 	struct futex_bucket *bucket;
+	bool shared;
 
 	for (i = 0; i < nr_futexes; i++) {
+
 		if (copy_from_user(&waitv, &uwaitv[i], sizeof(waitv)))
 			return -EFAULT;
 
@@ -495,8 +633,10 @@ static int futex_parse_waitv(struct futexv *futexv,
 		    (waitv.flags & FUTEX_SIZE_MASK) != FUTEX_32)
 			return -EINVAL;
 
+		shared = (waitv.flags & FUTEX_SHARED_FLAG) ? true : false;
+
 		bucket = futex_get_bucket(waitv.uaddr,
-				       &futexv->objects[i].key);
+				       &futexv->objects[i].key, shared);
 		if (IS_ERR(bucket))
 			return PTR_ERR(bucket);
 
@@ -505,6 +645,7 @@ static int futex_parse_waitv(struct futexv *futexv,
 		futexv->objects[i].flags = waitv.flags;
 		futexv->objects[i].index = i;
 		INIT_LIST_HEAD(&futexv->objects[i].list);
+		futexv->objects[i].uaddr = (uintptr_t) waitv.uaddr;
 	}
 
 	return 0;
@@ -573,6 +714,7 @@ static struct futexv *futex_get_parent(uintptr_t waiter, u8 index)
 SYSCALL_DEFINE3(futex_wake, void __user *, uaddr, unsigned int, nr_wake,
 		unsigned int, flags)
 {
+	bool shared = (flags & FUTEX_SHARED_FLAG) ? true : false;
 	unsigned int size = flags & FUTEX_SIZE_MASK;
 	struct futex_waiter waiter, *aux, *tmp;
 	struct futex_bucket *bucket;
@@ -586,7 +728,7 @@ SYSCALL_DEFINE3(futex_wake, void __user *, uaddr, unsigned int, nr_wake,
 	if (size != FUTEX_32)
 		return -EINVAL;
 
-	bucket = futex_get_bucket(uaddr, &waiter.key);
+	bucket = futex_get_bucket(uaddr, &waiter.key, shared);
 	if (IS_ERR(bucket))
 		return PTR_ERR(bucket);
 
@@ -599,7 +741,8 @@ SYSCALL_DEFINE3(futex_wake, void __user *, uaddr, unsigned int, nr_wake,
 			break;
 
 		if (waiter.key.address == aux->key.address &&
-		    waiter.key.mm == aux->key.mm) {
+		    waiter.key.mm == aux->key.mm &&
+		    waiter.key.offset == aux->key.offset) {
 			struct futexv *parent =
 				futex_get_parent((uintptr_t) aux, aux->index);
 
