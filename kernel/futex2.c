@@ -48,14 +48,25 @@ struct futex_bucket {
 	struct list_head list;
 };
 
+/**
+ * struct futexv - List of futexes to be waited
+ * @task:    Task to be awaken
+ * @hint:    Was someone on this list awaken?
+ * @objects: List of futexes
+ */
 struct futexv {
 	struct task_struct *task;
-	int hint;
+	bool hint;
 	struct futex_waiter objects[0];
 };
 
+/**
+ * struct futex_single_waiter - Wrapper for a futexv of one element
+ * @futexv: TODO
+ * @waiter: TODO
+ */
 struct futex_single_waiter {
-	struct futexv parent;
+	struct futexv futexv;
 	struct futex_waiter waiter;
 } __packed;
 
@@ -65,10 +76,10 @@ struct futex_bucket *futex_table;
 #define FUTEX2_MASK (FUTEX_SIZE_MASK | FUTEX_SHARED_FLAG | \
 		     FUTEX_CLOCK_REALTIME)
 
-// mask for sys_futex_waitv
+/* mask for sys_futex_waitv flag */
 #define FUTEXV_MASK (FUTEX_CLOCK_REALTIME)
 
-// mask for each futex in futex_waitv list
+/* mask for each futex in futex_waitv list */
 #define FUTEXV_WAITER_MASK (FUTEX_SIZE_MASK | FUTEX_SHARED_FLAG)
 
 int futex2_hashsize;
@@ -151,7 +162,7 @@ static struct futex_bucket *futex_get_bucket(void __user *uaddr,
  *
  * Check the comment at futex_get_user_val for more information.
  */
-static int futex_get_user(u32 *uval, u32 *uaddr)
+static int futex_get_user(u32 *uval, u32 __user *uaddr)
 {
 	int ret;
 
@@ -194,72 +205,10 @@ static int futex_setup_time(struct __kernel_timespec __user *timo,
 	return 0;
 }
 
-
 /**
- * futex_get_user_value - Get the value from the userspace address and compares
- *			  with the expected one. In success, leaves the function
- *			  holding the bucket lock. Else, hold no lock.
- * @bucket: hash bucket of this address
- * @uaddr:  futex's userspace address
- * @val:    expected value
- * @multiple: is this call in the wait on multiple path
- *
- * Return: 0 on success, error code otherwise
- */
-static int futex_get_user_value(struct futex_bucket *bucket, u32 __user *uaddr,
-				unsigned int val, bool multiple)
-{
-	u32 uval;
-	int ret;
-
-	/*
-	 * Get the value from user futex address.
-	 *
-	 * Since we are in a hurry, we use a spin lock and we can't sleep.
-	 * Try to get the value with page fault disabled (when enable, we might
-	 * sleep).
-	 *
-	 * If we fail, we aren't sure if the address is invalid or is just a
-	 * page fault. Then, release the lock (so we can sleep) and try to get
-	 * the value with page fault enabled. In order to trigger a page fault
-	 * handling, we just call __get_user() again.
-	 *
-	 * If get_user succeeds, this mean that the address is valid and we do
-	 * the loop again. Since we just handled the page fault, the page is
-	 * likely pinned in memory and we should be luckier this time and be
-	 * able to get the value. If we fail anyway, we will try again.
-	 *
-	 * If even with page faults enabled we get and error, this means that
-	 * the address is not valid and we return from the syscall.
-	 */
-	do {
-		spin_lock(&bucket->lock);
-
-		ret = futex_get_user(&uval, uaddr);
-
-		if (ret) {
-			spin_unlock(&bucket->lock);
-			if (multiple || __get_user(uval, uaddr))
-				return -EFAULT;
-
-		}
-	} while (ret);
-
-	if (uval != val) {
-		spin_unlock(&bucket->lock);
-		return -EWOULDBLOCK;
-	}
-
-	return 0;
-}
-
-/**
- * futex_dequeue - Remove a futex from a queue
- * @bucket: current bucket holding the futex
- * @waiter:   futex to be removed
- *
- * Return: True if futex was removed by this function, false if another wake
- *         thread removed this futex.
+ * futex_dequeue_multiple - Remove multiple futexes from hash table
+ * @futexv: list of waiters
+ * @nr:     number of futexes to be removed
  *
  * This function should be used after we found that this futex was in a queue.
  * Thus, it needs to be removed before the next step. However, someone could
@@ -267,22 +216,216 @@ static int futex_get_user_value(struct futex_bucket *bucket, u32 __user *uaddr,
  * the bucket. Check one more time if the futex is there with the bucket locked.
  * If it's there, just remove it and return true. Else, mark the removal as
  * false and do nothing.
+ *
+ * Return:
+ *  * -1 if no futex was woken during the removal
+ *  * =< 0 at least one futex was found woken, index of the last one
  */
-static bool futex_dequeue(struct futex_bucket *bucket, struct futex_waiter *waiter)
+static int futex_dequeue_multiple(struct futexv *futexv, unsigned int nr)
 {
-	bool removed = true;
+	int i, ret = -1;
 
-	spin_lock(&bucket->lock);
-	if (list_empty(&waiter->list))
-		removed = false;
-	else
-		list_del(&waiter->list);
-	spin_unlock(&bucket->lock);
+	for (i = 0; i < nr; i++) {
+		spin_lock(&futexv->objects[i].bucket->lock);
+		if (!list_empty_careful(&futexv->objects[i].list)) {
+			list_del_init_careful(&futexv->objects[i].list);
+			bucket_dec_waiters(futexv->objects[i].bucket);
+		} else {
+			ret = i;
+		}
+		spin_unlock(&futexv->objects[i].bucket->lock);
+	}
 
-	if (removed)
-		bucket_dec_waiters(bucket);
+	return ret;
+}
 
-	return removed;
+/**
+ * futex_enqueue - Check the value and enqueue a futex on a wait list
+ *
+ * @futexv:     List of futexes
+ * @nr_futexes: Number of futexes in the list
+ * @awaken:	If a futex was awaken during enqueueing, store the index here
+ *
+ * Get the value from the userspace address and compares with the expected one.
+ * In success, enqueue the futex in the correct bucket
+ *
+ * Get the value from user futex address.
+ *
+ * Since we are in a hurry, we use a spin lock and we can't sleep.
+ * Try to get the value with page fault disabled (when enable, we might
+ * sleep).
+ *
+ * If we fail, we aren't sure if the address is invalid or is just a
+ * page fault. Then, release the lock (so we can sleep) and try to get
+ * the value with page fault enabled. In order to trigger a page fault
+ * handling, we just call __get_user() again. If we sleep with enqueued
+ * futexes, we might miss a wake, so dequeue everything before sleeping.
+ *
+ * If get_user succeeds, this mean that the address is valid and we do
+ * the work again. Since we just handled the page fault, the page is
+ * likely pinned in memory and we should be luckier this time and be
+ * able to get the value. If we fail anyway, we will try again.
+ *
+ * If even with page faults enabled we get and error, this means that
+ * the address is not valid and we return from the syscall.
+ *
+ * If we got an unexpected value or need to treat a page fault and realized that
+ * a futex was awaken, we can priority this and return success.
+ *
+ * Return: 0 on success, error code otherwise
+ */
+static int futex_enqueue(struct futexv *futexv, unsigned int nr_futexes,
+			 unsigned int *awaken)
+{
+	int i, ret;
+	u32 uval, *uaddr, val;
+	struct futex_bucket *bucket;
+
+retry:
+	set_current_state(TASK_INTERRUPTIBLE);
+
+	for (i = 0; i < nr_futexes; i++) {
+		uaddr = (u32 * __user) futexv->objects[i].key.address;
+		val = (u32) futexv->objects[i].val;
+		bucket = futexv->objects[i].bucket;
+
+		bucket_inc_waiters(bucket);
+	        spin_lock(&bucket->lock);
+
+	        ret = futex_get_user(&uval, uaddr);
+
+	        if (unlikely(ret)) {
+			spin_unlock(&bucket->lock);
+
+			bucket_dec_waiters(bucket);
+			__set_current_state(TASK_RUNNING);
+			*awaken = futex_dequeue_multiple(futexv, i);
+
+			if (__get_user(uval, uaddr))
+				return -EFAULT;
+
+			if (*awaken >= 0)
+				return 0;
+
+			goto retry;
+	        }
+
+		if (uval != val) {
+			spin_unlock(&bucket->lock);
+
+			bucket_dec_waiters(bucket);
+			__set_current_state(TASK_RUNNING);
+			*awaken = futex_dequeue_multiple(futexv, i);
+
+			if (*awaken >= 0)
+				return 0;
+
+			return -EWOULDBLOCK;
+		}
+
+		list_add_tail(&futexv->objects[i].list, &bucket->list);
+		spin_unlock(&bucket->lock);
+	}
+
+	return 0;
+}
+
+
+static int __futex_wait(struct futexv *futexv,
+			       unsigned int nr_futexes,
+			       struct hrtimer_sleeper *timeout)
+{
+	int ret;
+	unsigned int awaken = -1;
+
+	while (1) {
+		ret = futex_enqueue(futexv, nr_futexes, &awaken);
+
+		if (ret < 0)
+			break;
+
+		if (awaken <= 0) {
+			return awaken;
+		}
+
+
+		/* Before sleeping, check if someone was woken */
+		if (!futexv->hint && (!timeout || timeout->task))
+			freezable_schedule();
+
+		__set_current_state(TASK_RUNNING);
+
+		/*
+		 * One of those things triggered this wake:
+		 *
+		 * * We have been removed from the bucket. futex_wake() woke
+		 *   us. We just need to dequeue return 0 to userspace.
+		 *
+		 * However, if no futex was dequeued by a futex_wake():
+		 *
+		 * * If the there's a timeout and it has expired,
+		 *   return -ETIMEDOUT.
+		 *
+		 * * If there is a signal pending, something wants to kill our
+		 *   thread, return -ERESTARTSYS.
+		 *
+		 * * If there's no signal pending, it was a spurious wake
+		 *   (scheduler gave us a change to do some work, even if we
+		 *   don't want to). We need to remove ourselves from the
+		 *   bucket and add again, to prevent losing wakeups in the
+		 *   meantime.
+		 */
+
+		ret = futex_dequeue_multiple(futexv, nr_futexes);
+
+		/* Normal wake */
+		if (ret >= 0)
+			break;
+
+		if (timeout && !timeout->task)
+			return -ETIMEDOUT;
+
+		/* signal */
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+
+		/* spurious wake, do everything again */
+	}
+
+	return ret;
+}
+
+/**
+ * futex_wait - Setup the timer and wait on a list of futexes
+ * @futexv:     List of waiters
+ * @nr_futexes: Number of waiters
+ * @timo:	Timeout
+ * @timeout:	Timeout
+ * @flags:	Timeout flags
+ *
+ * Return: error code, or a hint of one of the waiters
+ */
+static int futex_wait(struct futexv *futexv, unsigned int nr_futexes,
+		      struct __kernel_timespec __user *timo,
+		      struct hrtimer_sleeper *timeout, unsigned int flags)
+{
+	int ret;
+
+	if (timo) {
+		ret = futex_setup_time(timo, timeout, flags);
+		if (ret)
+			return ret;
+
+		hrtimer_sleeper_start_expires(timeout, HRTIMER_MODE_ABS);
+	}
+
+	ret = __futex_wait(futexv, nr_futexes, timo ? timeout : NULL);
+
+
+	if (timo)
+		hrtimer_cancel(&timeout->timer);
+
+	return ret;
 }
 
 /**
@@ -297,15 +440,20 @@ SYSCALL_DEFINE4(futex_wait, void __user *, uaddr, unsigned int, val,
 {
 	unsigned int size = flags & FUTEX_SIZE_MASK;
 	struct hrtimer_sleeper timeout;
-	struct futex_bucket *bucket;
 	struct futex_single_waiter wait_single;
 	struct futex_waiter *waiter;
+	struct futexv *futexv;
 	int ret;
 
-	wait_single.parent.task = current;
-	wait_single.parent.hint = 0;
+	futexv = &wait_single.futexv;
+	futexv->task = current;
+	futexv->hint = false;
+
 	waiter = &wait_single.waiter;
 	waiter->index = 0;
+	waiter->val = val;
+
+	INIT_LIST_HEAD(&waiter->list);
 
 	if (flags & ~FUTEX2_MASK)
 		return -EINVAL;
@@ -313,85 +461,101 @@ SYSCALL_DEFINE4(futex_wait, void __user *, uaddr, unsigned int, val,
 	if (size != FUTEX_32)
 		return -EINVAL;
 
-	if (timo) {
-		ret = futex_setup_time(timo, &timeout, flags);
-		if (ret)
-			return ret;
-	}
-
 	/* Get an unlocked hash bucket */
-	bucket = futex_get_bucket(uaddr, &waiter->key);
-	if (IS_ERR(bucket))
-		return PTR_ERR(bucket);
+	waiter->bucket = futex_get_bucket(uaddr, &waiter->key);
+	if (IS_ERR(waiter->bucket))
+		return PTR_ERR(waiter->bucket);
 
-	if (timo)
-		hrtimer_sleeper_start_expires(&timeout, HRTIMER_MODE_ABS);
-
-retry:
-	bucket_inc_waiters(bucket);
-
-	/* Compare the expected and current value, get the bucket lock */
-	ret = futex_get_user_value(bucket, uaddr, val, false);
-	if (ret) {
-		bucket_dec_waiters(bucket);
-		goto out;
-	}
-
-	/* Add the waiter to the hash table and sleep */
-	set_current_state(TASK_INTERRUPTIBLE);
-	list_add_tail(&waiter->list, &bucket->list);
-	spin_unlock(&bucket->lock);
-
-	/* Do not sleep if someone woke this futex or if it was timeouted */
-	if (!list_empty_careful(&waiter->list) && (!timo || timeout.task))
-		freezable_schedule();
-
-	__set_current_state(TASK_RUNNING);
-
-	/*
-	 * One of those things triggered this wake:
-	 *
-	 * * We have been removed from the bucket. futex_wake() woke us. We just
-	 *   need to return 0 to userspace.
-	 *
-	 * However, if we find ourselves in the bucket we must remove ourselves
-	 * from the bucket and ...
-	 *
-	 * * If the there's a timeout and it has expired, return -ETIMEDOUT.
-	 *
-	 * * If there is a signal pending, something wants to kill our thread.
-	 *   Return -ERESTARTSYS.
-	 *
-	 * * If there's no signal pending, it was a spurious wake (scheduler
-	 *   gave us a change to do some work, even if we don't want to). We
-	 *   need to remove ourselves from the bucket and add again, to prevent
-	 *   losing wakeups in the meantime.
-	 */
-
-	/* Normal wake */
-	if (list_empty_careful(&waiter->list))
-		goto out;
-
-	if (!futex_dequeue(bucket, waiter))
-		goto out;
-
-	/* Timeout */
-	if (timo && !timeout.task)
-		return -ETIMEDOUT;
-
-	/* Spurious wakeup */
-	if (!signal_pending(current))
-		goto retry;
-
-	/* Some signal is pending */
-	ret = -ERESTARTSYS;
-out:
-	if (timo)
-		hrtimer_cancel(&timeout.timer);
+	ret = futex_wait(futexv, 1, timo, &timeout, flags);
 
 	return ret;
 }
 
+/**
+ * futex_parse_waitv - Parse a waitv array from userspace
+ * @futexv:	list of waiters
+ * @uwaitv:     userspace list
+ * @nr_futexes: number of waiters in the list
+ *
+ * Return: Error code on failure, pointer to a prepared futexv otherwise
+ */
+static int futex_parse_waitv(struct futexv *futexv,
+			     struct futex_waitv __user *uwaitv,
+			     unsigned int nr_futexes)
+{
+	struct futex_waitv waitv;
+	unsigned int i;
+	struct futex_bucket *bucket;
+
+	for (i = 0; i < nr_futexes; i++) {
+		if (copy_from_user(&waitv, &uwaitv[i], sizeof(waitv)))
+			return -EFAULT;
+
+		if ((waitv.flags & ~FUTEXV_WAITER_MASK) ||
+		    (waitv.flags & FUTEX_SIZE_MASK) != FUTEX_32)
+			return -EINVAL;
+
+		bucket = futex_get_bucket(waitv.uaddr,
+				       &futexv->objects[i].key);
+		if (IS_ERR(bucket))
+			return PTR_ERR(bucket);
+
+		futexv->objects[i].bucket = bucket;
+		futexv->objects[i].val = waitv.val;
+		futexv->objects[i].flags = waitv.flags;
+		futexv->objects[i].index = i;
+		INIT_LIST_HEAD(&futexv->objects[i].list);
+	}
+
+	return 0;
+}
+
+/**
+ * sys_futex_waitv - function
+ * @waiters:    TODO
+ * @nr_futexes: TODO
+ * @flags:      TODO
+ * @timo:	TODO
+ */
+SYSCALL_DEFINE4(futex_waitv, struct futex_waitv __user *, waiters,
+		unsigned int, nr_futexes, unsigned int, flags,
+		struct __kernel_timespec __user *, timo)
+{
+	struct hrtimer_sleeper timeout;
+	struct futexv *futexv;
+	int ret;
+
+	if (flags & ~FUTEXV_MASK)
+		return -EINVAL;
+
+	if (!nr_futexes || nr_futexes > FUTEX_WAITV_MAX || !waiters)
+		return -EINVAL;
+
+	futexv = kmalloc(sizeof(struct futexv) +
+			 (sizeof(struct futex_waiter) * nr_futexes),
+			 GFP_KERNEL);
+	if (!futexv)
+		return -ENOMEM;
+
+	futexv->hint = false;
+	futexv->task = current;
+
+	ret = futex_parse_waitv(futexv, waiters, nr_futexes);
+	if (!ret)
+		ret = futex_wait(futexv, nr_futexes, timo, &timeout, flags);
+
+	kfree(futexv);
+
+	return ret;
+}
+
+/**
+ * futex_get_parent - Get parent
+ * @waiter: TODO
+ * @index: TODO
+ *
+ * Return: TODO
+ */
 static struct futexv *futex_get_parent(uintptr_t waiter, u8 index)
 {
 	uintptr_t parent = waiter - sizeof(struct futexv)
@@ -439,7 +603,7 @@ SYSCALL_DEFINE3(futex_wake, void __user *, uaddr, unsigned int, nr_wake,
 			struct futexv *parent =
 				futex_get_parent((uintptr_t) aux, aux->index);
 
-			parent->hint = 1;
+			parent->hint = true;
 			task = parent->task;
 			get_task_struct(task);
 			list_del_init_careful(&aux->list);
