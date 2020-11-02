@@ -1599,13 +1599,13 @@ futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 
 	ret = get_futex_key(uaddr, flags & FLAGS_SHARED, &key, FUTEX_READ);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out;
 
 	hb = hash_futex(&key);
 
 	/* Make sure we really have tasks to wakeup */
 	if (!hb_waiters_pending(hb))
-		return ret;
+		goto out;
 
 	spin_lock(&hb->lock);
 
@@ -1628,6 +1628,7 @@ futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 
 	spin_unlock(&hb->lock);
 	wake_up_q(&wake_q);
+out:
 	return ret;
 }
 
@@ -1694,10 +1695,10 @@ futex_wake_op(u32 __user *uaddr1, unsigned int flags, u32 __user *uaddr2,
 retry:
 	ret = get_futex_key(uaddr1, flags & FLAGS_SHARED, &key1, FUTEX_READ);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out;
 	ret = get_futex_key(uaddr2, flags & FLAGS_SHARED, &key2, FUTEX_WRITE);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out;
 
 	hb1 = hash_futex(&key1);
 	hb2 = hash_futex(&key2);
@@ -1715,13 +1716,13 @@ retry_private:
 			 * an MMU, but we might get them from range checking
 			 */
 			ret = op_ret;
-			return ret;
+			goto out;
 		}
 
 		if (op_ret == -EFAULT) {
 			ret = fault_in_user_writeable(uaddr2);
 			if (ret)
-				return ret;
+				goto out;
 		}
 
 		if (!(flags & FLAGS_SHARED)) {
@@ -1764,6 +1765,7 @@ retry_private:
 out_unlock:
 	double_unlock_hb(hb1, hb2);
 	wake_up_q(&wake_q);
+out:
 	return ret;
 }
 
@@ -1970,18 +1972,20 @@ static int futex_requeue(u32 __user *uaddr1, unsigned int flags,
 retry:
 	ret = get_futex_key(uaddr1, flags & FLAGS_SHARED, &key1, FUTEX_READ);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out;
 	ret = get_futex_key(uaddr2, flags & FLAGS_SHARED, &key2,
 			    requeue_pi ? FUTEX_WRITE : FUTEX_READ);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out;
 
 	/*
 	 * The check above which compares uaddrs is not sufficient for
 	 * shared futexes. We need to compare the keys:
 	 */
-	if (requeue_pi && match_futex(&key1, &key2))
-		return -EINVAL;
+	if (requeue_pi && match_futex(&key1, &key2)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	hb1 = hash_futex(&key1);
 	hb2 = hash_futex(&key2);
@@ -2001,7 +2005,7 @@ retry_private:
 
 			ret = get_user(curval, uaddr1);
 			if (ret)
-				return ret;
+				goto out;
 
 			if (!(flags & FLAGS_SHARED))
 				goto retry_private;
@@ -2067,7 +2071,7 @@ retry_private:
 			ret = fault_in_user_writeable(uaddr2);
 			if (!ret)
 				goto retry;
-			return ret;
+			goto out;
 		case -EBUSY:
 		case -EAGAIN:
 			/*
@@ -2186,6 +2190,8 @@ out_unlock:
 	double_unlock_hb(hb1, hb2);
 	wake_up_q(&wake_q);
 	hb_waiters_dec(hb2);
+
+out:
 	return ret ? ret : task_count;
 }
 
@@ -2547,6 +2553,7 @@ static int fixup_owner(u32 __user *uaddr, struct futex_q *q, int locked)
 		if (q->pi_state->owner != current)
 			return fixup_pi_state_owner(uaddr, q, current);
 		return 1;
+
 	}
 
 	/*
@@ -2566,6 +2573,7 @@ static int fixup_owner(u32 __user *uaddr, struct futex_q *q, int locked)
 	 */
 	if (WARN_ON_ONCE(rt_mutex_owner(&q->pi_state->pi_mutex) == current))
 		return fixup_pi_state_owner(uaddr, q, current);
+
 
 	return 0;
 }
@@ -2664,7 +2672,7 @@ retry_private:
 
 		ret = get_user(uval, uaddr);
 		if (ret)
-			return ret;
+			goto out;
 
 		if (!(flags & FLAGS_SHARED))
 			goto retry_private;
@@ -2677,6 +2685,7 @@ retry_private:
 		ret = -EWOULDBLOCK;
 	}
 
+out:
 	return ret;
 }
 
