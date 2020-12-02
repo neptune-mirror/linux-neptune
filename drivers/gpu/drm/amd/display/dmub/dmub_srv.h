@@ -88,9 +88,9 @@ enum dmub_asic {
 	DMUB_ASIC_NONE = 0,
 	DMUB_ASIC_DCN20,
 	DMUB_ASIC_DCN21,
-#ifdef CONFIG_DRM_AMD_DC_DCN3_0
 	DMUB_ASIC_DCN30,
-#endif
+	DMUB_ASIC_DCN301,
+	DMUB_ASIC_DCN302,
 	DMUB_ASIC_MAX,
 };
 
@@ -265,8 +265,12 @@ struct dmub_srv_hw_funcs {
 	bool (*is_hw_init)(struct dmub_srv *dmub);
 
 	bool (*is_phy_init)(struct dmub_srv *dmub);
+	void (*enable_dmub_boot_options)(struct dmub_srv *dmub);
 
-	bool (*is_auto_load_done)(struct dmub_srv *dmub);
+	void (*skip_dmub_panel_power_sequence)(struct dmub_srv *dmub, bool skip);
+
+	union dmub_fw_boot_status (*get_fw_status)(struct dmub_srv *dmub);
+
 
 	void (*set_gpint)(struct dmub_srv *dmub,
 			  union dmub_gpint_data_register reg);
@@ -309,6 +313,7 @@ struct dmub_srv_hw_params {
 	uint64_t fb_offset;
 	uint32_t psp_version;
 	bool load_inst_const;
+	bool skip_panel_power_sequence;
 };
 
 /**
@@ -589,6 +594,19 @@ enum dmub_status dmub_srv_get_gpint_response(struct dmub_srv *dmub,
  * Can be called after software initialization.
  */
 void dmub_flush_buffer_mem(const struct dmub_fb *fb);
+
+/**
+ * dmub_srv_get_fw_boot_status() - Returns the DMUB boot status bits.
+ *
+ * @dmub: the dmub service
+ * @status: out pointer for firmware status
+ *
+ * Return:
+ *   DMUB_STATUS_OK - success
+ *   DMUB_STATUS_INVALID - unspecified error, unsupported
+ */
+enum dmub_status dmub_srv_get_fw_boot_status(struct dmub_srv *dmub,
+					     union dmub_fw_boot_status *status);
 
 #if defined(__cplusplus)
 }

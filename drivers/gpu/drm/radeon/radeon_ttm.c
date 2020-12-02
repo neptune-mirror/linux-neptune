@@ -52,6 +52,7 @@
 
 #include "radeon_reg.h"
 #include "radeon.h"
+#include "radeon_ttm.h"
 
 static int radeon_ttm_debugfs_init(struct radeon_device *rdev);
 static void radeon_ttm_debugfs_fini(struct radeon_device *rdev);
@@ -590,11 +591,10 @@ static void radeon_ttm_backend_destroy(struct ttm_bo_device *bdev, struct ttm_tt
 static struct ttm_tt *radeon_ttm_tt_create(struct ttm_buffer_object *bo,
 					   uint32_t page_flags)
 {
-	struct radeon_device *rdev;
 	struct radeon_ttm_tt *gtt;
-
-	rdev = radeon_get_rdev(bo->bdev);
 #if IS_ENABLED(CONFIG_AGP)
+	struct radeon_device *rdev = radeon_get_rdev(bo->bdev);
+
 	if (rdev->flags & RADEON_IS_AGP) {
 		return ttm_agp_tt_create(bo, rdev->ddev->agp->bridge,
 					 page_flags);

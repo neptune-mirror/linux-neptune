@@ -170,7 +170,7 @@ err0_out:
 	return -ENOMEM;
 }
 
-/**
+/*
  * This interface just for getting uclk ultimate freq and should't introduce
  * other likewise function result in overmuch callback.
  */
@@ -656,7 +656,7 @@ static int renoir_get_power(struct smu_context *smu, uint32_t *value)
 	return 0;
 }
 
-/**
+/*
  * This interface get dpm clock table for dc
  */
 static int renoir_get_dpm_clock_table(struct smu_context *smu, struct dpm_clocks *clock_table)
@@ -1136,6 +1136,12 @@ static ssize_t renoir_get_gpu_metrics(struct smu_context *smu,
 	return sizeof(struct gpu_metrics_v2_0);
 }
 
+static int renoir_gfx_state_change_set(struct smu_context *smu, uint32_t state)
+{
+
+	return smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_GpuChangeState, state, NULL);
+}
+
 static const struct pptable_funcs renoir_ppt_funcs = {
 	.set_power_state = NULL,
 	.print_clk_levels = renoir_print_clk_levels,
@@ -1171,6 +1177,7 @@ static const struct pptable_funcs renoir_ppt_funcs = {
 	.get_pp_feature_mask = smu_cmn_get_pp_feature_mask,
 	.set_pp_feature_mask = smu_cmn_set_pp_feature_mask,
 	.get_gpu_metrics = renoir_get_gpu_metrics,
+	.gfx_state_change_set = renoir_gfx_state_change_set,
 };
 
 void renoir_set_ppt_funcs(struct smu_context *smu)
