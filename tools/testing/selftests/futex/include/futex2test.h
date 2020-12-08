@@ -27,10 +27,18 @@
 #ifndef FUTEX_32
 #define FUTEX_32	2
 #endif
-#ifdef __x86_64__
-# ifndef FUTEX_64
-#  define FUTEX_64      3
-# endif
+
+#ifndef FUTEX_SHARED_FLAG
+#define FUTEX_SHARED_FLAG 8
+#endif
+
+#ifndef FUTEX_WAITV_MAX
+#define FUTEX_WAITV_MAX 128
+struct futex_waitv {
+	void *uaddr;
+	unsigned int val;
+	unsigned int flags;
+};
 #endif
 
 /*
@@ -74,4 +82,13 @@ static inline int futex2_wait(volatile void *uaddr, unsigned long val,
 static inline int futex2_wake(volatile void *uaddr, unsigned int nr, unsigned long flags)
 {
 	return syscall(__NR_futex_wake, uaddr, nr, flags);
+}
+
+/*
+ * wait for uaddr if (*uaddr == val)
+ */
+static inline int futex2_waitv(volatile struct futex_waitv *waiters, unsigned long nr_waiters,
+			      unsigned long flags, struct timespec64 *timo)
+{
+	return syscall(__NR_futex_waitv, waiters, nr_waiters, flags, timo);
 }
