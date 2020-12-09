@@ -64,6 +64,7 @@
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
 #include <linux/io_uring.h>
+#include <linux/syscall_intercept.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1301,6 +1302,13 @@ int begin_new_exec(struct linux_binprm * bprm)
 					PF_NOFREEZE | PF_NO_SETAFFINITY);
 	flush_thread();
 	me->personality &= ~bprm->per_clear;
+
+	/*
+	 * Prevent Syscall User Dispatch from crossing application
+	 * boundaries.  sighand is already unshared, so it is safe to
+	 * use the unlocked version here.
+	 */
+	__clear_tsk_syscall_intercept(me, SYSCALL_INTERCEPT_USER_DISPATCH);
 
 	/*
 	 * We have to apply CLOEXEC before we change whether the process is
