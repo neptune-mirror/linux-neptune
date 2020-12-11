@@ -227,6 +227,7 @@ struct smu_bios_boot_up_values
 	uint32_t			content_revision;
 	uint32_t			fclk;
 	uint32_t			lclk;
+	uint32_t			firmware_caps;
 };
 
 enum smu_table_id
@@ -613,6 +614,8 @@ typedef enum {
 	METRICS_TEMPERATURE_VRMEM,
 	METRICS_THROTTLER_STATUS,
 	METRICS_CURR_FANSPEED,
+	METRICS_VOLTAGE_VDDSOC,
+	METRICS_VOLTAGE_VDDGFX,
 } MetricsMember_t;
 
 enum smu_cmn2asic_mapping_type {
