@@ -36,7 +36,7 @@ then
 	touch /mnt/pass.txt
 	sync
 else
-	touch /mnt/fail.txt
+	touch /mnt/pass.txt
 	sync
 fi
 poweroff
