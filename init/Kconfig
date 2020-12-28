@@ -1525,7 +1525,7 @@ config FUTEX
 config FUTEX2
 	bool "Enable futex2 support" if EXPERT
 	depends on FUTEX
-	default n
+	default y
 	help
 	  Experimental support for futex2 interface.
 
