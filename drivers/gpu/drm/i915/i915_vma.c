@@ -314,8 +314,10 @@ static void __vma_release(struct dma_fence_work *work)
 {
 	struct i915_vma_work *vw = container_of(work, typeof(*vw), base);
 
-	if (vw->pinned)
+	if (vw->pinned) {
 		__i915_gem_object_unpin_pages(vw->pinned);
+		i915_gem_object_put(vw->pinned);
+	}
 
 	i915_vm_free_pt_stash(vw->vm, &vw->stash);
 	i915_vm_put(vw->vm);
@@ -431,7 +433,7 @@ int i915_vma_bind(struct i915_vma *vma,
 
 		if (vma->obj) {
 			__i915_gem_object_pin_pages(vma->obj);
-			work->pinned = vma->obj;
+			work->pinned = i915_gem_object_get(vma->obj);
 		}
 	} else {
 		vma->ops->bind_vma(vma->vm, NULL, vma, cache_level, bind_flags);
@@ -892,9 +894,11 @@ int i915_vma_pin_ww(struct i915_vma *vma, struct i915_gem_ww_ctx *ww,
 
 		/* Allocate enough page directories to used PTE */
 		if (vma->vm->allocate_va_range) {
-			i915_vm_alloc_pt_stash(vma->vm,
-					       &work->stash,
-					       vma->size);
+			err = i915_vm_alloc_pt_stash(vma->vm,
+						     &work->stash,
+						     vma->size);
+			if (err)
+				goto err_fence;
 
 			err = i915_vm_pin_pt_stash(vma->vm,
 						   &work->stash);
