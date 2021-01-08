@@ -28,6 +28,10 @@ if [ $min == "not_ok" ]; then
 echo "Interception overhead greater than 10%" > /mnt/fail.txt
 fi
 
+### Perf benchmark 
+apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
+cd /mnt/ && make -C tools/perf/ TARGETS=perf
+
 # Parse result file for fail value
 grep -q "fail:[1-9]" /mnt/kernel_results.log
 ret=$?
