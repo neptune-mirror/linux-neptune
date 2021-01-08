@@ -20,7 +20,7 @@ echo -e "\t\t\t\t Build Perf benchmark"
 echo "========================================================================" 
 apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
 apt-get install -y flex bison build-essential
-cd /mnt && make -C tools/perf -f tests/make
+# cd /mnt && make -C tools/perf -f tests/make
 cd /mnt/tools/perf/ && make
 
 echo -e "\t\t\t\t Completed perf benchmark build" 
