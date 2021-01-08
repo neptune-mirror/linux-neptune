@@ -15,6 +15,16 @@ echo -e "\t\t\t\t Starting syscall_user_dispatch:sud_benchmark Tests"
 ./sud_benchmark 
 echo -e "\t\t\t\t Completed syscall_user_dispatch:sud_benchmark Tests"
 echo "========================================================================" 
+
+echo -e "\t\t\t\t Build Perf benchmark"
+echo "========================================================================" 
+apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
+apt-get install -y flex bison build-essential
+cd /mnt && make -C tools/perf -f tests/make
+cd /mnt/tools/perf/ && make
+
+echo -e "\t\t\t\t Completed perf benchmark build" 
+echo "========================================================================" 
 }
 
 start_test 2>&1 | tee -a /mnt/kernel_results.log
@@ -28,9 +38,6 @@ if [ $min == "not_ok" ]; then
 echo "Interception overhead greater than 10%" > /mnt/fail.txt
 fi
 
-### Perf benchmark 
-apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
-cd /mnt/ && make -C tools/perf/ TARGETS=perf
 
 # Parse result file for fail value
 grep -q "fail:[1-9]" /mnt/kernel_results.log
