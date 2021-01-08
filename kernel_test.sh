@@ -18,9 +18,13 @@ echo "========================================================================"
 
 echo -e "\t\t\t\t Build Perf benchmark"
 echo "========================================================================" 
+cd /mnt
+make headers_install INSTALL_HDR_PATH=/usr
+echo "grep FUTEX_32"
+grep FUTEX_32 /usr/include/linux/futex.h
 apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
-apt-get install -y flex bison build-essential
-cd /mnt && make -C tools/perf -f tests/make
+apt-get update && apt-get install -y flex bison build-essential libiberty-dev libbabeltrace-ctf-dev libperl-dev libslang2-dev libssl-dev systemtap-sdt-dev libdw-dev
+# cd /mnt && make -C tools/perf -f tests/make
 cd /mnt/tools/perf/ && make
 
 echo -e "\t\t\t\t Completed perf benchmark build" 
