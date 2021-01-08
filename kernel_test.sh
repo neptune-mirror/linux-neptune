@@ -18,6 +18,8 @@ echo "========================================================================"
 
 echo -e "\t\t\t\t Build Perf benchmark"
 echo "========================================================================" 
+cd /mnt/
+make headers_install INSTALL_HDR_PATH=/usr
 apt-get update && apt-get install  elfutils libunwind-dev binutils numactl libaudit-dev coreutils libelf-dev libzstd-dev libcap-dev -y
 apt-get install -y flex bison build-essential
 cd /mnt && make -C tools/perf -f tests/make
