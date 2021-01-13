@@ -4,6 +4,9 @@
 #include <linux/entry-common.h>
 #include <linux/livepatch.h>
 #include <linux/audit.h>
+#include <linux/syscall_intercept.h>
+
+#include "common.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
@@ -41,6 +44,26 @@ static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 	}
 }
 
+static inline long do_syscall_intercept(struct pt_regs *regs)
+{
+	int sysint_work = READ_ONCE(current->syscall_intercept);
+	int ret;
+
+	if (sysint_work & SYSCALL_INTERCEPT_USER_DISPATCH) {
+		ret = do_syscall_user_dispatch(regs);
+		if (ret == -1L)
+			return ret;
+	}
+
+	if (sysint_work & SYSCALL_INTERCEPT_SECCOMP) {
+		ret = __secure_computing(NULL);
+		if (ret == -1L)
+			return ret;
+	}
+
+	return 0;
+}
+
 static long syscall_trace_enter(struct pt_regs *regs, long syscall,
 				unsigned long ti_work)
 {
@@ -53,9 +76,12 @@ static long syscall_trace_enter(struct pt_regs *regs, long syscall,
 			return -1L;
 	}
 
-	/* Do seccomp after ptrace, to catch any tracer changes. */
-	if (ti_work & _TIF_SECCOMP) {
-		ret = __secure_computing(NULL);
+	/*
+	 * Do syscall interception like seccomp after ptrace, to catch
+	 * any tracer changes.
+	 */
+	if (ti_work & _TIF_SYSCALL_INTERCEPT) {
+		ret = do_syscall_intercept(regs);
 		if (ret == -1L)
 			return ret;
 	}
