@@ -1,0 +1,14 @@
+amd-staging-drm-next:
+    ed94c622f91453aaca80029b0afdd2551a12e777 ("drm/amdgpu: fix vbios reservation handling on SR-IOV")
+cirrus:
+    9842d296ab8600def4902227d44b3f5d3f688b1b ("ASoC: cs35l36: Fix CS35L36 Makefile")
+futex2:
+    433b3f9bb60d8284073557f47ec21aa0c3e3fcca ("perf bench: Add futex2 benchmark tests")
+futex-wait-multiple:
+    b870d05547a8c41b20507770e49e588699bef79c ("futex: Change WAIT_MULTIPLE opcode to 31")
+mm-soft-dirty-file:
+    66db1255e435a751056189f82522b7f7539bafb3 ("mm: Support soft dirty flag read with reset.")
+setup-gitlabci:
+    344346144c15776b5a6307a1c0b842b141ba0213 ("GitlabCI: kernel_test.sh: Add futex2 perf tests")
+syscall-user-dispatch:
+    a8aab9e015c256205564d907b59e568e0fc0e4b8 ("doc: Document Syscall User Dispatch")
