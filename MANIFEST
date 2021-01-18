@@ -1,0 +1,7 @@
+origin/features/setup-gitlabci 344346144c15 GitlabCI: kernel_test.sh: Add futex2 perf tests
+origin/features/futex2 433b3f9bb60d perf bench: Add futex2 benchmark tests
+origin/features/mm-soft-dirty-file 66db1255e435 mm: Support soft dirty flag read with reset.
+origin/features/futex-wait-multiple b870d05547a8 futex: Change WAIT_MULTIPLE opcode to 31
+origin/features/syscall-user-dispatch a8aab9e015c2 doc: Document Syscall User Dispatch
+origin/features/amd-staging-drm-next bcc871bab81e Backmerge Linux v5.10-rc6 into merge/amd-staging-drm-next
+origin/features/cirrus 9842d296ab86 ASoC: cs35l36: Fix CS35L36 Makefile
