@@ -49,7 +49,7 @@
 #include <linux/cgroup.h>
 #include <linux/security.h>
 #include <linux/hugetlb.h>
-#include <linux/seccomp.h>
+#include <linux/syscall_intercept.h>
 #include <linux/swap.h>
 #include <linux/syscalls.h>
 #include <linux/jiffies.h>
@@ -900,6 +900,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	 * the usage counts on the error path calling free_task.
 	 */
 	tsk->seccomp.filter = NULL;
+	tsk->syscall_intercept = 0;
 #endif
 
 	setup_thread_stack(tsk, orig);
@@ -1623,9 +1624,14 @@ static void copy_seccomp(struct task_struct *p)
 	 * If the parent gained a seccomp mode after copying thread
 	 * flags and between before we held the sighand lock, we have
 	 * to manually enable the seccomp thread flag here.
+	 *
+	 * In addition current sighand lock is asserted, so it is safe
+	 * to use the unlocked version of set_tsk_syscall_intercept.
 	 */
 	if (p->seccomp.mode != SECCOMP_MODE_DISABLED)
-		set_tsk_thread_flag(p, TIF_SECCOMP);
+		__set_tsk_syscall_intercept(p, SYSCALL_INTERCEPT_SECCOMP);
+	else
+		__clear_tsk_syscall_intercept(p, SYSCALL_INTERCEPT_SECCOMP);
 #endif
 }
 

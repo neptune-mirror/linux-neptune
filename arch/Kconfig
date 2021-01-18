@@ -514,6 +514,27 @@ config SECCOMP_FILTER
 
 	  See Documentation/userspace-api/seccomp_filter.rst for details.
 
+config HAVE_ARCH_SYSCALL_USER_DISPATCH
+	bool
+	help
+	  An arch should select this symbol if it provides all of these things:
+	  - TIF_SYSCALL_INTERCEPT
+	  - syscall_get_arch
+	  - syscall_rollback
+	  - syscall_get_nr
+	  - SIGSYS siginfo_t support
+	  - arch_syscall_is_vdso_sigreturn
+
+config SYSCALL_USER_DISPATCH
+	bool "Support syscall redirection to userspace dispatcher"
+	depends on HAVE_ARCH_SYSCALL_USER_DISPATCH
+	help
+	  Enable tasks to ask the kernel to redirect syscalls not
+	  issued from a predefined dispatcher back to userspace,
+	  depending on a userspace memory selector.
+
+	  This option is useful to optimize games running over Wine.
+
 config HAVE_ARCH_STACKLEAK
 	bool
 	help
