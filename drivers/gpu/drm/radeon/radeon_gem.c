@@ -34,6 +34,7 @@
 #include <drm/radeon_drm.h>
 
 #include "radeon.h"
+#include "radeon_prime.h"
 
 void radeon_gem_object_free(struct drm_gem_object *gobj)
 {
