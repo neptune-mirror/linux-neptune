@@ -20,6 +20,24 @@
 #include <linux/atomic.h>
 #include <asm/seccomp.h>
 
+/*
+ * Some transitional defines to avoid migrating every architecture code
+ * at once.
+ */
+
+#if defined(TIF_SECCOMP) && defined(TIF_SYSCALL_INTERCEPT)
+# error "TIF_SYSCALL_INTERCEPT and TIF_SECCOMP can't be defined at the same time"
+#endif
+
+/*
+ * If the arch has not transitioned to TIF_SYSCALL_INTERCEPT, this let
+ * seccomp work with these architectures, as long as no other syscall
+ * intercept features are meant to be supported.
+ */
+#ifdef TIF_SECCOMP
+# define TIF_SYSCALL_INTERCEPT TIF_SECCOMP
+#endif
+
 struct seccomp_filter;
 /**
  * struct seccomp - the state of a seccomp'ed process
@@ -42,7 +60,7 @@ struct seccomp {
 extern int __secure_computing(const struct seccomp_data *sd);
 static inline int secure_computing(void)
 {
-	if (unlikely(test_thread_flag(TIF_SECCOMP)))
+	if (unlikely(test_thread_flag(TIF_SYSCALL_INTERCEPT)))
 		return  __secure_computing(NULL);
 	return 0;
 }
