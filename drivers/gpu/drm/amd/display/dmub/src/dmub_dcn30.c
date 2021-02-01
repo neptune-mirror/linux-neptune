@@ -26,6 +26,7 @@
 #include "../dmub_srv.h"
 #include "dmub_reg.h"
 #include "dmub_dcn20.h"
+#include "dmub_dcn30.h"
 
 #include "sienna_cichlid_ip_offset.h"
 #include "dcn/dcn_3_0_0_offset.h"
@@ -187,9 +188,4 @@ void dmub_dcn30_setup_windows(struct dmub_srv *dmub,
 	REG_SET_2(DMCUB_REGION3_CW6_TOP_ADDRESS, 0,
 		  DMCUB_REGION3_CW6_TOP_ADDRESS, cw6->region.top,
 		  DMCUB_REGION3_CW6_ENABLE, 1);
-}
-
-bool dmub_dcn30_is_auto_load_done(struct dmub_srv *dmub)
-{
-	return (REG_READ(DMCUB_SCRATCH0) > 0);
 }
