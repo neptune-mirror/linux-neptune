@@ -41,6 +41,46 @@
 #define FUTEX_CMP_REQUEUE_PI_PRIVATE	(FUTEX_CMP_REQUEUE_PI | \
 					 FUTEX_PRIVATE_FLAG)
 
+/* Size argument to futex2 syscall */
+#define FUTEX_8		0
+#define FUTEX_16	1
+#define FUTEX_32	2
+
+#define FUTEX_SIZE_MASK	0x3
+
+#define FUTEX_SHARED_FLAG 8
+
+#define FUTEX_NUMA_FLAG 16
+
+/*
+ * struct futexXX_numa - struct for NUMA-aware futex operation
+ * @value: futex value
+ * @hint:  node id to operate
+ */
+
+struct futex8_numa {
+	__u8 value;
+	__u8 hint;
+};
+
+struct futex16_numa {
+	__u16 value;
+	__u16 hint;
+};
+
+struct futex32_numa {
+	__u32 value;
+	__u32 hint;
+};
+
+#define FUTEX_WAITV_MAX 128
+
+struct futex_waitv {
+	void *uaddr;
+	unsigned int val;
+	unsigned int flags;
+};
+
 /*
  * Support for robust futexes: the kernel cleans up held futexes at
  * thread exit time.
