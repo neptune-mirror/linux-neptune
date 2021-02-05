@@ -18,6 +18,20 @@
 
 #define NSEC_PER_SEC	1000000000L
 
+#ifndef __NR_futex_wait
+#define __NR_futex_wait 447
+#define __NR_futex_wake 448
+#define __NR_futex_waitv 449
+#define __NR_futex_requeue 450
+#endif
+
+#ifndef futex_requeue
+struct futex_requeue {
+	void *uaddr;
+	unsigned int flags;
+};
+#endif
+
 #ifndef FUTEX_8
 # define FUTEX_8	0
 #endif
@@ -102,4 +116,20 @@ static inline int futex2_waitv(volatile struct futex_waitv *waiters, unsigned lo
 			      unsigned long flags, struct timespec64 *timo)
 {
 	return syscall(__NR_futex_waitv, waiters, nr_waiters, flags, timo);
+}
+
+/**
+ * futex2_requeue - Wake futexes at uaddr1 and requeue from uaddr1 to uaddr2
+ * @uaddr1:     Original address to wake and requeue from
+ * @uaddr2:     Address to requeue to
+ * @nr_wake:    Number of futexes to wake at uaddr1 before requeuing
+ * @nr_requeue: Number of futexes to requeue from uaddr1 to uaddr2
+ * @cmpval:     If (uaddr1->uaddr != cmpval), return immediatally
+ * @flgas:      Operation flags
+ */
+static inline int futex2_requeue(struct futex_requeue *uaddr1, struct futex_requeue *uaddr2,
+				 unsigned int nr_wake, unsigned int nr_requeue,
+				 unsigned int cmpval, unsigned long flags)
+{
+	return syscall(__NR_futex_requeue, uaddr1, uaddr2, nr_wake, nr_requeue, cmpval, flags);
 }
