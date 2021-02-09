@@ -589,6 +589,13 @@ asmlinkage long sys_get_robust_list(int pid,
 asmlinkage long sys_set_robust_list(struct robust_list_head __user *head,
 				    size_t len);
 
+/* kernel/futex2.c */
+asmlinkage long sys_futex_wait(void __user *uaddr, unsigned long val,
+			       unsigned long flags,
+			       struct __kernel_timespec __user __user *timo);
+asmlinkage long sys_futex_wake(void __user *uaddr, unsigned long nr_wake,
+			       unsigned long flags);
+
 /* kernel/hrtimer.c */
 asmlinkage long sys_nanosleep(struct __kernel_timespec __user *rqtp,
 			      struct __kernel_timespec __user *rmtp);
