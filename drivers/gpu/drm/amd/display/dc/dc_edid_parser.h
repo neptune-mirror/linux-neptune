@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Advanced Micro Devices, Inc.
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,13 +23,22 @@
  *
  */
 
-#ifndef _DCN302_RESOURCE_H_
-#define _DCN302_RESOURCE_H_
+#ifndef _DC_EDID_PARSER_H_
+#define _DC_EDID_PARSER_H_
 
 #include "core_types.h"
 
-struct resource_pool *dcn302_create_resource_pool(const struct dc_init_data *init_data, struct dc *dc);
+bool dc_edid_parser_send_cea(struct dc *dc,
+		int offset,
+		int total_length,
+		uint8_t *data,
+		int length);
 
-void dcn302_update_bw_bounding_box(struct dc *dc, struct clk_bw_params *bw_params);
+bool dc_edid_parser_recv_cea_ack(struct dc *dc, int *offset);
 
-#endif /* _DCN302_RESOURCE_H_ */
+bool dc_edid_parser_recv_amd_vsdb(struct dc *dc,
+		int *version,
+		int *min_frame_rate,
+		int *max_frame_rate);
+
+#endif /* _DC_EDID_PARSER_H_ */
