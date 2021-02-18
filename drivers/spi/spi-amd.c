@@ -2,10 +2,11 @@
 //
 // AMD SPI controller driver
 //
-// Copyright (c) 2020, Advanced Micro Devices, Inc.
+// Copyright (c) 2021, Advanced Micro Devices, Inc.
 //
 // Authors: Sanjay R Mehta <sanju.mehta@amd.com>
 //     Nehal Bakulchnadra Shah <nehal-bakulchandra.shah@amd.com>
+//     Liang Liang (Leo) <liang.liang@amd.com>
 
 #include <linux/acpi.h>
 #include <linux/init.h>
@@ -249,7 +250,6 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 					 AMD_SPI_FIFO_BASE + i));
 			}
 
-			amd_spi_set_rx_count(master, 0);
 			/* Execute command */
 			amd_spi_execute_opcode(master);
 		}
@@ -261,7 +261,6 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 			rx_len = xfer->len;
 			buf = (u8 *)xfer->rx_buf;
 			amd_spi_clear_fifo_ptr(master);
-			amd_spi_set_tx_count(master, 0);
 			amd_spi_set_rx_count(master, rx_len);
 
 			/* Execute command */

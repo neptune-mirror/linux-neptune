@@ -1,7 +1,5 @@
 /*
- * Copyright 2008 Advanced Micro Devices, Inc.
- * Copyright 2008 Red Hat Inc.
- * Copyright 2009 Jerome Glisse.
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,19 +20,11 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#ifndef __SMUIO_V11_0_6_H__
+#define __SMUIO_V11_0_6_H__
 
-/*
- * Debugfs
- */
-struct amdgpu_autodump {
-	struct completion		dumping;
-	struct wait_queue_head		gpu_hang;
-};
+#include "soc15_common.h"
 
-int amdgpu_debugfs_regs_init(struct amdgpu_device *adev);
-int amdgpu_debugfs_init(struct amdgpu_device *adev);
-void amdgpu_debugfs_fini(struct amdgpu_device *adev);
-void amdgpu_debugfs_fence_init(struct amdgpu_device *adev);
-void amdgpu_debugfs_firmware_init(struct amdgpu_device *adev);
-void amdgpu_debugfs_gem_init(struct amdgpu_device *adev);
-int amdgpu_debugfs_wait_dump(struct amdgpu_device *adev);
+extern const struct amdgpu_smuio_funcs smuio_v11_0_6_funcs;
+
+#endif /* __SMUIO_V11_0_6_H__ */

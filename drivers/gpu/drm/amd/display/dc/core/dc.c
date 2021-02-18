@@ -163,6 +163,18 @@ static uint32_t get_num_of_internal_disp(struct dc_link **links, uint32_t num_li
 	return count;
 }
 
+static int get_seamless_boot_stream_count(struct dc_state *ctx)
+{
+	uint8_t i;
+	uint8_t seamless_boot_stream_count = 0;
+
+	for (i = 0; i < ctx->stream_count; i++)
+		if (ctx->streams[i]->apply_seamless_boot_optimization)
+			seamless_boot_stream_count++;
+
+	return seamless_boot_stream_count;
+}
+
 static bool create_links(
 		struct dc *dc,
 		uint32_t num_virtual_links)
@@ -205,27 +217,9 @@ static bool create_links(
 		link = link_create(&link_init_params);
 
 		if (link) {
-			bool should_destory_link = false;
-
-			if (link->connector_signal == SIGNAL_TYPE_EDP) {
-				if (dc->config.edp_not_connected) {
-					if (!IS_DIAG_DC(dc->ctx->dce_environment))
-						should_destory_link = true;
-				} else {
-					enum dc_connection_type type;
-					dc_link_detect_sink(link, &type);
-					if (type == dc_connection_none)
-						should_destory_link = true;
-				}
-			}
-
-			if (dc->config.force_enum_edp || !should_destory_link) {
 				dc->links[dc->link_count] = link;
 				link->dc = dc;
 				++dc->link_count;
-			} else {
-				link_destroy(&link);
-			}
 		}
 	}
 
@@ -988,7 +982,6 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 				full_pipe_count,
 				dc->res_pool->stream_enc_count);
 
-		dc->optimize_seamless_boot_streams = 0;
 		dc->caps.max_links = dc->link_count;
 		dc->caps.max_audios = dc->res_pool->audio_count;
 		dc->caps.linear_pitch_alignment = 64;
@@ -1016,8 +1009,30 @@ destruct_dc:
 	return NULL;
 }
 
+static void detect_edp_presence(struct dc *dc)
+{
+	struct dc_link *edp_link = get_edp_link(dc);
+	bool edp_sink_present = true;
+
+	if (!edp_link)
+		return;
+
+	if (dc->config.edp_not_connected) {
+			edp_sink_present = false;
+	} else {
+		enum dc_connection_type type;
+		dc_link_detect_sink(edp_link, &type);
+		if (type == dc_connection_none)
+			edp_sink_present = false;
+	}
+
+	edp_link->edp_sink_present = edp_sink_present;
+}
+
 void dc_hardware_init(struct dc *dc)
 {
+
+	detect_edp_presence(dc);
 	if (dc->ctx->dce_environment != DCE_ENV_VIRTUAL_HW)
 		dc->hwss.init_hw(dc);
 }
@@ -1373,11 +1388,7 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 		dc->hwss.enable_accelerated_mode(dc, context);
 	}
 
-	for (i = 0; i < context->stream_count; i++)
-		if (context->streams[i]->apply_seamless_boot_optimization)
-			dc->optimize_seamless_boot_streams++;
-
-	if (context->stream_count > dc->optimize_seamless_boot_streams ||
+	if (context->stream_count > get_seamless_boot_stream_count(context) ||
 		context->stream_count == 0)
 		dc->hwss.prepare_bandwidth(dc, context);
 
@@ -1460,7 +1471,7 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 
 	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
 
-	if (context->stream_count > dc->optimize_seamless_boot_streams ||
+	if (context->stream_count > get_seamless_boot_stream_count(context) ||
 		context->stream_count == 0) {
 		/* Must wait for no flips to be pending before doing optimize bw */
 		wait_for_no_pipes_pending(dc, context);
@@ -1574,7 +1585,7 @@ void dc_post_update_surfaces_to_stream(struct dc *dc)
 	int i;
 	struct dc_state *context = dc->current_state;
 
-	if ((!dc->optimized_required) || dc->optimize_seamless_boot_streams > 0)
+	if ((!dc->optimized_required) || get_seamless_boot_stream_count(context) > 0)
 		return;
 
 	post_surface_trace(dc);
@@ -2273,8 +2284,6 @@ static void copy_stream_update_to_stream(struct dc *dc,
 	if (update->dither_option)
 		stream->dither_option = *update->dither_option;
 
-	if (update->pending_test_pattern)
-		stream->test_pattern = *update->pending_test_pattern;
 	/* update current stream with writeback info */
 	if (update->wb_update) {
 		int i;
@@ -2371,15 +2380,6 @@ static void commit_planes_do_stream_update(struct dc *dc,
 				}
 			}
 
-			if (stream_update->pending_test_pattern) {
-				dc_link_dp_set_test_pattern(stream->link,
-					stream->test_pattern.type,
-					stream->test_pattern.color_space,
-					stream->test_pattern.p_link_settings,
-					stream->test_pattern.p_custom_pattern,
-					stream->test_pattern.cust_pattern_size);
-			}
-
 			/* Full fe update*/
 			if (update_type == UPDATE_TYPE_FAST)
 				continue;
@@ -2396,7 +2396,7 @@ static void commit_planes_do_stream_update(struct dc *dc,
 
 					dc->hwss.optimize_bandwidth(dc, dc->current_state);
 				} else {
-					if (dc->optimize_seamless_boot_streams == 0)
+					if (get_seamless_boot_stream_count(context) == 0)
 						dc->hwss.prepare_bandwidth(dc, dc->current_state);
 
 					core_link_enable_stream(dc->current_state, pipe_ctx);
@@ -2435,7 +2435,7 @@ static void commit_planes_for_stream(struct dc *dc,
 	int i, j;
 	struct pipe_ctx *top_pipe_to_program = NULL;
 
-	if (dc->optimize_seamless_boot_streams > 0 && surface_count > 0) {
+	if (get_seamless_boot_stream_count(context) > 0 && surface_count > 0) {
 		/* Optimize seamless boot flag keeps clocks and watermarks high until
 		 * first flip. After first flip, optimization is required to lower
 		 * bandwidth. Important to note that it is expected UEFI will
@@ -2444,9 +2444,8 @@ static void commit_planes_for_stream(struct dc *dc,
 		 */
 		if (stream->apply_seamless_boot_optimization) {
 			stream->apply_seamless_boot_optimization = false;
-			dc->optimize_seamless_boot_streams--;
 
-			if (dc->optimize_seamless_boot_streams == 0)
+			if (get_seamless_boot_stream_count(context) == 0)
 				dc->optimized_required = true;
 		}
 	}
@@ -2456,7 +2455,7 @@ static void commit_planes_for_stream(struct dc *dc,
 		dc_allow_idle_optimizations(dc, false);
 
 #endif
-		if (dc->optimize_seamless_boot_streams == 0)
+		if (get_seamless_boot_stream_count(context) == 0)
 			dc->hwss.prepare_bandwidth(dc, context);
 
 		context_clock_trace(dc, context);
