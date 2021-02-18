@@ -1,0 +1,16 @@
+amd-staging-drm-next:
+    4390f4d41ddc8984f88c837ea492bc6413070eed ("drm/radeon: OLAND boards don't have VCE")
+cirrus:
+    9842d296ab8600def4902227d44b3f5d3f688b1b ("ASoC: cs35l36: Fix CS35L36 Makefile")
+futex2:
+    8c04cf91d0afb1ca8899c6e63c5fe454e6fd3617 ("futex2: Add sysfs entry for syscall numbers")
+futex-wait-multiple:
+    b870d05547a8c41b20507770e49e588699bef79c ("futex: Change WAIT_MULTIPLE opcode to 31")
+mm-soft-dirty-file:
+    66db1255e435a751056189f82522b7f7539bafb3 ("mm: Support soft dirty flag read with reset.")
+rtw88:
+    4832bb371c4175ffb506a96accbb08ef2b2466e7 ("iwl4965: do not process non-QOS frames on txq->sched_retry path")
+setup-gitlabci:
+    b3331a2c6773f6585175d0d28ba2508936934995 ("GitlabCI: Add rtw88 build options")
+syscall-user-dispatch:
+    a8aab9e015c256205564d907b59e568e0fc0e4b8 ("doc: Document Syscall User Dispatch")
