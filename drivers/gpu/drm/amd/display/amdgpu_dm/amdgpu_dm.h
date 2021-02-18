@@ -58,10 +58,10 @@
 /* Forward declarations */
 struct amdgpu_device;
 struct drm_device;
-struct amdgpu_dm_irq_handler_data;
 struct dc;
 struct amdgpu_bo;
 struct dmub_srv;
+struct dc_plane_state;
 
 struct common_irq_params {
 	struct amdgpu_device *adev;
@@ -337,6 +337,13 @@ struct amdgpu_display_manager {
 	const struct gpu_info_soc_bounding_box_v1_0 *soc_bounding_box;
 
 	/**
+	 * @active_vblank_irq_count:
+	 *
+	 * number of currently active vblank irqs
+	 */
+	uint32_t active_vblank_irq_count;
+
+	/**
 	 * @mst_encoders:
 	 *
 	 * fake encoders used for DP MST.
@@ -412,16 +419,9 @@ struct amdgpu_dm_connector {
 
 extern const struct amdgpu_ip_block_version dm_ip_block;
 
-struct amdgpu_framebuffer;
-struct amdgpu_display_manager;
-struct dc_validation_set;
-struct dc_plane_state;
-
 struct dm_plane_state {
 	struct drm_plane_state base;
 	struct dc_plane_state *dc_state;
-	uint64_t tiling_flags;
-	bool tmz_surface;
 };
 
 struct dm_crtc_state {
@@ -440,6 +440,7 @@ struct dm_crtc_state {
 	bool freesync_timing_changed;
 	bool freesync_vrr_info_changed;
 
+	bool dsc_force_changed;
 	bool vrr_supported;
 	struct mod_freesync_config freesync_config;
 	struct dc_info_packet vrr_infopacket;
@@ -464,11 +465,23 @@ struct dm_connector_state {
 	uint8_t underscan_vborder;
 	uint8_t underscan_hborder;
 	bool underscan_enable;
+	bool freesync_enable;
 	bool freesync_capable;
+#ifdef CONFIG_DRM_AMD_DC_HDCP
+	bool update_hdcp;
+#endif
 	uint8_t abm_level;
 	int vcpi_slots;
 	uint64_t pbn;
 };
+
+struct amdgpu_hdmi_vsdb_info {
+	unsigned int amd_vsdb_version;		/* VSDB version, should be used to determine which VSIF to send */
+	bool freesync_supported;		/* FreeSync Supported */
+	unsigned int min_refresh_rate_hz;	/* FreeSync Minimum Refresh Rate in Hz */
+	unsigned int max_refresh_rate_hz;	/* FreeSync Maximum Refresh Rate in Hz */
+};
+
 
 #define to_dm_connector_state(x)\
 	container_of((x), struct dm_connector_state, base)
