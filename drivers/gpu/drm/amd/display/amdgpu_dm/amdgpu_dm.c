@@ -7078,8 +7078,7 @@ static int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 		DRM_MODE_ROTATE_0 | DRM_MODE_ROTATE_90 |
 		DRM_MODE_ROTATE_180 | DRM_MODE_ROTATE_270;
 
-	if (dm->adev->asic_type >= CHIP_BONAIRE &&
-	    plane->type != DRM_PLANE_TYPE_CURSOR)
+	if (dm->adev->asic_type >= CHIP_BONAIRE)
 		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
 						   supported_rotations);
 
@@ -9863,6 +9862,11 @@ static int dm_check_crtc_cursor(struct drm_atomic_state *state,
 	if (cursor_scale_w != underlying_scale_w ||
 	    cursor_scale_h != underlying_scale_h) {
 		drm_dbg_atomic(crtc->dev, "Cursor plane scaling doesn't match underlying plane\n");
+		return -EINVAL;
+	}
+
+	if (new_underlying_state->rotation != new_cursor_state->rotation) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane rotation doesn't match underlying plane\n");
 		return -EINVAL;
 	}
 
