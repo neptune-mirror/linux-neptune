@@ -9660,8 +9660,13 @@ static int dm_check_crtc_cursor(struct drm_atomic_state *state,
 	}
 
 	new_cursor_state = drm_atomic_get_new_plane_state(state, crtc->cursor);
-	if (!new_cursor_state || !new_underlying_state || !new_cursor_state->fb)
+	if (!new_cursor_state || !new_cursor_state->fb)
 		return 0;
+
+	if (!new_underlying_state || !new_underlying_state->fb) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane can't be enabled without underlying plane\n");
+		return -EINVAL;
+	}
 
 	cursor_scale_w = new_cursor_state->crtc_w * 1000 /
 			 (new_cursor_state->src_w >> 16);
