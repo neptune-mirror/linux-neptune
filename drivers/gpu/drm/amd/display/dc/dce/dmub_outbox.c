@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Advanced Micro Devices, Inc.
+ * Copyright 2020 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,49 +20,41 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: AMD
- *
  */
-#ifndef _DMUB_TRACE_BUFFER_H_
-#define _DMUB_TRACE_BUFFER_H_
 
-#include "dmub_cmd.h"
+#include "dmub_outbox.h"
+#include "dc_dmub_srv.h"
+#include "dmub/inc/dmub_cmd.h"
 
-#define LOAD_DMCU_FW	1
-#define LOAD_PHY_FW	2
+/**
+ *****************************************************************************
+ *  Function: dmub_enable_outbox_notification
+ *
+ *  @brief
+ *		Sends inbox cmd to dmub to enable outbox1 messages with interrupt.
+ *		Dmub sends outbox1 message and triggers outbox1 interrupt.
+ *
+ *  @param
+ *		[in] dc: dc structure
+ *
+ *  @return
+ *     None
+ *****************************************************************************
+ */
+void dmub_enable_outbox_notification(struct dc *dc)
+{
+	union dmub_rb_cmd cmd;
+	struct dc_context *dc_ctx = dc->ctx;
 
+	memset(&cmd, 0x0, sizeof(cmd));
+	cmd.outbox1_enable.header.type = DMUB_CMD__OUTBOX1_ENABLE;
+	cmd.outbox1_enable.header.sub_type = 0;
+	cmd.outbox1_enable.header.payload_bytes =
+		sizeof(cmd.outbox1_enable) -
+		sizeof(cmd.outbox1_enable.header);
+	cmd.outbox1_enable.enable = true;
 
-enum dmucb_trace_code {
-	DMCUB__UNKNOWN,
-	DMCUB__MAIN_BEGIN,
-	DMCUB__PHY_INIT_BEGIN,
-	DMCUB__PHY_FW_SRAM_LOAD_BEGIN,
-	DMCUB__PHY_FW_SRAM_LOAD_END,
-	DMCUB__PHY_INIT_POLL_DONE,
-	DMCUB__PHY_INIT_END,
-	DMCUB__DMCU_ERAM_LOAD_BEGIN,
-	DMCUB__DMCU_ERAM_LOAD_END,
-	DMCUB__DMCU_ISR_LOAD_BEGIN,
-	DMCUB__DMCU_ISR_LOAD_END,
-	DMCUB__MAIN_IDLE,
-	DMCUB__PERF_TRACE,
-	DMCUB__PG_DONE,
-};
-
-struct dmcub_trace_buf_entry {
-	enum dmucb_trace_code trace_code;
-	uint32_t tick_count;
-	uint32_t param0;
-	uint32_t param1;
-};
-
-#define TRACE_BUF_SIZE (1024) //1 kB
-#define PERF_TRACE_MAX_ENTRY ((TRACE_BUF_SIZE - 8)/sizeof(struct dmcub_trace_buf_entry))
-
-
-struct dmcub_trace_buf {
-	uint32_t entry_count;
-	uint32_t clk_freq;
-	struct dmcub_trace_buf_entry entries[PERF_TRACE_MAX_ENTRY];
-};
-
-#endif /* _DMUB_TRACE_BUFFER_H_ */
+	dc_dmub_srv_cmd_queue(dc_ctx->dmub_srv, &cmd);
+	dc_dmub_srv_cmd_execute(dc_ctx->dmub_srv);
+	dc_dmub_srv_wait_idle(dc_ctx->dmub_srv);
+}

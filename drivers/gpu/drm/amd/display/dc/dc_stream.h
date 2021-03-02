@@ -228,6 +228,9 @@ struct dc_stream_state {
 	uint32_t stream_id;
 	bool is_dsc_enabled;
 	union stream_update_flags update_flags;
+
+	bool has_non_synchronizable_pclk;
+	bool vblank_synchronized;
 };
 
 #define ABM_LEVEL_IMMEDIATE_DISABLE 255
@@ -283,7 +286,8 @@ void dc_commit_updates_for_stream(struct dc *dc,
 		struct dc_surface_update *srf_updates,
 		int surface_count,
 		struct dc_stream_state *stream,
-		struct dc_stream_update *stream_update);
+		struct dc_stream_update *stream_update,
+		struct dc_state *state);
 /*
  * Log the current stream state.
  */

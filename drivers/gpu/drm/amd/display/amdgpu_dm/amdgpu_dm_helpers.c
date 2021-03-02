@@ -530,7 +530,7 @@ bool dm_helpers_dp_write_dsc_enable(
 {
 	uint8_t enable_dsc = enable ? 1 : 0;
 	struct amdgpu_dm_connector *aconnector;
-	uint8_t ret;
+	uint8_t ret = 0;
 
 	if (!stream)
 		return false;
@@ -662,4 +662,10 @@ void dm_helpers_free_gpu_mem(
 		void *pvMem)
 {
 	// TODO
+}
+
+bool dm_helpes_dmub_outbox0_interrupt_control(struct dc_context *ctx, bool enable)
+{
+	// TODO
+	return true;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Advanced Micro Devices, Inc.
+ * Copyright 2020 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,47 +22,21 @@
  * Authors: AMD
  *
  */
-#ifndef _DMUB_TRACE_BUFFER_H_
-#define _DMUB_TRACE_BUFFER_H_
 
-#include "dmub_cmd.h"
+#ifndef _DC_STAT_H_
+#define _DC_STAT_H_
 
-#define LOAD_DMCU_FW	1
-#define LOAD_PHY_FW	2
+/**
+ * DOC: DC STAT Interface
+ *
+ * These interfaces are called without acquiring DAL and DC locks.
+ * Hence, there is limitations on whese interfaces can access. Only
+ * variables exclusively defined for these interfaces can be modified.
+ */
 
+#include "dc.h"
+#include "dmub/dmub_srv.h"
 
-enum dmucb_trace_code {
-	DMCUB__UNKNOWN,
-	DMCUB__MAIN_BEGIN,
-	DMCUB__PHY_INIT_BEGIN,
-	DMCUB__PHY_FW_SRAM_LOAD_BEGIN,
-	DMCUB__PHY_FW_SRAM_LOAD_END,
-	DMCUB__PHY_INIT_POLL_DONE,
-	DMCUB__PHY_INIT_END,
-	DMCUB__DMCU_ERAM_LOAD_BEGIN,
-	DMCUB__DMCU_ERAM_LOAD_END,
-	DMCUB__DMCU_ISR_LOAD_BEGIN,
-	DMCUB__DMCU_ISR_LOAD_END,
-	DMCUB__MAIN_IDLE,
-	DMCUB__PERF_TRACE,
-	DMCUB__PG_DONE,
-};
+void dc_stat_get_dmub_notification(const struct dc *dc, struct dmub_notification *notify);
 
-struct dmcub_trace_buf_entry {
-	enum dmucb_trace_code trace_code;
-	uint32_t tick_count;
-	uint32_t param0;
-	uint32_t param1;
-};
-
-#define TRACE_BUF_SIZE (1024) //1 kB
-#define PERF_TRACE_MAX_ENTRY ((TRACE_BUF_SIZE - 8)/sizeof(struct dmcub_trace_buf_entry))
-
-
-struct dmcub_trace_buf {
-	uint32_t entry_count;
-	uint32_t clk_freq;
-	struct dmcub_trace_buf_entry entries[PERF_TRACE_MAX_ENTRY];
-};
-
-#endif /* _DMUB_TRACE_BUFFER_H_ */
+#endif /* _DC_STAT_H_ */
