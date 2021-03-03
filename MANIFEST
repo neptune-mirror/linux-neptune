@@ -1,0 +1,18 @@
+amd-staging-drm-next:
+    b22c64e0de30bef088b16d512566e3897e95415b ("drm/amd/display/dc/dce/dce_aux: Remove duplicate line causing 'field overwritten' issue")
+cirrus:
+    9842d296ab8600def4902227d44b3f5d3f688b1b ("ASoC: cs35l36: Fix CS35L36 Makefile")
+futex2:
+    b99a8a205f4dd9f60a25bc876cd6884e91e598b6 ("futex2: Add sysfs entry for syscall numbers")
+futex-wait-multiple:
+    b870d05547a8c41b20507770e49e588699bef79c ("futex: Change WAIT_MULTIPLE opcode to 31")
+mm-soft-dirty-file:
+    66db1255e435a751056189f82522b7f7539bafb3 ("mm: Support soft dirty flag read with reset.")
+rtw88:
+    4832bb371c4175ffb506a96accbb08ef2b2466e7 ("iwl4965: do not process non-QOS frames on txq->sched_retry path")
+rtw88:
+    0677bbe41db7d49668803bd5532d82d8802d0a5a (" rtw88: Backport driver from wireless-next")
+setup-gitlabci:
+    b3331a2c6773f6585175d0d28ba2508936934995 ("GitlabCI: Add rtw88 build options")
+syscall-user-dispatch:
+    a8aab9e015c256205564d907b59e568e0fc0e4b8 ("doc: Document Syscall User Dispatch")

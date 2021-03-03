@@ -2,7 +2,7 @@
 VERSION = 5
 PATCHLEVEL = 10
 SUBLEVEL = 0
-EXTRAVERSION = -rc6
+EXTRAVERSION = -rc6-valve3
 NAME = Kleptomaniac Octopus
 
 # *DOCUMENTATION*
