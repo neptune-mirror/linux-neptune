@@ -123,6 +123,11 @@ void dcn10_enable_timing_synchronization(
 		int group_index,
 		int group_size,
 		struct pipe_ctx *grouped_pipes[]);
+void dcn10_enable_vblanks_synchronization(
+		struct dc *dc,
+		int group_index,
+		int group_size,
+		struct pipe_ctx *grouped_pipes[]);
 void dcn10_enable_per_frame_crtc_position_reset(
 		struct dc *dc,
 		int group_size,
@@ -163,6 +168,8 @@ void dcn10_wait_for_mpcc_disconnect(
 void dce110_edp_backlight_control(
 		struct dc_link *link,
 		bool enable);
+void dce110_edp_wait_for_T12(
+		struct dc_link *link);
 void dce110_edp_power_control(
 		struct dc_link *link,
 		bool power_up);
