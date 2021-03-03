@@ -289,7 +289,7 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	p->chunk_relocs = NULL;
 	p->chunk_flags = NULL;
 	p->chunk_const_ib = NULL;
-	p->chunks_array = kcalloc(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
+	p->chunks_array = kvmalloc_array(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
 	if (p->chunks_array == NULL) {
 		return -ENOMEM;
 	}
@@ -300,7 +300,7 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	}
 	p->cs_flags = 0;
 	p->nchunks = cs->num_chunks;
-	p->chunks = kcalloc(p->nchunks, sizeof(struct radeon_cs_chunk), GFP_KERNEL);
+	p->chunks = kvmalloc_array(p->nchunks, sizeof(struct radeon_cs_chunk), GFP_KERNEL);
 	if (p->chunks == NULL) {
 		return -ENOMEM;
 	}
@@ -408,6 +408,7 @@ static int cmp_size_smaller_first(void *priv, struct list_head *a,
  * cs_parser_fini() - clean parser states
  * @parser:	parser structure holding parsing context.
  * @error:	error number
+ * @backoff:	indicator to backoff the reservation
  *
  * If error is set than unvalidate buffer, otherwise just free memory
  * used by parsing context.
@@ -451,8 +452,8 @@ static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error, bo
 	kvfree(parser->vm_bos);
 	for (i = 0; i < parser->nchunks; i++)
 		kvfree(parser->chunks[i].kdata);
-	kfree(parser->chunks);
-	kfree(parser->chunks_array);
+	kvfree(parser->chunks);
+	kvfree(parser->chunks_array);
 	radeon_ib_free(parser->rdev, &parser->ib);
 	radeon_ib_free(parser->rdev, &parser->const_ib);
 }
@@ -723,8 +724,9 @@ out:
 
 /**
  * radeon_cs_packet_parse() - parse cp packet and point ib index to next packet
- * @parser:	parser structure holding parsing context.
+ * @p:		parser structure holding parsing context.
  * @pkt:	where to store packet information
+ * @idx:	packet index
  *
  * Assume that chunk_ib_index is properly set. Will return -EINVAL
  * if packet is bigger than remaining ib size. or if packets is unknown.
@@ -829,11 +831,9 @@ void radeon_cs_dump_packet(struct radeon_cs_parser *p,
 
 /**
  * radeon_cs_packet_next_reloc() - parse next (should be reloc) packet
- * @parser:		parser structure holding parsing context.
- * @data:		pointer to relocation data
- * @offset_start:	starting offset
- * @offset_mask:	offset mask (to align start offset on)
- * @reloc:		reloc informations
+ * @p:			parser structure holding parsing context.
+ * @cs_reloc:		reloc informations
+ * @nomm:		no memory management for debugging
  *
  * Check if next packet is relocation packet3, do bo validation and compute
  * GPU offset using the provided start.

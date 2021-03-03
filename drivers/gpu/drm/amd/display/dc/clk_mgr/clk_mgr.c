@@ -39,9 +39,8 @@
 #include "dcn10/rv2_clk_mgr.h"
 #include "dcn20/dcn20_clk_mgr.h"
 #include "dcn21/rn_clk_mgr.h"
-#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
 #include "dcn30/dcn30_clk_mgr.h"
-#endif
+#include "dcn301/vg_clk_mgr.h"
 
 
 int clk_mgr_helper_get_active_display_cnt(
@@ -88,24 +87,34 @@ int clk_mgr_helper_get_active_plane_cnt(
 
 void clk_mgr_exit_optimized_pwr_state(const struct dc *dc, struct clk_mgr *clk_mgr)
 {
-	struct dc_link *edp_link = get_edp_link(dc);
+	struct dc_link *edp_links[MAX_NUM_EDP];
+	struct dc_link *edp_link = NULL;
+	int edp_num;
 
+	get_edp_links(dc, edp_links, &edp_num);
 	if (dc->hwss.exit_optimized_pwr_state)
 		dc->hwss.exit_optimized_pwr_state(dc, dc->current_state);
 
-	if (edp_link) {
+	if (edp_num) {
+		edp_link = edp_links[0];
 		clk_mgr->psr_allow_active_cache = edp_link->psr_settings.psr_allow_active;
-		dc_link_set_psr_allow_active(edp_link, false, false);
+		dc_link_set_psr_allow_active(edp_link, false, false, false);
 	}
 
 }
 
 void clk_mgr_optimize_pwr_state(const struct dc *dc, struct clk_mgr *clk_mgr)
 {
-	struct dc_link *edp_link = get_edp_link(dc);
+	struct dc_link *edp_links[MAX_NUM_EDP];
+	struct dc_link *edp_link = NULL;
+	int edp_num;
 
-	if (edp_link)
-		dc_link_set_psr_allow_active(edp_link, clk_mgr->psr_allow_active_cache, false);
+	get_edp_links(dc, edp_links, &edp_num);
+	if (edp_num) {
+		edp_link = edp_links[0];
+		dc_link_set_psr_allow_active(edp_link,
+				clk_mgr->psr_allow_active_cache, false, false);
+	}
 
 	if (dc->hwss.optimize_pwr_state)
 		dc->hwss.optimize_pwr_state(dc, dc->current_state);
@@ -183,16 +192,22 @@ struct clk_mgr *dc_clk_mgr_create(struct dc_context *ctx, struct pp_smu_funcs *p
 		break;
 
 	case FAMILY_NV:
-#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
 		if (ASICREV_IS_SIENNA_CICHLID_P(asic_id.hw_internal_rev)) {
 			dcn3_clk_mgr_construct(ctx, clk_mgr, pp_smu, dccg);
 			break;
 		}
-#endif
+		if (ASICREV_IS_DIMGREY_CAVEFISH_P(asic_id.hw_internal_rev)) {
+			dcn3_clk_mgr_construct(ctx, clk_mgr, pp_smu, dccg);
+			break;
+		}
 		dcn20_clk_mgr_construct(ctx, clk_mgr, pp_smu, dccg);
 		break;
-#endif	/* Family RV and NV*/
 
+	case FAMILY_VGH:
+		if (ASICREV_IS_VANGOGH(asic_id.hw_internal_rev))
+			vg_clk_mgr_construct(ctx, clk_mgr, pp_smu, dccg);
+		break;
+#endif
 	default:
 		ASSERT(0); /* Unknown Asic */
 		break;
@@ -204,14 +219,22 @@ struct clk_mgr *dc_clk_mgr_create(struct dc_context *ctx, struct pp_smu_funcs *p
 void dc_destroy_clk_mgr(struct clk_mgr *clk_mgr_base)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
-#ifdef CONFIG_DRM_AMD_DC_DCN3_0
 
+#ifdef CONFIG_DRM_AMD_DC_DCN
 	switch (clk_mgr_base->ctx->asic_id.chip_family) {
 	case FAMILY_NV:
 		if (ASICREV_IS_SIENNA_CICHLID_P(clk_mgr_base->ctx->asic_id.hw_internal_rev)) {
 			dcn3_clk_mgr_destroy(clk_mgr);
-			break;
 		}
+		break;
+
+	case FAMILY_VGH:
+		if (ASICREV_IS_VANGOGH(clk_mgr_base->ctx->asic_id.hw_internal_rev))
+			vg_clk_mgr_destroy(clk_mgr);
+		break;
+
+	default:
+		break;
 	}
 #endif
 

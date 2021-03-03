@@ -718,12 +718,11 @@ static int vega12_save_default_power_profile(struct pp_hwmgr *hwmgr)
 #endif
 
 /**
-* Initializes the SMC table and uploads it
-*
-* @param    hwmgr  the address of the powerplay hardware manager.
-* @param    pInput  the pointer to input data (PowerState)
-* @return   always 0
-*/
+ * Initializes the SMC table and uploads it
+ *
+ * @hwmgr:  the address of the powerplay hardware manager.
+ * return:  always 0
+ */
 static int vega12_init_smc_table(struct pp_hwmgr *hwmgr)
 {
 	int result;
@@ -1430,7 +1429,7 @@ static int vega12_read_sensor(struct pp_hwmgr *hwmgr, int idx,
 			*size = 8;
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -EOPNOTSUPP;
 		break;
 	}
 	return ret;

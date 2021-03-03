@@ -2,9 +2,11 @@
 //
 // AMD SPI controller driver
 //
-// Copyright (c) 2020, Advanced Micro Devices, Inc.
+// Copyright (c) 2021, Advanced Micro Devices, Inc.
 //
-// Author: Sanjay R Mehta <sanju.mehta@amd.com>
+// Authors: Sanjay R Mehta <sanju.mehta@amd.com>
+//     Nehal Bakulchnadra Shah <nehal-bakulchandra.shah@amd.com>
+//     Liang Liang (Leo) <liang.liang@amd.com>
 
 #include <linux/acpi.h>
 #include <linux/init.h>
@@ -14,10 +16,12 @@
 #include <linux/spi/spi.h>
 
 #define AMD_SPI_CTRL0_REG	0x00
+#define AMD_SPI_OPCODE_REG  0x45
+#define AMD_SPI_CMD_TRIGGER_REG 0x47
 #define AMD_SPI_EXEC_CMD	BIT(16)
 #define AMD_SPI_FIFO_CLEAR	BIT(20)
 #define AMD_SPI_BUSY		BIT(31)
-
+#define AMD_SPI_TRIGGER_CMD	BIT(7)
 #define AMD_SPI_OPCODE_MASK	0xFF
 
 #define AMD_SPI_ALT_CS_REG	0x1D
@@ -34,11 +38,21 @@
 #define AMD_SPI_XFER_TX		1
 #define AMD_SPI_XFER_RX		2
 
+#ifdef CONFIG_SPI_TPS6598X_CLIENT
+#define AMD_TX_OPCODE	0x0B
+#define AMD_RX_OPCODE	0x0A
+#endif
+
 struct amd_spi {
 	void __iomem *io_remap_addr;
 	unsigned long io_base_addr;
 	u32 rom_addr;
 	u8 chip_select;
+	u8 ctrl_id;
+	struct spi_device	*spi_dev;
+	struct spi_board_info	info;
+	struct spi_master *master;
+
 };
 
 static inline u8 amd_spi_readreg8(struct spi_master *master, int idx)
@@ -98,6 +112,14 @@ static void amd_spi_select_chip(struct spi_master *master)
 			      AMD_SPI_ALT_CS_MASK);
 }
 
+static void amd_spi_clear_chip(struct spi_master *master)
+{
+	struct amd_spi *amd_spi = spi_master_get_devdata(master);
+	u8 chip_select = amd_spi->chip_select;
+
+	amd_spi_writereg8(master, AMD_SPI_ALT_CS_REG, chip_select & 0XFC);
+}
+
 static void amd_spi_clear_fifo_ptr(struct spi_master *master)
 {
 	amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, AMD_SPI_FIFO_CLEAR,
@@ -106,8 +128,14 @@ static void amd_spi_clear_fifo_ptr(struct spi_master *master)
 
 static void amd_spi_set_opcode(struct spi_master *master, u8 cmd_opcode)
 {
-	amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, cmd_opcode,
-			       AMD_SPI_OPCODE_MASK);
+	struct amd_spi *amd_spi = spi_master_get_devdata(master);
+
+	if (!amd_spi->ctrl_id)
+		amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, cmd_opcode,
+				       AMD_SPI_OPCODE_MASK);
+	else
+		amd_spi_writereg8(master, AMD_SPI_OPCODE_REG, cmd_opcode);
+
 }
 
 static inline void amd_spi_set_rx_count(struct spi_master *master,
@@ -128,15 +156,25 @@ static inline int amd_spi_busy_wait(struct amd_spi *amd_spi)
 	int timeout = 100000;
 
 	/* poll for SPI bus to become idle */
-	spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
-		    AMD_SPI_CTRL0_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+	if (!amd_spi->ctrl_id)
+		spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
+				AMD_SPI_CTRL0_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+	else
+		spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
+				AMD_SPI_STATUS_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+
 	while (spi_busy) {
-		usleep_range(10, 20);
+		usleep_range(10, 40);
 		if (timeout-- < 0)
 			return -ETIMEDOUT;
 
-		spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
-			    AMD_SPI_CTRL0_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+		/* poll for SPI bus to become idle */
+		if (!amd_spi->ctrl_id)
+			spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
+					AMD_SPI_CTRL0_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+		else
+			spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
+					AMD_SPI_STATUS_REG) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
 	}
 
 	return 0;
@@ -146,11 +184,18 @@ static void amd_spi_execute_opcode(struct spi_master *master)
 {
 	struct amd_spi *amd_spi = spi_master_get_devdata(master);
 
-	/* Set ExecuteOpCode bit in the CTRL0 register */
-	amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, AMD_SPI_EXEC_CMD,
-			       AMD_SPI_EXEC_CMD);
-
-	amd_spi_busy_wait(amd_spi);
+	if (!amd_spi->ctrl_id) {
+		amd_spi_busy_wait(amd_spi);
+		/* Set ExecuteOpCode bit in the CTRL0 register */
+		amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, AMD_SPI_EXEC_CMD,
+				       AMD_SPI_EXEC_CMD);
+		amd_spi_busy_wait(amd_spi);
+	} else {
+		amd_spi_busy_wait(amd_spi);
+		amd_spi_setclear_reg8(master, AMD_SPI_CMD_TRIGGER_REG, AMD_SPI_TRIGGER_CMD,
+				      AMD_SPI_TRIGGER_CMD);
+		amd_spi_busy_wait(amd_spi);
+	}
 }
 
 static int amd_spi_master_setup(struct spi_device *spi)
@@ -182,11 +227,22 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 
 		if (m_cmd & AMD_SPI_XFER_TX) {
 			buf = (u8 *)xfer->tx_buf;
-			tx_len = xfer->len - 1;
 			cmd_opcode = *(u8 *)xfer->tx_buf;
+
+#ifdef CONFIG_SPI_TPS6598X_CLIENT
+			if (amd_spi->ctrl_id) {
+				tx_len = xfer->len;
+				cmd_opcode = AMD_TX_OPCODE;
+				amd_spi_set_opcode(master, cmd_opcode);
+			}
+#else
+			tx_len = xfer->len - 1;
 			buf++;
+#endif
+			amd_spi_clear_fifo_ptr(master);
 			amd_spi_set_opcode(master, cmd_opcode);
 
+			amd_spi_set_tx_count(master, tx_len);
 			/* Write data into the FIFO. */
 			for (i = 0; i < tx_len; i++) {
 				iowrite8(buf[i],
@@ -194,8 +250,6 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 					 AMD_SPI_FIFO_BASE + i));
 			}
 
-			amd_spi_set_tx_count(master, tx_len);
-			amd_spi_clear_fifo_ptr(master);
 			/* Execute command */
 			amd_spi_execute_opcode(master);
 		}
@@ -206,9 +260,16 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 			 */
 			rx_len = xfer->len;
 			buf = (u8 *)xfer->rx_buf;
-			amd_spi_set_rx_count(master, rx_len);
 			amd_spi_clear_fifo_ptr(master);
+			amd_spi_set_rx_count(master, rx_len);
+
 			/* Execute command */
+#ifdef CONFIG_SPI_TPS6598X_CLIENT
+			if (amd_spi->ctrl_id) {
+				cmd_opcode = AMD_RX_OPCODE;
+				amd_spi_set_opcode(master, cmd_opcode);
+			}
+#endif
 			amd_spi_execute_opcode(master);
 			/* Read data from FIFO to receive buffer  */
 			for (i = 0; i < rx_len; i++)
@@ -241,9 +302,23 @@ static int amd_spi_master_transfer(struct spi_master *master,
 	 * program the controller.
 	 */
 	amd_spi_fifo_xfer(amd_spi, master, msg);
-
+	if (amd_spi->ctrl_id)
+		amd_spi_clear_chip(master);
 	return 0;
 }
+
+#ifdef CONFIG_SPI_TPS6598X_CLIENT
+
+static int amd_spi_populate_client(struct amd_spi *amd_spi)
+{
+	strlcpy(amd_spi->info.modalias, "tps6598x_new", sizeof(amd_spi->info.modalias));
+	amd_spi->info.bus_num = amd_spi->master->bus_num;
+	amd_spi->info.chip_select = 0;
+	amd_spi->info.mode = amd_spi->master->mode_bits;
+	amd_spi->spi_dev = spi_new_device(amd_spi->master, &amd_spi->info);
+	return PTR_ERR_OR_ZERO(amd_spi->spi_dev);
+}
+#endif
 
 static int amd_spi_probe(struct platform_device *pdev)
 {
@@ -262,6 +337,16 @@ static int amd_spi_probe(struct platform_device *pdev)
 
 	amd_spi = spi_master_get_devdata(master);
 
+#if defined(CONFIG_ACPI) && defined(CONFIG_X86)
+	if (acpi_dev_get_first_match_dev("AMDI0061", NULL, -1))
+		amd_spi->ctrl_id = 0;
+
+	if (acpi_dev_get_first_match_dev("AMDI0062", NULL, -1))
+		amd_spi->ctrl_id = 1;
+#else
+	amd_spi->ctrl_id = 1;
+#endif
+	dev_dbg(dev, "amd_spi->ctrl_id =%d\n", amd_spi->ctrl_id);
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	amd_spi->io_remap_addr = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(amd_spi->io_remap_addr)) {
@@ -270,14 +355,18 @@ static int amd_spi_probe(struct platform_device *pdev)
 		goto err_free_master;
 	}
 	dev_dbg(dev, "io_remap_address: %p\n", amd_spi->io_remap_addr);
-
 	/* Initialize the spi_master fields */
 	master->bus_num = 0;
 	master->num_chipselect = 4;
 	master->mode_bits = 0;
-	master->flags = SPI_MASTER_HALF_DUPLEX;
+	if (!amd_spi->ctrl_id)
+		master->flags = SPI_MASTER_HALF_DUPLEX;
 	master->setup = amd_spi_master_setup;
 	master->transfer_one_message = amd_spi_master_transfer;
+#ifdef CONFIG_OF
+
+	master->dev.of_node = pdev->dev.of_node;
+#endif
 
 	/* Register the controller with SPI framework */
 	err = devm_spi_register_master(dev, master);
@@ -286,6 +375,10 @@ static int amd_spi_probe(struct platform_device *pdev)
 		goto err_free_master;
 	}
 
+#ifdef CONFIG_SPI_TPS6598X_CLIENT
+	amd_spi->master = master;
+	amd_spi_populate_client(amd_spi);
+#endif
 	return 0;
 
 err_free_master:
@@ -294,18 +387,28 @@ err_free_master:
 	return err;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id spi_acpi_match[] = {
 	{ "AMDI0061", 0 },
+	{ "AMDI0062", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, spi_acpi_match);
+
+#ifdef CONFIG_OF
+static const struct of_device_id amd_spi_dt_id[] = {
+	{ .compatible = "amd,amdi0061-spi" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, amd_spi_dt_id);
 #endif
 
 static struct platform_driver amd_spi_driver = {
 	.driver = {
 		.name = "amd_spi",
 		.acpi_match_table = ACPI_PTR(spi_acpi_match),
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(amd_spi_dt_id),
+#endif
 	},
 	.probe = amd_spi_probe,
 };
@@ -314,4 +417,5 @@ module_platform_driver(amd_spi_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Sanjay Mehta <sanju.mehta@amd.com>");
+MODULE_AUTHOR("Nehal Bakulchnadra Shah <nehal-bakulchandra.shah@amd.com>");
 MODULE_DESCRIPTION("AMD SPI Master Controller Driver");
