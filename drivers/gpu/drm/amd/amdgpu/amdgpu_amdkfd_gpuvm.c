@@ -119,6 +119,16 @@ void amdgpu_amdkfd_gpuvm_init_mem_limits(void)
  */
 #define ESTIMATE_PT_SIZE(mem_size) ((mem_size) >> 14)
 
+static size_t amdgpu_amdkfd_acc_size(uint64_t size)
+{
+	size >>= PAGE_SHIFT;
+	size *= sizeof(dma_addr_t) + sizeof(void *);
+
+	return __roundup_pow_of_two(sizeof(struct amdgpu_bo)) +
+		__roundup_pow_of_two(sizeof(struct ttm_tt)) +
+		PAGE_ALIGN(size);
+}
+
 static int amdgpu_amdkfd_reserve_mem_limit(struct amdgpu_device *adev,
 		uint64_t size, u32 domain, bool sg)
 {
@@ -127,8 +137,7 @@ static int amdgpu_amdkfd_reserve_mem_limit(struct amdgpu_device *adev,
 	size_t acc_size, system_mem_needed, ttm_mem_needed, vram_needed;
 	int ret = 0;
 
-	acc_size = ttm_bo_dma_acc_size(&adev->mman.bdev, size,
-				       sizeof(struct amdgpu_bo));
+	acc_size = amdgpu_amdkfd_acc_size(size);
 
 	vram_needed = 0;
 	if (domain == AMDGPU_GEM_DOMAIN_GTT) {
@@ -175,8 +184,7 @@ static void unreserve_mem_limit(struct amdgpu_device *adev,
 {
 	size_t acc_size;
 
-	acc_size = ttm_bo_dma_acc_size(&adev->mman.bdev, size,
-				       sizeof(struct amdgpu_bo));
+	acc_size = amdgpu_amdkfd_acc_size(size);
 
 	spin_lock(&kfd_mem_limit.mem_limit_lock);
 	if (domain == AMDGPU_GEM_DOMAIN_GTT) {
@@ -454,7 +462,7 @@ static int add_bo_to_vm(struct amdgpu_device *adev, struct kgd_mem *mem,
 	struct amdgpu_bo *bo = mem->bo;
 	uint64_t va = mem->va;
 	struct list_head *list_bo_va = &mem->bo_va_list;
-	unsigned long bo_size = bo->tbo.mem.size;
+	unsigned long bo_size = bo->tbo.base.size;
 
 	if (!va) {
 		pr_err("Invalid VA when adding BO to VM\n");
@@ -1277,7 +1285,7 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 		struct kgd_dev *kgd, struct kgd_mem *mem, uint64_t *size)
 {
 	struct amdkfd_process_info *process_info = mem->process_info;
-	unsigned long bo_size = mem->bo->tbo.mem.size;
+	unsigned long bo_size = mem->bo->tbo.base.size;
 	struct kfd_bo_va_list *entry, *tmp;
 	struct bo_vm_reservation_context ctx;
 	struct ttm_validate_buffer *bo_list_entry;
@@ -1398,7 +1406,7 @@ int amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
 	mutex_lock(&mem->lock);
 
 	domain = mem->domain;
-	bo_size = bo->tbo.mem.size;
+	bo_size = bo->tbo.base.size;
 
 	pr_debug("Map VA 0x%llx - 0x%llx to vm %p domain %s\n",
 			mem->va,
@@ -1502,7 +1510,7 @@ int amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(
 	struct amdgpu_device *adev = get_amdgpu_device(kgd);
 	struct amdkfd_process_info *process_info =
 		((struct amdgpu_vm *)vm)->process_info;
-	unsigned long bo_size = mem->bo->tbo.mem.size;
+	unsigned long bo_size = mem->bo->tbo.base.size;
 	struct kfd_bo_va_list *entry;
 	struct bo_vm_reservation_context ctx;
 	int ret;

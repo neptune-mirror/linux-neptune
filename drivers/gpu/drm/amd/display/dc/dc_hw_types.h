@@ -71,6 +71,7 @@ struct dc_plane_address {
 	union {
 		struct{
 			PHYSICAL_ADDRESS_LOC addr;
+			PHYSICAL_ADDRESS_LOC cursor_cache_addr;
 			PHYSICAL_ADDRESS_LOC meta_addr;
 			union large_integer dcc_const_color;
 		} grph;
@@ -704,6 +705,7 @@ struct dc_crtc_timing_flags {
 #ifndef TRIM_FSFT
 	uint32_t FAST_TRANSPORT: 1;
 #endif
+	uint32_t VBLANK_SYNCHRONIZABLE: 1;
 };
 
 enum dc_timing_3d_format {
