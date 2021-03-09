@@ -12,10 +12,11 @@
 #include "i915_pmu.h"
 #include "i915_reg.h"
 #include "i915_request.h"
+#include "i915_scheduler.h"
 #include "i915_selftest.h"
-#include "gt/intel_timeline.h"
 #include "intel_engine_types.h"
-#include "intel_gpu_commands.h"
+#include "intel_gt_types.h"
+#include "intel_timeline.h"
 #include "intel_workarounds.h"
 
 struct drm_printer;
@@ -123,23 +124,6 @@ execlists_active(const struct intel_engine_execlists *execlists)
 	return active;
 }
 
-static inline void
-execlists_active_lock_bh(struct intel_engine_execlists *execlists)
-{
-	local_bh_disable(); /* prevent local softirq and lock recursion */
-	tasklet_lock(&execlists->tasklet);
-}
-
-static inline void
-execlists_active_unlock_bh(struct intel_engine_execlists *execlists)
-{
-	tasklet_unlock(&execlists->tasklet);
-	local_bh_enable(); /* restore softirq, and kick ksoftirqd! */
-}
-
-struct i915_request *
-execlists_unwind_incomplete_requests(struct intel_engine_execlists *execlists);
-
 static inline u32
 intel_read_status_page(const struct intel_engine_cs *engine, int reg)
 {
@@ -223,91 +207,6 @@ void intel_engine_get_instdone(const struct intel_engine_cs *engine,
 
 void intel_engine_init_execlists(struct intel_engine_cs *engine);
 
-static inline u32 *__gen8_emit_pipe_control(u32 *batch, u32 flags0, u32 flags1, u32 offset)
-{
-	memset(batch, 0, 6 * sizeof(u32));
-
-	batch[0] = GFX_OP_PIPE_CONTROL(6) | flags0;
-	batch[1] = flags1;
-	batch[2] = offset;
-
-	return batch + 6;
-}
-
-static inline u32 *gen8_emit_pipe_control(u32 *batch, u32 flags, u32 offset)
-{
-	return __gen8_emit_pipe_control(batch, 0, flags, offset);
-}
-
-static inline u32 *gen12_emit_pipe_control(u32 *batch, u32 flags0, u32 flags1, u32 offset)
-{
-	return __gen8_emit_pipe_control(batch, flags0, flags1, offset);
-}
-
-static inline u32 *
-__gen8_emit_write_rcs(u32 *cs, u32 value, u32 offset, u32 flags0, u32 flags1)
-{
-	*cs++ = GFX_OP_PIPE_CONTROL(6) | flags0;
-	*cs++ = flags1 | PIPE_CONTROL_QW_WRITE;
-	*cs++ = offset;
-	*cs++ = 0;
-	*cs++ = value;
-	*cs++ = 0; /* We're thrashing one extra dword. */
-
-	return cs;
-}
-
-static inline u32*
-gen8_emit_ggtt_write_rcs(u32 *cs, u32 value, u32 gtt_offset, u32 flags)
-{
-	/* We're using qword write, offset should be aligned to 8 bytes. */
-	GEM_BUG_ON(!IS_ALIGNED(gtt_offset, 8));
-
-	return __gen8_emit_write_rcs(cs,
-				     value,
-				     gtt_offset,
-				     0,
-				     flags | PIPE_CONTROL_GLOBAL_GTT_IVB);
-}
-
-static inline u32*
-gen12_emit_ggtt_write_rcs(u32 *cs, u32 value, u32 gtt_offset, u32 flags0, u32 flags1)
-{
-	/* We're using qword write, offset should be aligned to 8 bytes. */
-	GEM_BUG_ON(!IS_ALIGNED(gtt_offset, 8));
-
-	return __gen8_emit_write_rcs(cs,
-				     value,
-				     gtt_offset,
-				     flags0,
-				     flags1 | PIPE_CONTROL_GLOBAL_GTT_IVB);
-}
-
-static inline u32 *
-__gen8_emit_flush_dw(u32 *cs, u32 value, u32 gtt_offset, u32 flags)
-{
-	*cs++ = (MI_FLUSH_DW + 1) | flags;
-	*cs++ = gtt_offset;
-	*cs++ = 0;
-	*cs++ = value;
-
-	return cs;
-}
-
-static inline u32 *
-gen8_emit_ggtt_write(u32 *cs, u32 value, u32 gtt_offset, u32 flags)
-{
-	/* w/a: bit 5 needs to be zero for MI_FLUSH_DW address. */
-	GEM_BUG_ON(gtt_offset & (1 << 5));
-	/* Offset should be aligned to 8 bytes for both (QW/DW) write types */
-	GEM_BUG_ON(!IS_ALIGNED(gtt_offset, 8));
-
-	return __gen8_emit_flush_dw(cs,
-				    value,
-				    gtt_offset | MI_FLUSH_DW_USE_GTT,
-				    flags | MI_FLUSH_DW_OP_STOREDW);
-}
-
 static inline void __intel_engine_reset(struct intel_engine_cs *engine,
 					bool stalled)
 {
@@ -318,7 +217,6 @@ static inline void __intel_engine_reset(struct intel_engine_cs *engine,
 
 bool intel_engines_are_idle(struct intel_gt *gt);
 bool intel_engine_is_idle(struct intel_engine_cs *engine);
-void intel_engine_flush_submission(struct intel_engine_cs *engine);
 
 void intel_engines_reset_default_submission(struct intel_gt *gt);
 
@@ -332,9 +230,6 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 ktime_t intel_engine_get_busy_time(struct intel_engine_cs *engine,
 				   ktime_t *now);
 
-struct i915_request *
-intel_engine_find_active_request(struct intel_engine_cs *engine);
-
 u32 intel_engine_context_size(struct intel_gt *gt, u8 class);
 
 void intel_engine_init_active(struct intel_engine_cs *engine,
@@ -342,6 +237,11 @@ void intel_engine_init_active(struct intel_engine_cs *engine,
 #define ENGINE_PHYSICAL	0
 #define ENGINE_MOCK	1
 #define ENGINE_VIRTUAL	2
+
+static inline bool intel_engine_uses_guc(const struct intel_engine_cs *engine)
+{
+	return engine->gt->submission_method >= INTEL_SUBMISSION_GUC;
+}
 
 static inline bool
 intel_engine_has_preempt_reset(const struct intel_engine_cs *engine)
@@ -359,6 +259,18 @@ intel_engine_has_heartbeat(const struct intel_engine_cs *engine)
 		return false;
 
 	return READ_ONCE(engine->props.heartbeat_interval_ms);
+}
+
+static inline void
+intel_engine_kick_scheduler(struct intel_engine_cs *engine)
+{
+	i915_sched_kick(intel_engine_get_scheduler(engine));
+}
+
+static inline void
+intel_engine_flush_scheduler(struct intel_engine_cs *engine)
+{
+	i915_sched_flush(intel_engine_get_scheduler(engine));
 }
 
 #endif /* _INTEL_RINGBUFFER_H_ */

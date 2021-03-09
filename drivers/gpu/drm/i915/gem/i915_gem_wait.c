@@ -5,12 +5,15 @@
  */
 
 #include <linux/dma-fence-array.h>
+#include <linux/dma-fence-chain.h>
 #include <linux/jiffies.h>
 
 #include "gt/intel_engine.h"
 
+#include "dma_resv_utils.h"
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
+#include "i915_scheduler.h"
 
 static long
 i915_gem_object_wait_fence(struct dma_fence *fence,
@@ -43,8 +46,7 @@ i915_gem_object_wait_reservation(struct dma_resv *resv,
 		unsigned int count, i;
 		int ret;
 
-		ret = dma_resv_get_fences_rcu(resv,
-							&excl, &count, &shared);
+		ret = dma_resv_get_fences_rcu(resv, &excl, &count, &shared);
 		if (ret)
 			return ret;
 
@@ -84,54 +86,60 @@ i915_gem_object_wait_reservation(struct dma_resv *resv,
 	 * Opportunistically prune the fences iff we know they have *all* been
 	 * signaled.
 	 */
-	if (prune_fences && dma_resv_trylock(resv)) {
-		if (dma_resv_test_signaled_rcu(resv, true))
-			dma_resv_add_excl_fence(resv, NULL);
-		dma_resv_unlock(resv);
-	}
+	if (prune_fences)
+		dma_resv_prune(resv);
 
 	return timeout;
 }
 
-static void __fence_set_priority(struct dma_fence *fence,
-				 const struct i915_sched_attr *attr)
+static void fence_set_priority(struct dma_fence *fence, int prio)
 {
-	struct i915_request *rq;
-	struct intel_engine_cs *engine;
-
 	if (dma_fence_is_signaled(fence) || !dma_fence_is_i915(fence))
 		return;
 
-	rq = to_request(fence);
-	engine = rq->engine;
-
-	local_bh_disable();
-	rcu_read_lock(); /* RCU serialisation for set-wedged protection */
-	if (engine->schedule)
-		engine->schedule(rq, attr);
-	rcu_read_unlock();
-	local_bh_enable(); /* kick the tasklets if queues were reprioritised */
+	i915_request_set_priority(to_request(fence), prio);
 }
 
-static void fence_set_priority(struct dma_fence *fence,
-			       const struct i915_sched_attr *attr)
+static inline bool __dma_fence_is_chain(const struct dma_fence *fence)
 {
+	return fence->ops == &dma_fence_chain_ops;
+}
+
+void i915_gem_fence_wait_priority(struct dma_fence *fence, int prio)
+{
+	if (dma_fence_is_signaled(fence))
+		return;
+
+	local_bh_disable();
+
 	/* Recurse once into a fence-array */
 	if (dma_fence_is_array(fence)) {
 		struct dma_fence_array *array = to_dma_fence_array(fence);
 		int i;
 
 		for (i = 0; i < array->num_fences; i++)
-			__fence_set_priority(array->fences[i], attr);
+			fence_set_priority(array->fences[i], prio);
+	} else if (__dma_fence_is_chain(fence)) {
+		struct dma_fence *iter;
+
+		/* The chain is ordered; if we boost the last, we boost all */
+		dma_fence_chain_for_each(iter, fence) {
+			fence_set_priority(to_dma_fence_chain(iter)->fence,
+					   prio);
+			break;
+		}
+		dma_fence_put(iter);
 	} else {
-		__fence_set_priority(fence, attr);
+		fence_set_priority(fence, prio);
 	}
+
+	local_bh_enable(); /* kick the tasklets if queues were reprioritised */
 }
 
 int
 i915_gem_object_wait_priority(struct drm_i915_gem_object *obj,
 			      unsigned int flags,
-			      const struct i915_sched_attr *attr)
+			      int prio)
 {
 	struct dma_fence *excl;
 
@@ -141,12 +149,12 @@ i915_gem_object_wait_priority(struct drm_i915_gem_object *obj,
 		int ret;
 
 		ret = dma_resv_get_fences_rcu(obj->base.resv,
-							&excl, &count, &shared);
+					      &excl, &count, &shared);
 		if (ret)
 			return ret;
 
 		for (i = 0; i < count; i++) {
-			fence_set_priority(shared[i], attr);
+			i915_gem_fence_wait_priority(shared[i], prio);
 			dma_fence_put(shared[i]);
 		}
 
@@ -156,7 +164,7 @@ i915_gem_object_wait_priority(struct drm_i915_gem_object *obj,
 	}
 
 	if (excl) {
-		fence_set_priority(excl, attr);
+		i915_gem_fence_wait_priority(excl, prio);
 		dma_fence_put(excl);
 	}
 	return 0;

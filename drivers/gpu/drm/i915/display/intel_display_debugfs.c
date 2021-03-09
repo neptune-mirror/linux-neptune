@@ -18,6 +18,7 @@
 #include "intel_pm.h"
 #include "intel_psr.h"
 #include "intel_sideband.h"
+#include "intel_sprite.h"
 
 static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
 {
@@ -248,12 +249,11 @@ static int i915_psr_sink_status_show(struct seq_file *m, void *data)
 		"sink internal error",
 	};
 	struct drm_connector *connector = m->private;
-	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct intel_dp *intel_dp =
 		intel_attached_dp(to_intel_connector(connector));
 	int ret;
 
-	if (!CAN_PSR(dev_priv)) {
+	if (!CAN_PSR(intel_dp)) {
 		seq_puts(m, "PSR Unsupported\n");
 		return -ENODEV;
 	}
@@ -279,12 +279,13 @@ static int i915_psr_sink_status_show(struct seq_file *m, void *data)
 DEFINE_SHOW_ATTRIBUTE(i915_psr_sink_status);
 
 static void
-psr_source_status(struct drm_i915_private *dev_priv, struct seq_file *m)
+psr_source_status(struct intel_dp *intel_dp, struct seq_file *m)
 {
-	u32 val, status_val;
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	const char *status = "unknown";
+	u32 val, status_val;
 
-	if (dev_priv->psr.psr2_enabled) {
+	if (intel_dp->psr.psr2_enabled) {
 		static const char * const live_status[] = {
 			"IDLE",
 			"CAPTURE",
@@ -299,7 +300,7 @@ psr_source_status(struct drm_i915_private *dev_priv, struct seq_file *m)
 			"TG_ON"
 		};
 		val = intel_de_read(dev_priv,
-				    EDP_PSR2_STATUS(dev_priv->psr.transcoder));
+				    EDP_PSR2_STATUS(intel_dp->psr.transcoder));
 		status_val = (val & EDP_PSR2_STATUS_STATE_MASK) >>
 			      EDP_PSR2_STATUS_STATE_SHIFT;
 		if (status_val < ARRAY_SIZE(live_status))
@@ -316,7 +317,7 @@ psr_source_status(struct drm_i915_private *dev_priv, struct seq_file *m)
 			"SRDENT_ON",
 		};
 		val = intel_de_read(dev_priv,
-				    EDP_PSR_STATUS(dev_priv->psr.transcoder));
+				    EDP_PSR_STATUS(intel_dp->psr.transcoder));
 		status_val = (val & EDP_PSR_STATUS_STATE_MASK) >>
 			      EDP_PSR_STATUS_STATE_SHIFT;
 		if (status_val < ARRAY_SIZE(live_status))
@@ -326,21 +327,18 @@ psr_source_status(struct drm_i915_private *dev_priv, struct seq_file *m)
 	seq_printf(m, "Source PSR status: %s [0x%08x]\n", status, val);
 }
 
-static int i915_edp_psr_status(struct seq_file *m, void *data)
+static int intel_psr_status(struct seq_file *m, struct intel_dp *intel_dp)
 {
-	struct drm_i915_private *dev_priv = node_to_i915(m->private);
-	struct i915_psr *psr = &dev_priv->psr;
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
+	struct intel_psr *psr = &intel_dp->psr;
 	intel_wakeref_t wakeref;
 	const char *status;
 	bool enabled;
 	u32 val;
 
-	if (!HAS_PSR(dev_priv))
-		return -ENODEV;
-
 	seq_printf(m, "Sink support: %s", yesno(psr->sink_support));
-	if (psr->dp)
-		seq_printf(m, " [0x%02x]", psr->dp->psr_dpcd[0]);
+	if (psr->sink_support)
+		seq_printf(m, " [0x%02x]", intel_dp->psr_dpcd[0]);
 	seq_puts(m, "\n");
 
 	if (!psr->sink_support)
@@ -364,16 +362,16 @@ static int i915_edp_psr_status(struct seq_file *m, void *data)
 
 	if (psr->psr2_enabled) {
 		val = intel_de_read(dev_priv,
-				    EDP_PSR2_CTL(dev_priv->psr.transcoder));
+				    EDP_PSR2_CTL(intel_dp->psr.transcoder));
 		enabled = val & EDP_PSR2_ENABLE;
 	} else {
 		val = intel_de_read(dev_priv,
-				    EDP_PSR_CTL(dev_priv->psr.transcoder));
+				    EDP_PSR_CTL(intel_dp->psr.transcoder));
 		enabled = val & EDP_PSR_ENABLE;
 	}
 	seq_printf(m, "Source PSR ctl: %s [0x%08x]\n",
 		   enableddisabled(enabled), val);
-	psr_source_status(dev_priv, m);
+	psr_source_status(intel_dp, m);
 	seq_printf(m, "Busy frontbuffer bits: 0x%08x\n",
 		   psr->busy_frontbuffer_bits);
 
@@ -382,7 +380,7 @@ static int i915_edp_psr_status(struct seq_file *m, void *data)
 	 */
 	if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv)) {
 		val = intel_de_read(dev_priv,
-				    EDP_PSR_PERF_CNT(dev_priv->psr.transcoder));
+				    EDP_PSR_PERF_CNT(intel_dp->psr.transcoder));
 		val &= EDP_PSR_PERF_CNT_MASK;
 		seq_printf(m, "Performance counter: %u\n", val);
 	}
@@ -403,7 +401,7 @@ static int i915_edp_psr_status(struct seq_file *m, void *data)
 		 */
 		for (frame = 0; frame < PSR2_SU_STATUS_FRAMES; frame += 3) {
 			val = intel_de_read(dev_priv,
-					    PSR2_SU_STATUS(dev_priv->psr.transcoder, frame));
+					    PSR2_SU_STATUS(intel_dp->psr.transcoder, frame));
 			su_frames_val[frame / 3] = val;
 		}
 
@@ -429,23 +427,50 @@ unlock:
 	return 0;
 }
 
+static int i915_edp_psr_status(struct seq_file *m, void *data)
+{
+	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	struct intel_dp *intel_dp = NULL;
+	struct intel_encoder *encoder;
+
+	if (!HAS_PSR(dev_priv))
+		return -ENODEV;
+
+	/* Find the first EDP which supports PSR */
+	for_each_intel_encoder_can_psr(&dev_priv->drm, encoder) {
+		intel_dp = enc_to_intel_dp(encoder);
+		break;
+	}
+
+	if (!intel_dp)
+		return -ENODEV;
+
+	return intel_psr_status(m, intel_dp);
+}
+
 static int
 i915_edp_psr_debug_set(void *data, u64 val)
 {
 	struct drm_i915_private *dev_priv = data;
+	struct intel_encoder *encoder;
 	intel_wakeref_t wakeref;
-	int ret;
+	int ret = -ENODEV;
 
-	if (!CAN_PSR(dev_priv))
-		return -ENODEV;
+	if (!HAS_PSR(dev_priv))
+		return ret;
 
-	drm_dbg_kms(&dev_priv->drm, "Setting PSR debug to %llx\n", val);
+	for_each_intel_encoder_can_psr(&dev_priv->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 
-	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
+		drm_dbg_kms(&dev_priv->drm, "Setting PSR debug to %llx\n", val);
 
-	ret = intel_psr_debug_set(dev_priv, val);
+		wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+		// TODO: split to each transcoder's PSR debug state
+		ret = intel_psr_debug_set(intel_dp, val);
+
+		intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+	}
 
 	return ret;
 }
@@ -454,12 +479,20 @@ static int
 i915_edp_psr_debug_get(void *data, u64 *val)
 {
 	struct drm_i915_private *dev_priv = data;
+	struct intel_encoder *encoder;
 
-	if (!CAN_PSR(dev_priv))
+	if (!HAS_PSR(dev_priv))
 		return -ENODEV;
 
-	*val = READ_ONCE(dev_priv->psr.debug);
-	return 0;
+	for_each_intel_encoder_can_psr(&dev_priv->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		// TODO: split to each transcoder's PSR debug state
+		*val = READ_ONCE(intel_dp->psr.debug);
+		return 0;
+	}
+
+	return -ENODEV;
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(i915_edp_psr_debug_fops,
@@ -771,27 +804,25 @@ static void intel_plane_uapi_info(struct seq_file *m, struct intel_plane *plane)
 	const struct intel_plane_state *plane_state =
 		to_intel_plane_state(plane->base.state);
 	const struct drm_framebuffer *fb = plane_state->uapi.fb;
-	struct drm_format_name_buf format_name;
 	struct drm_rect src, dst;
 	char rot_str[48];
 
 	src = drm_plane_state_src(&plane_state->uapi);
 	dst = drm_plane_state_dest(&plane_state->uapi);
 
-	if (fb)
-		drm_get_format_name(fb->format->format, &format_name);
-
 	plane_rotation(rot_str, sizeof(rot_str),
 		       plane_state->uapi.rotation);
 
-	seq_printf(m, "\t\tuapi: [FB:%d] %s,0x%llx,%dx%d, visible=%s, src=" DRM_RECT_FP_FMT ", dst=" DRM_RECT_FMT ", rotation=%s\n",
-		   fb ? fb->base.id : 0, fb ? format_name.str : "n/a",
-		   fb ? fb->modifier : 0,
-		   fb ? fb->width : 0, fb ? fb->height : 0,
-		   plane_visibility(plane_state),
-		   DRM_RECT_FP_ARG(&src),
-		   DRM_RECT_ARG(&dst),
-		   rot_str);
+	seq_puts(m, "\t\tuapi: [FB:");
+	if (fb)
+		seq_printf(m, "%d] %p4cc,0x%llx,%dx%d", fb->base.id,
+			   &fb->format->format, fb->modifier, fb->width,
+			   fb->height);
+	else
+		seq_puts(m, "0] n/a,0x0,0x0,");
+	seq_printf(m, ", visible=%s, src=" DRM_RECT_FP_FMT ", dst=" DRM_RECT_FMT
+		   ", rotation=%s\n", plane_visibility(plane_state),
+		   DRM_RECT_FP_ARG(&src), DRM_RECT_ARG(&dst), rot_str);
 
 	if (plane_state->planar_linked_plane)
 		seq_printf(m, "\t\tplanar: Linked to [PLANE:%d:%s] as a %s\n",
@@ -804,19 +835,17 @@ static void intel_plane_hw_info(struct seq_file *m, struct intel_plane *plane)
 	const struct intel_plane_state *plane_state =
 		to_intel_plane_state(plane->base.state);
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
-	struct drm_format_name_buf format_name;
 	char rot_str[48];
 
 	if (!fb)
 		return;
 
-	drm_get_format_name(fb->format->format, &format_name);
-
 	plane_rotation(rot_str, sizeof(rot_str),
 		       plane_state->hw.rotation);
 
-	seq_printf(m, "\t\thw: [FB:%d] %s,0x%llx,%dx%d, visible=%s, src=" DRM_RECT_FP_FMT ", dst=" DRM_RECT_FMT ", rotation=%s\n",
-		   fb->base.id, format_name.str,
+	seq_printf(m, "\t\thw: [FB:%d] %p4cc,0x%llx,%dx%d, visible=%s, src="
+		   DRM_RECT_FP_FMT ", dst=" DRM_RECT_FMT ", rotation=%s\n",
+		   fb->base.id, &fb->format->format,
 		   fb->modifier, fb->width, fb->height,
 		   yesno(plane_state->uapi.visible),
 		   DRM_RECT_FP_ARG(&plane_state->uapi.src),
@@ -865,6 +894,110 @@ static void intel_scaler_info(struct seq_file *m, struct intel_crtc *crtc)
 	}
 }
 
+#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_VBLANK_EVADE)
+static void crtc_updates_info(struct seq_file *m,
+			      struct intel_crtc *crtc,
+			      const char *hdr)
+{
+	u64 count;
+	int row;
+
+	count = 0;
+	for (row = 0; row < ARRAY_SIZE(crtc->debug.vbl.times); row++)
+		count += crtc->debug.vbl.times[row];
+	seq_printf(m, "%sUpdates: %llu\n", hdr, count);
+	if (!count)
+		return;
+
+	for (row = 0; row < ARRAY_SIZE(crtc->debug.vbl.times); row++) {
+		char columns[80] = "       |";
+		unsigned int x;
+
+		if (row & 1) {
+			const char *units;
+
+			if (row > 10) {
+				x = 1000000;
+				units = "ms";
+			} else {
+				x = 1000;
+				units = "us";
+			}
+
+			snprintf(columns, sizeof(columns), "%4ld%s |",
+				 DIV_ROUND_CLOSEST(BIT(row + 9), x), units);
+		}
+
+		if (crtc->debug.vbl.times[row]) {
+			x = ilog2(crtc->debug.vbl.times[row]);
+			memset(columns + 8, '*', x);
+			columns[8 + x] = '\0';
+		}
+
+		seq_printf(m, "%s%s\n", hdr, columns);
+	}
+
+	seq_printf(m, "%sMin update: %lluns\n",
+		   hdr, crtc->debug.vbl.min);
+	seq_printf(m, "%sMax update: %lluns\n",
+		   hdr, crtc->debug.vbl.max);
+	seq_printf(m, "%sAverage update: %lluns\n",
+		   hdr, div64_u64(crtc->debug.vbl.sum,  count));
+	seq_printf(m, "%sOverruns > %uus: %u\n",
+		   hdr, VBLANK_EVASION_TIME_US, crtc->debug.vbl.over);
+}
+
+static int crtc_updates_show(struct seq_file *m, void *data)
+{
+	crtc_updates_info(m, m->private, "");
+	return 0;
+}
+
+static int crtc_updates_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, crtc_updates_show, inode->i_private);
+}
+
+static ssize_t crtc_updates_write(struct file *file,
+				  const char __user *ubuf,
+				  size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_crtc *crtc = m->private;
+
+	/* May race with an update. Meh. */
+	memset(&crtc->debug.vbl, 0, sizeof(crtc->debug.vbl));
+
+	return len;
+}
+
+static const struct file_operations crtc_updates_fops = {
+	.owner = THIS_MODULE,
+	.open = crtc_updates_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = crtc_updates_write
+};
+
+static void crtc_updates_add(struct drm_crtc *crtc)
+{
+	debugfs_create_file("i915_update_info", 0644, crtc->debugfs_entry,
+			    to_intel_crtc(crtc), &crtc_updates_fops);
+}
+
+#else
+static void crtc_updates_info(struct seq_file *m,
+			      struct intel_crtc *crtc,
+			      const char *hdr)
+{
+}
+
+static void crtc_updates_add(struct drm_crtc *crtc)
+{
+}
+#endif
+
 static void intel_crtc_info(struct seq_file *m, struct intel_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
@@ -907,6 +1040,8 @@ static void intel_crtc_info(struct seq_file *m, struct intel_crtc *crtc)
 	seq_printf(m, "\tunderrun reporting: cpu=%s pch=%s\n",
 		   yesno(!crtc->cpu_fifo_underrun_disabled),
 		   yesno(!crtc->pch_fifo_underrun_disabled));
+
+	crtc_updates_info(m, crtc, "\t");
 }
 
 static int i915_display_info(struct seq_file *m, void *unused)
@@ -1032,7 +1167,6 @@ static ssize_t i915_ipc_status_write(struct file *file, const char __user *ubuf,
 		if (!dev_priv->ipc_enabled && enable)
 			drm_info(&dev_priv->drm,
 				 "Enabling IPC: WM will be proper only after next commit\n");
-		dev_priv->wm.distrust_bios_wm = true;
 		dev_priv->ipc_enabled = enable;
 		intel_enable_ipc(dev_priv);
 	}
@@ -1127,9 +1261,6 @@ static void drrs_status_per_crtc(struct seq_file *m,
 		/* disable_drrs() will make drrs->dp NULL */
 		if (!drrs->dp) {
 			seq_puts(m, "Idleness DRRS: Disabled\n");
-			if (dev_priv->psr.enabled)
-				seq_puts(m,
-				"\tAs PSR is enabled, DRRS is not enabled\n");
 			mutex_unlock(&drrs->mutex);
 			return;
 		}
@@ -2048,13 +2179,13 @@ static int i915_panel_show(struct seq_file *m, void *data)
 		return -ENODEV;
 
 	seq_printf(m, "Panel power up delay: %d\n",
-		   intel_dp->panel_power_up_delay);
+		   intel_dp->pps.panel_power_up_delay);
 	seq_printf(m, "Panel power down delay: %d\n",
-		   intel_dp->panel_power_down_delay);
+		   intel_dp->pps.panel_power_down_delay);
 	seq_printf(m, "Backlight on delay: %d\n",
-		   intel_dp->backlight_on_delay);
+		   intel_dp->pps.backlight_on_delay);
 	seq_printf(m, "Backlight off delay: %d\n",
-		   intel_dp->backlight_off_delay);
+		   intel_dp->pps.backlight_off_delay);
 
 	return 0;
 }
@@ -2063,18 +2194,39 @@ DEFINE_SHOW_ATTRIBUTE(i915_panel);
 static int i915_hdcp_sink_capability_show(struct seq_file *m, void *data)
 {
 	struct drm_connector *connector = m->private;
+	struct drm_i915_private *i915 = to_i915(connector->dev);
 	struct intel_connector *intel_connector = to_intel_connector(connector);
+	int ret;
 
-	if (connector->status != connector_status_connected)
-		return -ENODEV;
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	if (!connector->encoder || connector->status != connector_status_connected) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	seq_printf(m, "%s:%d HDCP version: ", connector->name,
 		   connector->base.id);
 	intel_hdcp_info(m, intel_connector);
 
-	return 0;
+out:
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	return ret;
 }
 DEFINE_SHOW_ATTRIBUTE(i915_hdcp_sink_capability);
+
+static int i915_psr_status_show(struct seq_file *m, void *data)
+{
+	struct drm_connector *connector = m->private;
+	struct intel_dp *intel_dp =
+		intel_attached_dp(to_intel_connector(connector));
+
+	return intel_psr_status(m, intel_dp);
+}
+DEFINE_SHOW_ATTRIBUTE(i915_psr_status);
 
 #define LPSP_CAPABLE(COND) (COND ? seq_puts(m, "LPSP: capable\n") : \
 				seq_puts(m, "LPSP: incapable\n"))
@@ -2251,6 +2403,12 @@ int intel_connector_debugfs_add(struct drm_connector *connector)
 				    connector, &i915_psr_sink_status_fops);
 	}
 
+	if (HAS_PSR(dev_priv) &&
+	    connector->connector_type == DRM_MODE_CONNECTOR_eDP) {
+		debugfs_create_file("i915_psr_status", 0444, root,
+				    connector, &i915_psr_status_fops);
+	}
+
 	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
 	    connector->connector_type == DRM_MODE_CONNECTOR_HDMIA ||
 	    connector->connector_type == DRM_MODE_CONNECTOR_HDMIB) {
@@ -2276,5 +2434,22 @@ int intel_connector_debugfs_add(struct drm_connector *connector)
 		debugfs_create_file("i915_lpsp_capability", 0444, root,
 				    connector, &i915_lpsp_capability_fops);
 
+	return 0;
+}
+
+/**
+ * intel_crtc_debugfs_add - add i915 specific crtc debugfs files
+ * @crtc: pointer to a drm_crtc
+ *
+ * Returns 0 on success, negative error codes on error.
+ *
+ * Failure to add debugfs entries should generally be ignored.
+ */
+int intel_crtc_debugfs_add(struct drm_crtc *crtc)
+{
+	if (!crtc->debugfs_entry)
+		return -ENODEV;
+
+	crtc_updates_add(crtc);
 	return 0;
 }

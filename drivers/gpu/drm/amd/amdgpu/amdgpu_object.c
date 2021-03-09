@@ -523,7 +523,6 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 	};
 	struct amdgpu_bo *bo;
 	unsigned long page_align, size = bp->size;
-	size_t acc_size;
 	int r;
 
 	/* Note that GDS/GWS/OA allocates 1 page per byte/resource. */
@@ -545,9 +544,6 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 		return -ENOMEM;
 
 	*bo_ptr = NULL;
-
-	acc_size = ttm_bo_dma_acc_size(&adev->mman.bdev, size,
-				       sizeof(struct amdgpu_bo));
 
 	bo = kzalloc(sizeof(struct amdgpu_bo), GFP_KERNEL);
 	if (bo == NULL)
@@ -577,8 +573,8 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 		bo->tbo.priority = 1;
 
 	r = ttm_bo_init_reserved(&adev->mman.bdev, &bo->tbo, size, bp->type,
-				 &bo->placement, page_align, &ctx, acc_size,
-				 NULL, bp->resv, &amdgpu_bo_destroy);
+				 &bo->placement, page_align, &ctx,  NULL,
+				 bp->resv, &amdgpu_bo_destroy);
 	if (unlikely(r != 0))
 		return r;
 
@@ -787,7 +783,7 @@ int amdgpu_bo_kmap(struct amdgpu_bo *bo, void **ptr)
 	if (r < 0)
 		return r;
 
-	r = ttm_bo_kmap(&bo->tbo, 0, bo->tbo.num_pages, &bo->kmap);
+	r = ttm_bo_kmap(&bo->tbo, 0, bo->tbo.mem.num_pages, &bo->kmap);
 	if (r)
 		return r;
 
@@ -911,8 +907,14 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 
 	if (bo->tbo.pin_count) {
 		uint32_t mem_type = bo->tbo.mem.mem_type;
+		uint32_t mem_flags = bo->tbo.mem.placement;
 
 		if (!(domain & amdgpu_mem_type_to_domain(mem_type)))
+			return -EINVAL;
+
+		if ((mem_type == TTM_PL_VRAM) &&
+		    (bo->flags & AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS) &&
+		    !(mem_flags & TTM_PL_FLAG_CONTIGUOUS))
 			return -EINVAL;
 
 		ttm_bo_pin(&bo->tbo);
@@ -930,7 +932,6 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 	if (bo->tbo.base.import_attach)
 		dma_buf_pin(bo->tbo.base.import_attach);
 
-	bo->flags |= AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS;
 	/* force to pin into visible video ram */
 	if (!(bo->flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS))
 		bo->flags |= AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
@@ -983,6 +984,7 @@ error:
  */
 int amdgpu_bo_pin(struct amdgpu_bo *bo, u32 domain)
 {
+	bo->flags |= AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS;
 	return amdgpu_bo_pin_restricted(bo, domain, 0, 0);
 }
 
