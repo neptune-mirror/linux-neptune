@@ -921,6 +921,37 @@ void dce110_edp_power_control(
 	}
 }
 
+void dce110_edp_wait_for_T12(
+		struct dc_link *link)
+{
+	struct dc_context *ctx = link->ctx;
+
+	if (dal_graphics_object_id_get_connector_id(link->link_enc->connector)
+			!= CONNECTOR_ID_EDP) {
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+
+	if (!link->panel_cntl)
+		return;
+
+	if (!link->panel_cntl->funcs->is_panel_powered_on(link->panel_cntl) &&
+			link->link_trace.time_stamp.edp_poweroff != 0) {
+		unsigned int t12_duration = 500; // Default T12 as per spec
+		unsigned long long current_ts = dm_get_timestamp(ctx);
+		unsigned long long time_since_edp_poweroff_ms =
+				div64_u64(dm_get_elapse_time_in_ns(
+						ctx,
+						current_ts,
+						link->link_trace.time_stamp.edp_poweroff), 1000000);
+
+		t12_duration += link->local_sink->edid_caps.panel_patch.extra_t12_ms; // Add extra T12
+
+		if (time_since_edp_poweroff_ms < t12_duration)
+			msleep(t12_duration - time_since_edp_poweroff_ms);
+	}
+}
+
 /*todo: cloned in stream enc, fix*/
 /*
  * @brief
@@ -1598,37 +1629,42 @@ static void disable_vga_and_power_gate_all_controllers(
 }
 
 
-static struct dc_stream_state *get_edp_stream(struct dc_state *context)
+static void get_edp_streams(struct dc_state *context,
+		struct dc_stream_state **edp_streams,
+		int *edp_stream_num)
 {
 	int i;
 
+	*edp_stream_num = 0;
 	for (i = 0; i < context->stream_count; i++) {
-		if (context->streams[i]->signal == SIGNAL_TYPE_EDP)
-			return context->streams[i];
+		if (context->streams[i]->signal == SIGNAL_TYPE_EDP) {
+			edp_streams[*edp_stream_num] = context->streams[i];
+			if (++(*edp_stream_num) == MAX_NUM_EDP)
+				return;
+		}
 	}
-	return NULL;
 }
 
-static struct dc_link *get_edp_link_with_sink(
+static void get_edp_links_with_sink(
 		struct dc *dc,
-		struct dc_state *context)
+		struct dc_link **edp_links_with_sink,
+		int *edp_with_sink_num)
 {
 	int i;
-	struct dc_link *link = NULL;
 
 	/* check if there is an eDP panel not in use */
+	*edp_with_sink_num = 0;
 	for (i = 0; i < dc->link_count; i++) {
 		if (dc->links[i]->local_sink &&
 			dc->links[i]->local_sink->sink_signal == SIGNAL_TYPE_EDP) {
-			link = dc->links[i];
-			break;
+			edp_links_with_sink[*edp_with_sink_num] = dc->links[i];
+			if (++(*edp_with_sink_num) == MAX_NUM_EDP)
+				return;
 		}
 	}
-
-	return link;
 }
 
-/**
+/*
  * When ASIC goes from VBIOS/VGA mode to driver/accelerated mode we need:
  *  1. Power down all DC HW blocks
  *  2. Disable VGA engine on all controllers
@@ -1637,36 +1673,48 @@ static struct dc_link *get_edp_link_with_sink(
  */
 void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 {
-	int i;
-	struct dc_link *edp_link_with_sink = get_edp_link_with_sink(dc, context);
-	struct dc_link *edp_link = get_edp_link(dc);
+	struct dc_link *edp_links_with_sink[MAX_NUM_EDP];
+	struct dc_link *edp_links[MAX_NUM_EDP];
+	struct dc_stream_state *edp_streams[MAX_NUM_EDP];
+	struct dc_link *edp_link_with_sink = NULL;
+	struct dc_link *edp_link = NULL;
 	struct dc_stream_state *edp_stream = NULL;
+	struct dce_hwseq *hws = dc->hwseq;
+	int edp_with_sink_num;
+	int edp_num;
+	int edp_stream_num;
+	int i;
 	bool can_apply_edp_fast_boot = false;
 	bool can_apply_seamless_boot = false;
 	bool keep_edp_vdd_on = false;
-	struct dce_hwseq *hws = dc->hwseq;
+
+	get_edp_links_with_sink(dc, edp_links_with_sink, &edp_with_sink_num);
+	get_edp_links(dc, edp_links, &edp_num);
 
 	if (hws->funcs.init_pipes)
 		hws->funcs.init_pipes(dc, context);
 
-	edp_stream = get_edp_stream(context);
+	get_edp_streams(context, edp_streams, &edp_stream_num);
 
 	// Check fastboot support, disable on DCE8 because of blank screens
-	if (edp_link && dc->ctx->dce_version != DCE_VERSION_8_0 &&
+	if (edp_num && dc->ctx->dce_version != DCE_VERSION_8_0 &&
 		    dc->ctx->dce_version != DCE_VERSION_8_1 &&
 		    dc->ctx->dce_version != DCE_VERSION_8_3) {
-
-		// enable fastboot if backend is enabled on eDP
-		if (edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc)) {
-			/* Set optimization flag on eDP stream*/
-			if (edp_stream && edp_link->link_status.link_active) {
-				edp_stream->apply_edp_fast_boot_optimization = true;
-				can_apply_edp_fast_boot = true;
+		for (i = 0; i < edp_num; i++) {
+			edp_link = edp_links[i];
+			// enable fastboot if backend is enabled on eDP
+			if (edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc)) {
+				/* Set optimization flag on eDP stream*/
+				if (edp_stream_num && edp_link->link_status.link_active) {
+					edp_stream = edp_streams[0];
+					edp_stream->apply_edp_fast_boot_optimization = true;
+					can_apply_edp_fast_boot = true;
+					break;
+				}
 			}
 		}
-
 		// We are trying to enable eDP, don't power down VDD
-		if (edp_stream)
+		if (edp_stream_num)
 			keep_edp_vdd_on = true;
 	}
 
@@ -1681,6 +1729,9 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 	/* eDP should not have stream in resume from S4 and so even with VBios post
 	 * it should get turned off
 	 */
+	if (edp_with_sink_num)
+		edp_link_with_sink = edp_links_with_sink[0];
+
 	if (!can_apply_edp_fast_boot && !can_apply_seamless_boot) {
 		if (edp_link_with_sink && !keep_edp_vdd_on) {
 			/*turn off backlight before DP_blank and encoder powered down*/

@@ -23,6 +23,9 @@ Advanced: Tricky tasks that need fairly good understanding of the DRM subsystem
 and graphics topics. Generally need the relevant hardware for development and
 testing.
 
+Expert: Only attempt these if you've successfully completed some tricky
+refactorings already and are an expert in the specific area
+
 Subsystem-wide refactorings
 ===========================
 
@@ -167,6 +170,22 @@ the ``msm`` and `i915` drivers use ``struct_mutex``.
 Contact: Daniel Vetter, respective driver maintainers
 
 Level: Advanced
+
+Move Buffer Object Locking to dma_resv_lock()
+---------------------------------------------
+
+Many drivers have their own per-object locking scheme, usually using
+mutex_lock(). This causes all kinds of trouble for buffer sharing, since
+depending which driver is the exporter and importer, the locking hierarchy is
+reversed.
+
+To solve this we need one standard per-object locking mechanism, which is
+dma_resv_lock(). This lock needs to be called as the outermost lock, with all
+other driver specific per-object locks removed. The problem is tha rolling out
+the actual change to the locking contract is a flag day, due to struct dma_buf
+buffer sharing.
+
+Level: Expert
 
 Convert logging to drm_* functions with drm_device paramater
 ------------------------------------------------------------
@@ -577,20 +596,24 @@ Contact: Daniel Vetter
 
 Level: Intermediate
 
-KMS cleanups
-------------
+Object lifetime fixes
+---------------------
 
-Some of these date from the very introduction of KMS in 2008 ...
+There's two related issues here
 
-- Make ->funcs and ->helper_private vtables optional. There's a bunch of empty
-  function tables in drivers, but before we can remove them we need to make sure
-  that all the users in helpers and drivers do correctly check for a NULL
-  vtable.
+- Cleanup up the various ->destroy callbacks, which often are all the same
+  simple code.
 
-- Cleanup up the various ->destroy callbacks. A lot of them just wrapt the
-  drm_*_cleanup implementations and can be removed. Some tack a kfree() at the
-  end, for which we could add drm_*_cleanup_kfree(). And then there's the (for
-  historical reasons) misnamed drm_primary_helper_destroy() function.
+- Lots of drivers erroneously allocate DRM modeset objects using devm_kzalloc,
+  which results in use-after free issues on driver unload. This can be serious
+  trouble even for drivers for hardware integrated on the SoC due to
+  EPROBE_DEFERRED backoff.
+
+Both these problems can be solved by switching over to drmm_kzalloc(), and the
+various convenience wrappers provided, e.g. drmm_crtc_alloc_with_planes(),
+drmm_universal_plane_alloc(), ... and so on.
+
+Contact: Daniel Vetter
 
 Level: Intermediate
 
@@ -625,8 +648,6 @@ Extend virtual test driver (VKMS)
 See the documentation of :ref:`VKMS <vkms>` for more details. This is an ideal
 internship task, since it only requires a virtual machine and can be sized to
 fit the available time.
-
-Contact: Daniel Vetter
 
 Level: See details
 
