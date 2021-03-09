@@ -1,0 +1,14 @@
+amd-staging-drm-next-rebase:
+    0a5740a1ed51cb57f45dd2e49913ec4ab30afa2c ("drm/ttm: Do not add non-system domain BO into swap list")
+amd-staging-drm-next-rebase:
+    0a5740a1ed51cb57f45dd2e49913ec4ab30afa2c ("drm/ttm: Do not add non-system domain BO into swap list")
+cirrus:
+    4c40f8c51b4c96262ffd18eae1f250735cb75ecb ("audio: cs35l41: Fix property renaming")
+futex2:
+    875f5b7d5d16c644e4f67a5a8824b2ccdb39ead4 ("futex2: Add sysfs entry for syscall numbers")
+futex-wait-multiple:
+    38d3381f594a4c8ee689adc7770a6cec0f44799e ("futex: Change WAIT_MULTIPLE opcode to 31")
+mm-soft-dirty-file:
+    bd68c4b17aaeffb6c44ad2dbde356fc1bd16d878 ("mm: Support soft dirty flag read with reset.")
+setup-gitlabci:
+    b3331a2c6773f6585175d0d28ba2508936934995 ("GitlabCI: Add rtw88 build options")
