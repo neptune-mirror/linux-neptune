@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: MIT
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -44,7 +43,7 @@ static bool flush_submission(struct intel_gt *gt, long timeout)
 		return false;
 
 	for_each_engine(engine, gt, id) {
-		intel_engine_flush_submission(engine);
+		intel_engine_flush_scheduler(engine);
 
 		/* Flush the background retirement and idle barriers */
 		flush_work(&engine->retire_work);
@@ -135,12 +134,7 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl, *tn;
 	unsigned long active_count = 0;
-	bool interruptible;
 	LIST_HEAD(free);
-
-	interruptible = true;
-	if (unlikely(timeout < 0))
-		timeout = -timeout, interruptible = false;
 
 	flush_submission(gt, timeout); /* kick the ksoftirqd tasklets */
 	spin_lock(&timelines->lock);
@@ -163,7 +157,7 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 				mutex_unlock(&tl->mutex);
 
 				timeout = dma_fence_wait_timeout(fence,
-								 interruptible,
+								 true,
 								 timeout);
 				dma_fence_put(fence);
 

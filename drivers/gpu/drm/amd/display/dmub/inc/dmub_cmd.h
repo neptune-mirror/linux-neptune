@@ -47,10 +47,10 @@
 
 /* Firmware versioning. */
 #ifdef DMUB_EXPOSE_VERSION
-#define DMUB_FW_VERSION_GIT_HASH 0xf51b86a
+#define DMUB_FW_VERSION_GIT_HASH 0x22538c5e3
 #define DMUB_FW_VERSION_MAJOR 0
 #define DMUB_FW_VERSION_MINOR 0
-#define DMUB_FW_VERSION_REVISION 47
+#define DMUB_FW_VERSION_REVISION 54
 #define DMUB_FW_VERSION_TEST 0
 #define DMUB_FW_VERSION_VBIOS 0
 #define DMUB_FW_VERSION_HOTFIX 0
@@ -78,6 +78,9 @@
 
 /* Maximum number of planes on any ASIC. */
 #define DMUB_MAX_PLANES 6
+
+/* Trace buffer offset for entry */
+#define TRACE_BUFFER_ENTRY_OFFSET  16
 
 #ifndef PHYSICAL_ADDRESS_LOC
 #define PHYSICAL_ADDRESS_LOC union large_integer
@@ -458,6 +461,10 @@ struct dmub_rb_cmd_mall {
 	uint16_t cursor_pitch;
 	uint16_t cursor_height;
 	uint8_t cursor_bpp;
+	uint8_t debug_bits;
+
+	uint8_t reserved1;
+	uint8_t reserved2;
 };
 
 struct dmub_cmd_digx_encoder_control_data {
@@ -487,13 +494,34 @@ struct dmub_rb_cmd_enable_disp_power_gating {
 	struct dmub_cmd_enable_disp_power_gating_data power_gating;
 };
 
-struct dmub_cmd_dig1_transmitter_control_data {
+struct dmub_dig_transmitter_control_data_v1_7 {
+	uint8_t phyid; /**< 0=UNIPHYA, 1=UNIPHYB, 2=UNIPHYC, 3=UNIPHYD, 4=UNIPHYE, 5=UNIPHYF */
+	uint8_t action; /**< Defined as ATOM_TRANSMITER_ACTION_xxx */
+	union {
+		uint8_t digmode; /**< enum atom_encode_mode_def */
+		uint8_t dplaneset; /**< DP voltage swing and pre-emphasis value, "DP_LANE_SET__xDB_y_zV" */
+	} mode_laneset;
+	uint8_t lanenum; /**< Number of lanes */
+	union {
+		uint32_t symclk_10khz; /**< Symbol Clock in 10Khz */
+	} symclk_units;
+	uint8_t hpdsel; /**< =1: HPD1, =2: HPD2, ..., =6: HPD6, =0: HPD is not assigned */
+	uint8_t digfe_sel; /**< DIG front-end selection, bit0 means DIG0 FE is enabled */
+	uint8_t connobj_id; /**< Connector Object Id defined in ObjectId.h */
+	uint8_t reserved0; /**< For future use */
+	uint8_t reserved1; /**< For future use */
+	uint8_t reserved2[3]; /**< For future use */
+	uint32_t reserved3[11]; /**< For future use */
+};
+
+union dmub_cmd_dig1_transmitter_control_data {
 	struct dig_transmitter_control_parameters_v1_6 dig;
+	struct dmub_dig_transmitter_control_data_v1_7 dig_v1_7;
 };
 
 struct dmub_rb_cmd_dig1_transmitter_control {
 	struct dmub_cmd_header header;
-	struct dmub_cmd_dig1_transmitter_control_data transmitter_control;
+	union dmub_cmd_dig1_transmitter_control_data transmitter_control;
 };
 
 struct dmub_rb_cmd_dpphy_init {
@@ -539,9 +567,11 @@ struct aux_transaction_parameters {
 };
 
 struct dmub_cmd_dp_aux_control_data {
-	uint32_t handle;
 	uint8_t instance;
+	uint8_t manual_acq_rel_enable;
 	uint8_t sw_crc_enabled;
+	uint8_t pad;
+	uint16_t handle;
 	uint16_t timeout;
 	enum aux_channel_type type;
 	struct aux_transaction_parameters dpaux;
@@ -624,6 +654,7 @@ enum dmub_cmd_mall_type {
 	DMUB_CMD__MALL_ACTION_ALLOW = 0,
 	DMUB_CMD__MALL_ACTION_DISALLOW = 1,
 	DMUB_CMD__MALL_ACTION_COPY_CURSOR = 2,
+	DMUB_CMD__MALL_ACTION_NO_DF_REQ = 3,
 };
 
 struct dmub_cmd_psr_copy_settings_data {
@@ -648,6 +679,7 @@ struct dmub_cmd_psr_copy_settings_data {
 	uint8_t multi_disp_optimizations_en;
 	uint16_t init_sdp_deadline;
 	uint16_t pad2;
+	uint32_t line_time_in_us;
 };
 
 struct dmub_rb_cmd_psr_copy_settings {

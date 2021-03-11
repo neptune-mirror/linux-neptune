@@ -38,7 +38,6 @@
 #include "gc/gc_9_0_sh_mask.h"
 
 #include "vega10_enum.h"
-#include "hdp/hdp_4_0_offset.h"
 
 #include "soc15_common.h"
 #include "clearstate_gfx9.h"
@@ -53,6 +52,7 @@
 
 #include "asic_reg/pwr/pwr_10_0_offset.h"
 #include "asic_reg/pwr/pwr_10_0_sh_mask.h"
+#include "asic_reg/gc/gc_9_0_default.h"
 
 #define GFX9_NUM_GFX_RINGS     1
 #define GFX9_MEC_HPD_SIZE 4096
@@ -107,14 +107,12 @@ MODULE_FIRMWARE("amdgpu/raven2_rlc.bin");
 MODULE_FIRMWARE("amdgpu/raven_kicker_rlc.bin");
 
 MODULE_FIRMWARE("amdgpu/arcturus_mec.bin");
-MODULE_FIRMWARE("amdgpu/arcturus_mec2.bin");
 MODULE_FIRMWARE("amdgpu/arcturus_rlc.bin");
 
 MODULE_FIRMWARE("amdgpu/renoir_ce.bin");
 MODULE_FIRMWARE("amdgpu/renoir_pfp.bin");
 MODULE_FIRMWARE("amdgpu/renoir_me.bin");
 MODULE_FIRMWARE("amdgpu/renoir_mec.bin");
-MODULE_FIRMWARE("amdgpu/renoir_mec2.bin");
 MODULE_FIRMWARE("amdgpu/renoir_rlc.bin");
 
 MODULE_FIRMWARE("amdgpu/green_sardine_ce.bin");
@@ -1517,6 +1515,15 @@ out:
 	return err;
 }
 
+static bool gfx_v9_0_load_mec2_fw_bin_support(struct amdgpu_device *adev)
+{
+	if (adev->asic_type == CHIP_ARCTURUS  ||
+	    adev->asic_type == CHIP_RENOIR)
+	    return false;
+
+	return true;
+}
+
 static int gfx_v9_0_init_cp_compute_microcode(struct amdgpu_device *adev,
 					  const char *chip_name)
 {
@@ -1538,21 +1545,23 @@ static int gfx_v9_0_init_cp_compute_microcode(struct amdgpu_device *adev,
 	adev->gfx.mec_feature_version = le32_to_cpu(cp_hdr->ucode_feature_version);
 
 
-	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_mec2.bin", chip_name);
-	err = request_firmware(&adev->gfx.mec2_fw, fw_name, adev->dev);
-	if (!err) {
-		err = amdgpu_ucode_validate(adev->gfx.mec2_fw);
-		if (err)
-			goto out;
-		cp_hdr = (const struct gfx_firmware_header_v1_0 *)
-		adev->gfx.mec2_fw->data;
-		adev->gfx.mec2_fw_version =
-		le32_to_cpu(cp_hdr->header.ucode_version);
-		adev->gfx.mec2_feature_version =
-		le32_to_cpu(cp_hdr->ucode_feature_version);
-	} else {
-		err = 0;
-		adev->gfx.mec2_fw = NULL;
+	if (gfx_v9_0_load_mec2_fw_bin_support(adev)) {
+		snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_mec2.bin", chip_name);
+		err = request_firmware(&adev->gfx.mec2_fw, fw_name, adev->dev);
+		if (!err) {
+			err = amdgpu_ucode_validate(adev->gfx.mec2_fw);
+			if (err)
+				goto out;
+			cp_hdr = (const struct gfx_firmware_header_v1_0 *)
+			adev->gfx.mec2_fw->data;
+			adev->gfx.mec2_fw_version =
+			le32_to_cpu(cp_hdr->header.ucode_version);
+			adev->gfx.mec2_feature_version =
+			le32_to_cpu(cp_hdr->ucode_feature_version);
+		} else {
+			err = 0;
+			adev->gfx.mec2_fw = NULL;
+		}
 	}
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
@@ -1581,8 +1590,7 @@ static int gfx_v9_0_init_cp_compute_microcode(struct amdgpu_device *adev,
 
 			/* TODO: Determine if MEC2 JT FW loading can be removed
 				 for all GFX V9 asic and above */
-			if (adev->asic_type != CHIP_ARCTURUS &&
-			    adev->asic_type != CHIP_RENOIR) {
+			if (gfx_v9_0_load_mec2_fw_bin_support(adev)) {
 				info = &adev->firmware.ucode[AMDGPU_UCODE_ID_CP_MEC2_JT];
 				info->ucode_id = AMDGPU_UCODE_ID_CP_MEC2_JT;
 				info->fw = adev->gfx.mec2_fw;
@@ -1882,7 +1890,10 @@ static void gfx_v9_0_enable_lbpw(struct amdgpu_device *adev, bool enable)
 
 static int gfx_v9_0_cp_jump_table_num(struct amdgpu_device *adev)
 {
-	return 5;
+	if (gfx_v9_0_load_mec2_fw_bin_support(adev))
+		return 5;
+	else
+		return 4;
 }
 
 static int gfx_v9_0_rlc_init(struct amdgpu_device *adev)
@@ -2228,8 +2239,7 @@ static int gfx_v9_0_compute_ring_init(struct amdgpu_device *adev, int ring_id,
 	irq_type = AMDGPU_CP_IRQ_COMPUTE_MEC1_PIPE0_EOP
 		+ ((ring->me - 1) * adev->gfx.mec.num_pipe_per_mec)
 		+ ring->pipe;
-	hw_prio = amdgpu_gfx_is_high_priority_compute_queue(adev, ring->pipe,
-							    ring->queue) ?
+	hw_prio = amdgpu_gfx_is_high_priority_compute_queue(adev, ring) ?
 			AMDGPU_GFX_PIPE_PRIO_HIGH : AMDGPU_GFX_PIPE_PRIO_NORMAL;
 	/* type-2 packets are deprecated on MEC, use type-3 instead */
 	return amdgpu_ring_init(adev, ring, 1024,
@@ -3391,9 +3401,7 @@ static void gfx_v9_0_mqd_set_priority(struct amdgpu_ring *ring, struct v9_mqd *m
 	struct amdgpu_device *adev = ring->adev;
 
 	if (ring->funcs->type == AMDGPU_RING_TYPE_COMPUTE) {
-		if (amdgpu_gfx_is_high_priority_compute_queue(adev,
-							      ring->pipe,
-							      ring->queue)) {
+		if (amdgpu_gfx_is_high_priority_compute_queue(adev, ring)) {
 			mqd->cp_hqd_pipe_priority = AMDGPU_GFX_PIPE_PRIO_HIGH;
 			mqd->cp_hqd_queue_priority =
 				AMDGPU_GFX_QUEUE_PRIORITY_MAXIMUM;
@@ -6671,6 +6679,65 @@ static void gfx_v9_0_emit_mem_sync(struct amdgpu_ring *ring)
 	amdgpu_ring_write(ring, 0x0000000A); /* POLL_INTERVAL */
 }
 
+static void gfx_v9_0_emit_wave_limit_cs(struct amdgpu_ring *ring,
+					uint32_t pipe, bool enable)
+{
+	struct amdgpu_device *adev = ring->adev;
+	uint32_t val;
+	uint32_t wcl_cs_reg;
+
+	/* mmSPI_WCL_PIPE_PERCENT_CS[0-7]_DEFAULT values are same */
+	val = enable ? 0x1 : mmSPI_WCL_PIPE_PERCENT_CS0_DEFAULT;
+
+	switch (pipe) {
+	case 0:
+		wcl_cs_reg = SOC15_REG_OFFSET(GC, 0, mmSPI_WCL_PIPE_PERCENT_CS0);
+		break;
+	case 1:
+		wcl_cs_reg = SOC15_REG_OFFSET(GC, 0, mmSPI_WCL_PIPE_PERCENT_CS1);
+		break;
+	case 2:
+		wcl_cs_reg = SOC15_REG_OFFSET(GC, 0, mmSPI_WCL_PIPE_PERCENT_CS2);
+		break;
+	case 3:
+		wcl_cs_reg = SOC15_REG_OFFSET(GC, 0, mmSPI_WCL_PIPE_PERCENT_CS3);
+		break;
+	default:
+		DRM_DEBUG("invalid pipe %d\n", pipe);
+		return;
+	}
+
+	amdgpu_ring_emit_wreg(ring, wcl_cs_reg, val);
+
+}
+static void gfx_v9_0_emit_wave_limit(struct amdgpu_ring *ring, bool enable)
+{
+	struct amdgpu_device *adev = ring->adev;
+	uint32_t val;
+	int i;
+
+
+	/* mmSPI_WCL_PIPE_PERCENT_GFX is 7 bit multiplier register to limit
+	 * number of gfx waves. Setting 5 bit will make sure gfx only gets
+	 * around 25% of gpu resources.
+	 */
+	val = enable ? 0x1f : mmSPI_WCL_PIPE_PERCENT_GFX_DEFAULT;
+	amdgpu_ring_emit_wreg(ring,
+			      SOC15_REG_OFFSET(GC, 0, mmSPI_WCL_PIPE_PERCENT_GFX),
+			      val);
+
+	/* Restrict waves for normal/low priority compute queues as well
+	 * to get best QoS for high priority compute jobs.
+	 *
+	 * amdgpu controls only 1st ME(0-3 CS pipes).
+	 */
+	for (i = 0; i < adev->gfx.mec.num_pipe_per_mec; i++) {
+		if (i != ring->pipe)
+			gfx_v9_0_emit_wave_limit_cs(ring, i, enable);
+
+	}
+}
+
 static const struct amd_ip_funcs gfx_v9_0_ip_funcs = {
 	.name = "gfx_v9_0",
 	.early_init = gfx_v9_0_early_init,
@@ -6760,7 +6827,9 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_compute = {
 		SOC15_FLUSH_GPU_TLB_NUM_REG_WAIT * 7 +
 		2 + /* gfx_v9_0_ring_emit_vm_flush */
 		8 + 8 + 8 + /* gfx_v9_0_ring_emit_fence x3 for user fence, vm fence */
-		7, /* gfx_v9_0_emit_mem_sync */
+		7 + /* gfx_v9_0_emit_mem_sync */
+		5 + /* gfx_v9_0_emit_wave_limit for updating mmSPI_WCL_PIPE_PERCENT_GFX register */
+		15, /* for updating 3 mmSPI_WCL_PIPE_PERCENT_CS registers */
 	.emit_ib_size =	7, /* gfx_v9_0_ring_emit_ib_compute */
 	.emit_ib = gfx_v9_0_ring_emit_ib_compute,
 	.emit_fence = gfx_v9_0_ring_emit_fence,
@@ -6776,6 +6845,7 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_compute = {
 	.emit_reg_wait = gfx_v9_0_ring_emit_reg_wait,
 	.emit_reg_write_reg_wait = gfx_v9_0_ring_emit_reg_write_reg_wait,
 	.emit_mem_sync = gfx_v9_0_emit_mem_sync,
+	.emit_wave_limit = gfx_v9_0_emit_wave_limit,
 };
 
 static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_kiq = {
