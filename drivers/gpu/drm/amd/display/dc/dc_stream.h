@@ -228,6 +228,9 @@ struct dc_stream_state {
 	uint32_t stream_id;
 	bool is_dsc_enabled;
 	union stream_update_flags update_flags;
+
+	bool has_non_synchronizable_pclk;
+	bool vblank_synchronized;
 };
 
 #define ABM_LEVEL_IMMEDIATE_DISABLE 255
@@ -283,7 +286,8 @@ void dc_commit_updates_for_stream(struct dc *dc,
 		struct dc_surface_update *srf_updates,
 		int surface_count,
 		struct dc_stream_state *stream,
-		struct dc_stream_update *stream_update);
+		struct dc_stream_update *stream_update,
+		struct dc_state *state);
 /*
  * Log the current stream state.
  */
@@ -448,6 +452,13 @@ bool dc_stream_get_crtc_position(struct dc *dc,
 				 int num_streams,
 				 unsigned int *v_pos,
 				 unsigned int *nom_v_pos);
+
+#if defined(CONFIG_DRM_AMD_SECURE_DISPLAY)
+bool dc_stream_forward_dmcu_crc_window(struct dc *dc, struct dc_stream_state *stream,
+			     struct crc_params *crc_window);
+bool dc_stream_stop_dmcu_crc_win_update(struct dc *dc,
+				 struct dc_stream_state *stream);
+#endif
 
 bool dc_stream_configure_crc(struct dc *dc,
 			     struct dc_stream_state *stream,

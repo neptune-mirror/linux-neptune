@@ -126,9 +126,7 @@ static void dpcd_set_training_pattern(
 static enum dc_dp_training_pattern decide_cr_training_pattern(
 		const struct dc_link_settings *link_settings)
 {
-	enum dc_dp_training_pattern pattern = DP_TRAINING_PATTERN_SEQUENCE_1;
-
-	return pattern;
+	return DP_TRAINING_PATTERN_SEQUENCE_1;
 }
 
 static enum dc_dp_training_pattern decide_eq_training_pattern(struct dc_link *link,
@@ -1100,11 +1098,13 @@ static enum link_training_result perform_clock_recovery_sequence(
 		if (is_max_vs_reached(lt_settings))
 			break;
 
-		/* 7. same voltage*/
-		/* Note: VS same for all lanes,
-		* so comparing first lane is sufficient*/
-		if (lt_settings->lane_settings[0].VOLTAGE_SWING ==
+		/* 7. same lane settings*/
+		/* Note: settings are the same for all lanes,
+		 * so comparing first lane is sufficient*/
+		if ((lt_settings->lane_settings[0].VOLTAGE_SWING ==
 			req_settings.lane_settings[0].VOLTAGE_SWING)
+			&& (lt_settings->lane_settings[0].PRE_EMPHASIS ==
+				req_settings.lane_settings[0].PRE_EMPHASIS))
 			retries_cr++;
 		else
 			retries_cr = 0;
@@ -1670,6 +1670,22 @@ bool perform_link_training_with_retries(
 
 			msleep(delay_dp_power_up_in_ms);
 		}
+
+#ifdef CONFIG_DRM_AMD_DC_HDCP
+		if (panel_mode == DP_PANEL_MODE_EDP) {
+			struct cp_psp *cp_psp = &stream->ctx->cp_psp;
+
+			if (cp_psp && cp_psp->funcs.enable_assr) {
+				if (!cp_psp->funcs.enable_assr(cp_psp->handle, link)) {
+					/* since eDP implies ASSR on, change panel
+					 * mode to disable ASSR
+					 */
+					panel_mode = DP_PANEL_MODE_DEFAULT;
+				}
+			} else
+				panel_mode = DP_PANEL_MODE_DEFAULT;
+		}
+#endif
 
 		dp_set_panel_mode(link, panel_mode);
 
@@ -3710,7 +3726,7 @@ bool detect_dp_sink_caps(struct dc_link *link)
 	/* TODO save sink caps in link->sink */
 }
 
-enum dc_link_rate linkRateInKHzToLinkRateMultiplier(uint32_t link_rate_in_khz)
+static enum dc_link_rate linkRateInKHzToLinkRateMultiplier(uint32_t link_rate_in_khz)
 {
 	enum dc_link_rate link_rate;
 	// LinkRate is normally stored as a multiplier of 0.27 Gbps per lane. Do the translation.
@@ -4267,7 +4283,7 @@ void dp_set_panel_mode(struct dc_link *link, enum dp_panel_mode panel_mode)
 
 		if (edp_config_set.bits.PANEL_MODE_EDP
 			!= panel_mode_edp) {
-			enum dc_status result = DC_ERROR_UNEXPECTED;
+			enum dc_status result;
 
 			edp_config_set.bits.PANEL_MODE_EDP =
 			panel_mode_edp;
@@ -4348,7 +4364,7 @@ void dp_set_fec_ready(struct dc_link *link, bool ready)
 	struct link_encoder *link_enc = link->link_enc;
 	uint8_t fec_config = 0;
 
-	if (!dc_link_is_fec_supported(link) || link->dc->debug.disable_fec)
+	if (!dc_link_should_enable_fec(link))
 		return;
 
 	if (link_enc->funcs->fec_set_ready &&
@@ -4383,7 +4399,7 @@ void dp_set_fec_enable(struct dc_link *link, bool enable)
 {
 	struct link_encoder *link_enc = link->link_enc;
 
-	if (!dc_link_is_fec_supported(link) || link->dc->debug.disable_fec)
+	if (!dc_link_should_enable_fec(link))
 		return;
 
 	if (link_enc->funcs->fec_set_enable &&
@@ -4409,24 +4425,39 @@ void dp_set_fec_enable(struct dc_link *link, bool enable)
 void dpcd_set_source_specific_data(struct dc_link *link)
 {
 	if (!link->dc->vendor_signature.is_valid) {
-		enum dc_status result_write_min_hblank = DC_NOT_SUPPORTED;
-		struct dpcd_amd_signature amd_signature;
-		amd_signature.AMD_IEEE_TxSignature_byte1 = 0x0;
-		amd_signature.AMD_IEEE_TxSignature_byte2 = 0x0;
-		amd_signature.AMD_IEEE_TxSignature_byte3 = 0x1A;
-		amd_signature.device_id_byte1 =
-				(uint8_t)(link->ctx->asic_id.chip_id);
-		amd_signature.device_id_byte2 =
-				(uint8_t)(link->ctx->asic_id.chip_id >> 8);
-		memset(&amd_signature.zero, 0, 4);
-		amd_signature.dce_version =
-				(uint8_t)(link->ctx->dce_version);
-		amd_signature.dal_version_byte1 = 0x0; // needed? where to get?
-		amd_signature.dal_version_byte2 = 0x0; // needed? where to get?
+		enum dc_status __maybe_unused result_write_min_hblank = DC_NOT_SUPPORTED;
+		struct dpcd_amd_signature amd_signature = {0};
+		struct dpcd_amd_device_id amd_device_id = {0};
 
-		core_link_write_dpcd(link, DP_SOURCE_OUI,
+		amd_device_id.device_id_byte1 =
+				(uint8_t)(link->ctx->asic_id.chip_id);
+		amd_device_id.device_id_byte2 =
+				(uint8_t)(link->ctx->asic_id.chip_id >> 8);
+		amd_device_id.dce_version =
+				(uint8_t)(link->ctx->dce_version);
+		amd_device_id.dal_version_byte1 = 0x0; // needed? where to get?
+		amd_device_id.dal_version_byte2 = 0x0; // needed? where to get?
+
+		core_link_read_dpcd(link, DP_SOURCE_OUI,
 				(uint8_t *)(&amd_signature),
 				sizeof(amd_signature));
+
+		if (!((amd_signature.AMD_IEEE_TxSignature_byte1 == 0x0) &&
+			(amd_signature.AMD_IEEE_TxSignature_byte2 == 0x0) &&
+			(amd_signature.AMD_IEEE_TxSignature_byte3 == 0x1A))) {
+
+			amd_signature.AMD_IEEE_TxSignature_byte1 = 0x0;
+			amd_signature.AMD_IEEE_TxSignature_byte2 = 0x0;
+			amd_signature.AMD_IEEE_TxSignature_byte3 = 0x1A;
+
+			core_link_write_dpcd(link, DP_SOURCE_OUI,
+				(uint8_t *)(&amd_signature),
+				sizeof(amd_signature));
+		}
+
+		core_link_write_dpcd(link, DP_SOURCE_OUI+0x03,
+				(uint8_t *)(&amd_device_id),
+				sizeof(amd_device_id));
 
 		if (link->ctx->dce_version >= DCN_VERSION_2_0 &&
 			link->dc->caps.min_horizontal_blanking_period != 0) {

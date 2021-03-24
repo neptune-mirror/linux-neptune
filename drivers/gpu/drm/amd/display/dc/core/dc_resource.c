@@ -417,6 +417,49 @@ int resource_get_clock_source_reference(
 	return -1;
 }
 
+bool resource_are_vblanks_synchronizable(
+	struct dc_stream_state *stream1,
+	struct dc_stream_state *stream2)
+{
+	uint32_t base60_refresh_rates[] = {10, 20, 5};
+	uint8_t i;
+	uint8_t rr_count = sizeof(base60_refresh_rates)/sizeof(base60_refresh_rates[0]);
+	uint64_t frame_time_diff;
+
+	if (stream1->ctx->dc->config.vblank_alignment_dto_params &&
+		stream1->ctx->dc->config.vblank_alignment_max_frame_time_diff > 0 &&
+		dc_is_dp_signal(stream1->signal) &&
+		dc_is_dp_signal(stream2->signal) &&
+		false == stream1->has_non_synchronizable_pclk &&
+		false == stream2->has_non_synchronizable_pclk &&
+		stream1->timing.flags.VBLANK_SYNCHRONIZABLE &&
+		stream2->timing.flags.VBLANK_SYNCHRONIZABLE) {
+		/* disable refresh rates higher than 60Hz for now */
+		if (stream1->timing.pix_clk_100hz*100/stream1->timing.h_total/
+				stream1->timing.v_total > 60)
+			return false;
+		if (stream2->timing.pix_clk_100hz*100/stream2->timing.h_total/
+				stream2->timing.v_total > 60)
+			return false;
+		frame_time_diff = (uint64_t)10000 *
+			stream1->timing.h_total *
+			stream1->timing.v_total *
+			stream2->timing.pix_clk_100hz;
+		frame_time_diff = div_u64(frame_time_diff, stream1->timing.pix_clk_100hz);
+		frame_time_diff = div_u64(frame_time_diff, stream2->timing.h_total);
+		frame_time_diff = div_u64(frame_time_diff, stream2->timing.v_total);
+		for (i = 0; i < rr_count; i++) {
+			int64_t diff = (int64_t)div_u64(frame_time_diff * base60_refresh_rates[i], 10) - 10000;
+
+			if (diff < 0)
+				diff = -diff;
+			if (diff < stream1->ctx->dc->config.vblank_alignment_max_frame_time_diff)
+				return true;
+		}
+	}
+	return false;
+}
+
 bool resource_are_streams_timing_synchronizable(
 	struct dc_stream_state *stream1,
 	struct dc_stream_state *stream2)
@@ -1117,7 +1160,7 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx)
  * We also need to make sure pipe_ctx->plane_res.scl_data.h_active uses the
  * original h_border_left value in its calculation.
  */
-int shift_border_left_to_dst(struct pipe_ctx *pipe_ctx)
+static int shift_border_left_to_dst(struct pipe_ctx *pipe_ctx)
 {
 	int store_h_border_left = pipe_ctx->stream->timing.h_border_left;
 
@@ -1128,8 +1171,8 @@ int shift_border_left_to_dst(struct pipe_ctx *pipe_ctx)
 	return store_h_border_left;
 }
 
-void restore_border_left_from_dst(struct pipe_ctx *pipe_ctx,
-                                  int store_h_border_left)
+static void restore_border_left_from_dst(struct pipe_ctx *pipe_ctx,
+					 int store_h_border_left)
 {
 	pipe_ctx->stream->dst.x -= store_h_border_left;
 	pipe_ctx->stream->timing.h_border_left = store_h_border_left;
@@ -1153,8 +1196,8 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 
 	calculate_viewport(pipe_ctx);
 
-	if (pipe_ctx->plane_res.scl_data.viewport.height < 12 ||
-		pipe_ctx->plane_res.scl_data.viewport.width < 12) {
+	if (pipe_ctx->plane_res.scl_data.viewport.height < MIN_VIEWPORT_SIZE ||
+		pipe_ctx->plane_res.scl_data.viewport.width < MIN_VIEWPORT_SIZE) {
 		if (store_h_border_left) {
 			restore_border_left_from_dst(pipe_ctx,
 				store_h_border_left);
@@ -1697,7 +1740,7 @@ static bool are_stream_backends_same(
 	return true;
 }
 
-/**
+/*
  * dc_is_stream_unchanged() - Compare two stream states for equivalence.
  *
  * Checks if there a difference between the two states
@@ -1718,7 +1761,7 @@ bool dc_is_stream_unchanged(
 	return true;
 }
 
-/**
+/*
  * dc_is_stream_scaling_unchanged() - Compare scaling rectangles of two streams.
  */
 bool dc_is_stream_scaling_unchanged(
@@ -1833,7 +1876,7 @@ static struct audio *find_first_free_audio(
 	return 0;
 }
 
-/**
+/*
  * dc_add_stream_to_ctx() - Add a new dc_stream_state to a dc_state.
  */
 enum dc_status dc_add_stream_to_ctx(
@@ -1860,7 +1903,7 @@ enum dc_status dc_add_stream_to_ctx(
 	return res;
 }
 
-/**
+/*
  * dc_remove_stream_from_ctx() - Remove a stream from a dc_state.
  */
 enum dc_status dc_remove_stream_from_ctx(
@@ -2075,6 +2118,20 @@ static int acquire_resource_from_hw_enabled_state(
 	return -1;
 }
 
+static void mark_seamless_boot_stream(
+		const struct dc  *dc,
+		struct dc_stream_state *stream)
+{
+	struct dc_bios *dcb = dc->ctx->dc_bios;
+
+	/* TODO: Check Linux */
+	if (dc->config.allow_seamless_boot_optimization &&
+			!dcb->funcs->is_accelerated_mode(dcb)) {
+		if (dc_validate_seamless_boot_timing(dc, stream->sink, &stream->timing))
+			stream->apply_seamless_boot_optimization = true;
+	}
+}
+
 enum dc_status resource_map_pool_resources(
 		const struct dc  *dc,
 		struct dc_state *context,
@@ -2085,22 +2142,20 @@ enum dc_status resource_map_pool_resources(
 	struct dc_context *dc_ctx = dc->ctx;
 	struct pipe_ctx *pipe_ctx = NULL;
 	int pipe_idx = -1;
-	struct dc_bios *dcb = dc->ctx->dc_bios;
 
 	calculate_phy_pix_clks(stream);
 
-	/* TODO: Check Linux */
-	if (dc->config.allow_seamless_boot_optimization &&
-			!dcb->funcs->is_accelerated_mode(dcb)) {
-		if (dc_validate_seamless_boot_timing(dc, stream->sink, &stream->timing))
-			stream->apply_seamless_boot_optimization = true;
-	}
+	mark_seamless_boot_stream(dc, stream);
 
-	if (stream->apply_seamless_boot_optimization)
+	if (stream->apply_seamless_boot_optimization) {
 		pipe_idx = acquire_resource_from_hw_enabled_state(
 				&context->res_ctx,
 				pool,
 				stream);
+		if (pipe_idx < 0)
+			/* hw resource was assigned to other stream */
+			stream->apply_seamless_boot_optimization = false;
+	}
 
 	if (pipe_idx < 0)
 		/* acquire new resources */

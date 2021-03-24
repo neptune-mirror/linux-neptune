@@ -15,6 +15,7 @@
 
 #include "gt/intel_gt_requests.h"
 
+#include "dma_resv_utils.h"
 #include "i915_trace.h"
 
 static bool swap_available(void)
@@ -208,6 +209,8 @@ i915_gem_shrink(struct drm_i915_private *i915,
 				}
 				mutex_unlock(&obj->mm.lock);
 			}
+
+			dma_resv_prune(obj->base.resv);
 
 			scanned += obj->base.size >> PAGE_SHIFT;
 			i915_gem_object_put(obj);
@@ -410,20 +413,6 @@ void i915_gem_driver_unregister__shrinker(struct drm_i915_private *i915)
 	drm_WARN_ON(&i915->drm,
 		    unregister_oom_notifier(&i915->mm.oom_notifier));
 	unregister_shrinker(&i915->mm.shrinker);
-}
-
-void i915_gem_shrinker_taints_mutex(struct drm_i915_private *i915,
-				    struct mutex *mutex)
-{
-	if (!IS_ENABLED(CONFIG_LOCKDEP))
-		return;
-
-	fs_reclaim_acquire(GFP_KERNEL);
-
-	mutex_acquire(&mutex->dep_map, 0, 0, _RET_IP_);
-	mutex_release(&mutex->dep_map, _RET_IP_);
-
-	fs_reclaim_release(GFP_KERNEL);
 }
 
 #define obj_to_i915(obj__) to_i915((obj__)->base.dev)
