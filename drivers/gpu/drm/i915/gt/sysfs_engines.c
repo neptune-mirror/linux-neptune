@@ -79,13 +79,11 @@ static ssize_t repr_trim(char *buf, ssize_t len)
 
 static ssize_t
 __caps_show(struct intel_engine_cs *engine,
-	    u32 caps, char *buf, bool show_unknown)
+	    unsigned long caps, char *buf, bool show_unknown)
 {
 	const char * const *repr;
 	int count, n;
 	ssize_t len;
-
-	BUILD_BUG_ON(!typecheck(typeof(caps), engine->uabi_capabilities));
 
 	switch (engine->class) {
 	case VIDEO_DECODE_CLASS:
@@ -103,12 +101,10 @@ __caps_show(struct intel_engine_cs *engine,
 		count = 0;
 		break;
 	}
-	GEM_BUG_ON(count > BITS_PER_TYPE(typeof(caps)));
+	GEM_BUG_ON(count > BITS_PER_LONG);
 
 	len = 0;
-	for_each_set_bit(n,
-			 (unsigned long *)&caps,
-			 show_unknown ? BITS_PER_TYPE(typeof(caps)) : count) {
+	for_each_set_bit(n, &caps, show_unknown ? BITS_PER_LONG : count) {
 		if (n >= count || !repr[n]) {
 			if (GEM_WARN_ON(show_unknown))
 				len += snprintf(buf + len, PAGE_SIZE - len,
@@ -226,9 +222,7 @@ timeslice_store(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 
 	WRITE_ONCE(engine->props.timeslice_duration_ms, duration);
-
-	if (execlists_active(&engine->execlists))
-		set_timer_ms(&engine->execlists.timer, duration);
+	intel_engine_kick_scheduler(engine);
 
 	return count;
 }
@@ -330,9 +324,7 @@ preempt_timeout_store(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 
 	WRITE_ONCE(engine->props.preempt_timeout_ms, timeout);
-
-	if (READ_ONCE(engine->execlists.pending[0]))
-		set_timer_ms(&engine->execlists.preempt, timeout);
+	intel_engine_kick_scheduler(engine);
 
 	return count;
 }
@@ -414,6 +406,19 @@ heartbeat_default(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 
 static struct kobj_attribute heartbeat_interval_def =
 __ATTR(heartbeat_interval_ms, 0444, heartbeat_default, NULL);
+
+static ssize_t
+runtime_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct intel_engine_cs *engine = kobj_to_engine(kobj);
+	ktime_t dummy;
+
+	return sprintf(buf, "%llu\n",
+		       ktime_to_ms(intel_engine_get_busy_time(engine, &dummy)));
+}
+
+static struct kobj_attribute runtime_attr =
+__ATTR(runtime_ms, 0444, runtime_show, NULL);
 
 static void kobj_engine_release(struct kobject *kobj)
 {
@@ -523,6 +528,10 @@ void intel_engines_add_sysfs(struct drm_i915_private *i915)
 
 		if (intel_engine_has_preempt_reset(engine) &&
 		    sysfs_create_file(kobj, &preempt_timeout_attr.attr))
+			goto err_engine;
+
+		if (intel_engine_supports_stats(engine) &&
+		    sysfs_create_file(kobj, &runtime_attr.attr))
 			goto err_engine;
 
 		add_defaults(container_of(kobj, struct kobj_engine, base));

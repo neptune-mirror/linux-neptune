@@ -296,11 +296,16 @@ struct amdgpu_display_funcs {
 			      struct amdgpu_hpd *hpd,
 			      struct amdgpu_router *router);
 
-
+	/* it is used to enter or exit into free sync mode */
+	int (*notify_freesync)(struct drm_device *dev, void *data,
+			       struct drm_file *filp);
 };
 
 struct amdgpu_framebuffer {
 	struct drm_framebuffer base;
+
+	uint64_t tiling_flags;
+	bool tmz_surface;
 
 	/* caching for later use */
 	uint64_t address;
@@ -334,6 +339,10 @@ struct amdgpu_mode_info {
 	struct drm_property *dither_property;
 	/* Adaptive Backlight Modulation (power feature) */
 	struct drm_property *abm_level_property;
+	/* it is used to allow enablement of freesync mode */
+	struct drm_property *freesync_property;
+	/* it is used to know about display capability of freesync mode */
+	struct drm_property *freesync_capable_property;
 	/* hardcoded DFP edid from BIOS */
 	struct edid *bios_hardcoded_edid;
 	int bios_hardcoded_edid_size;
@@ -599,6 +608,14 @@ int amdgpu_display_get_crtc_scanoutpos(struct drm_device *dev,
 			int *hpos, ktime_t *stime, ktime_t *etime,
 			const struct drm_display_mode *mode);
 
+int amdgpu_display_gem_fb_init(struct drm_device *dev,
+			       struct amdgpu_framebuffer *rfb,
+			       const struct drm_mode_fb_cmd2 *mode_cmd,
+			       struct drm_gem_object *obj);
+int amdgpu_display_gem_fb_verify_and_init(
+	struct drm_device *dev, struct amdgpu_framebuffer *rfb,
+	struct drm_file *file_priv, const struct drm_mode_fb_cmd2 *mode_cmd,
+	struct drm_gem_object *obj);
 int amdgpu_display_framebuffer_init(struct drm_device *dev,
 				    struct amdgpu_framebuffer *rfb,
 				    const struct drm_mode_fb_cmd2 *mode_cmd,

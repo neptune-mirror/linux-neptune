@@ -1,6 +1,5 @@
+/* SPDX-License-Identifier: MIT */
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2016 Intel Corporation
  */
 
@@ -83,6 +82,8 @@ struct intel_timeline {
 
 	struct list_head link;
 	struct intel_gt *gt;
+
+	struct list_head engine_link;
 
 	struct kref kref;
 	struct rcu_head rcu;

@@ -621,13 +621,6 @@ static const struct {
 	[WM_ADSP_FW_MISC] =     { .file = "misc" },
 };
 
-struct wm_coeff_ctl_ops {
-	int (*xget)(struct snd_kcontrol *kcontrol,
-		    struct snd_ctl_elem_value *ucontrol);
-	int (*xput)(struct snd_kcontrol *kcontrol,
-		    struct snd_ctl_elem_value *ucontrol);
-};
-
 struct wm_coeff_ctl {
 	const char *name;
 	const char *fw_name;
@@ -635,7 +628,6 @@ struct wm_coeff_ctl {
 	const char *subname;
 	unsigned int subname_len;
 	struct wm_adsp_alg_region alg_region;
-	struct wm_coeff_ctl_ops ops;
 	struct wm_adsp *dsp;
 	unsigned int enabled:1;
 	struct list_head list;
@@ -1589,8 +1581,6 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 	}
 	ctl->enabled = 1;
 	ctl->set = 0;
-	ctl->ops.xget = wm_coeff_get;
-	ctl->ops.xput = wm_coeff_put;
 	ctl->dsp = dsp;
 
 	ctl->flags = flags;
@@ -4069,7 +4059,7 @@ static inline int wm_adsp_read_data_word(struct wm_adsp *dsp, int mem_type,
 	if (ret < 0)
 		return ret;
 
-	*data = be32_to_cpu(raw) & dsp->data_word_mask;
+	*data = be32_to_cpu(raw) & 0x00ffffffu;
 
 	return 0;
 }
@@ -4078,7 +4068,7 @@ static int wm_adsp_write_data_word(struct wm_adsp *dsp, int mem_type,
 				   unsigned int mem_addr, u32 data)
 {
 	struct wm_adsp_region const *mem = wm_adsp_find_region(dsp, mem_type);
-	__be32 val = cpu_to_be32(data & dsp->data_word_mask);
+	__be32 val = cpu_to_be32(data & 0x00ffffffu);
 	unsigned int reg;
 
 	if (!mem)
@@ -4103,7 +4093,7 @@ static inline int wm_adsp_buffer_write(struct wm_adsp_compr_buf *buf,
 				       buf->host_buf_ptr + field_offset, data);
 }
 
-static void wm_adsp_remove_padding(u32 *buf, int nwords, int data_word_size)
+static void wm_adsp_remove_padding(u32 *buf, int nwords)
 {
 	const __be32 *pack_in = (__be32 *)buf;
 	u8 *pack_out = (u8 *)buf;
@@ -4114,21 +4104,12 @@ static void wm_adsp_remove_padding(u32 *buf, int nwords, int data_word_size)
 	 * are in swapped order. This swaps back to the original little-endian
 	 * order and strips the pad bytes.
 	 */
-	if (data_word_size == 3)
-		for (i = 0; i < nwords; i++) {
-			u32 word = be32_to_cpu(*pack_in++);
-			*pack_out++ = (u8)word;
-			*pack_out++ = (u8)(word >> 8);
-			*pack_out++ = (u8)(word >> 16);
-		}
-	else
-		for (i = 0; i < nwords; i++) {
-			u32 word = be32_to_cpu(*pack_in++);
-			*pack_out++ = (u8)word;
-			*pack_out++ = (u8)(word >> 8);
-			*pack_out++ = (u8)(word >> 16);
-			*pack_out++ = (u8)(word >> 24);
-		}
+	for (i = 0; i < nwords; i++) {
+		u32 word = be32_to_cpu(*pack_in++);
+		*pack_out++ = (u8)word;
+		*pack_out++ = (u8)(word >> 8);
+		*pack_out++ = (u8)(word >> 16);
+	}
 }
 
 static int wm_adsp_buffer_populate(struct wm_adsp_compr_buf *buf)
@@ -4325,8 +4306,7 @@ static int wm_adsp_buffer_parse_coeff(struct wm_coeff_ctl *ctl)
 		return -EINVAL;
 	}
 
-	wm_adsp_remove_padding((u32 *)&coeff_v1.name, ARRAY_SIZE(coeff_v1.name),
-			       ctl->dsp->data_word_size);
+	wm_adsp_remove_padding((u32 *)&coeff_v1.name, ARRAY_SIZE(coeff_v1.name));
 
 	buf->name = kasprintf(GFP_KERNEL, "%s-dsp-%s", ctl->dsp->part,
 			      (char *)&coeff_v1.name);
@@ -4678,7 +4658,7 @@ static int wm_adsp_buffer_capture_block(struct wm_adsp_compr *compr, int target)
 	if (ret < 0)
 		return ret;
 
-	wm_adsp_remove_padding(compr->raw_buf, nwords, data_word_size);
+	wm_adsp_remove_padding(compr->raw_buf, nwords);
 
 	/* update read index to account for words read */
 	buf->read_index += nwords;

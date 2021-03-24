@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: MIT
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -39,6 +38,24 @@ static void user_forcewake(struct intel_gt *gt, bool suspend)
 	intel_gt_pm_put(gt);
 }
 
+static void runtime_begin(struct intel_gt *gt)
+{
+	smp_wmb(); /* pairs with intel_gt_get_busy_time() */
+	WRITE_ONCE(gt->stats.start, ktime_get());
+}
+
+static void runtime_end(struct intel_gt *gt)
+{
+	ktime_t total;
+
+	total = ktime_sub(ktime_get(), gt->stats.start);
+	total = ktime_add(gt->stats.total, total);
+
+	WRITE_ONCE(gt->stats.start, 0);
+	smp_wmb(); /* pairs with intel_gt_get_busy_time() */
+	gt->stats.total = total;
+}
+
 static int __gt_unpark(struct intel_wakeref *wf)
 {
 	struct intel_gt *gt = container_of(wf, typeof(*gt), wakeref);
@@ -67,6 +84,7 @@ static int __gt_unpark(struct intel_wakeref *wf)
 	i915_pmu_gt_unparked(i915);
 
 	intel_gt_unpark_requests(gt);
+	runtime_begin(gt);
 
 	return 0;
 }
@@ -79,6 +97,7 @@ static int __gt_park(struct intel_wakeref *wf)
 
 	GT_TRACE(gt, "\n");
 
+	runtime_end(gt);
 	intel_gt_park_requests(gt);
 
 	i915_vma_parked(gt);
@@ -337,6 +356,20 @@ int intel_gt_runtime_resume(struct intel_gt *gt)
 	intel_ggtt_restore_fences(gt->ggtt);
 
 	return intel_uc_runtime_resume(&gt->uc);
+}
+
+ktime_t intel_gt_get_awake_time(const struct intel_gt *gt)
+{
+	ktime_t total = gt->stats.total;
+	ktime_t start;
+
+	start = READ_ONCE(gt->stats.start);
+	if (start) {
+		smp_rmb(); /* pairs with runtime_begin/end */
+		start = ktime_sub(ktime_get(), start);
+	}
+
+	return ktime_add(total, start);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
