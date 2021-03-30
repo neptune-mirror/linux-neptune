@@ -97,7 +97,7 @@ void i915_address_space_init(struct i915_address_space *vm, int subclass)
 	 */
 	mutex_init(&vm->mutex);
 	lockdep_set_subclass(&vm->mutex, subclass);
-	i915_gem_shrinker_taints_mutex(vm->i915, &vm->mutex);
+	fs_reclaim_taints_mutex(&vm->mutex);
 
 	GEM_BUG_ON(!vm->total);
 	drm_mm_init(&vm->mm, 0, vm->total);
@@ -420,6 +420,35 @@ void setup_private_pat(struct intel_uncore *uncore)
 		chv_setup_private_ppat(uncore);
 	else
 		bdw_setup_private_ppat(uncore);
+}
+
+struct i915_vma *
+__vm_create_scratch_for_read(struct i915_address_space *vm, unsigned long size)
+{
+	struct drm_i915_gem_object *obj;
+	struct i915_vma *vma;
+	int err;
+
+	obj = i915_gem_object_create_internal(vm->i915, PAGE_ALIGN(size));
+	if (IS_ERR(obj))
+		return ERR_CAST(obj);
+
+	i915_gem_object_set_cache_coherency(obj, I915_CACHING_CACHED);
+
+	vma = i915_vma_instance(obj, vm, NULL);
+	if (IS_ERR(vma)) {
+		i915_gem_object_put(obj);
+		return vma;
+	}
+
+	err = i915_vma_pin(vma, 0, 0,
+			   i915_vma_is_ggtt(vma) ? PIN_GLOBAL : PIN_USER);
+	if (err) {
+		i915_vma_put(vma);
+		return ERR_PTR(err);
+	}
+
+	return vma;
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

@@ -7,6 +7,7 @@
 #include <linux/prime_numbers.h>
 
 #include "gt/intel_engine_pm.h"
+#include "gt/intel_gpu_commands.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 #include "gem/i915_gem_region.h"
@@ -103,14 +104,6 @@ static int check_partial_mapping(struct drm_i915_gem_object *obj,
 	GEM_BUG_ON(i915_gem_object_get_tiling(obj) != tile->tiling);
 	GEM_BUG_ON(i915_gem_object_get_stride(obj) != tile->stride);
 
-	i915_gem_object_lock(obj, NULL);
-	err = i915_gem_object_set_to_gtt_domain(obj, true);
-	i915_gem_object_unlock(obj);
-	if (err) {
-		pr_err("Failed to flush to GTT write domain; err=%d\n", err);
-		return err;
-	}
-
 	page = i915_prandom_u32_max_state(npages, prng);
 	view = compute_partial_view(obj, page, MIN_CHUNK_PAGES);
 
@@ -187,14 +180,6 @@ static int check_partial_mappings(struct drm_i915_gem_object *obj,
 
 	GEM_BUG_ON(i915_gem_object_get_tiling(obj) != tile->tiling);
 	GEM_BUG_ON(i915_gem_object_get_stride(obj) != tile->stride);
-
-	i915_gem_object_lock(obj, NULL);
-	err = i915_gem_object_set_to_gtt_domain(obj, true);
-	i915_gem_object_unlock(obj);
-	if (err) {
-		pr_err("Failed to flush to GTT write domain; err=%d\n", err);
-		return err;
-	}
 
 	for_each_prime_number_from(page, 1, npages) {
 		struct i915_ggtt_view view =
