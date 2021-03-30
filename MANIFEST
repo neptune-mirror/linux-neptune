@@ -1,0 +1,18 @@
+amd-staging-drm-next:
+    74bf6b762776e24d19aeec141ffa36ea7793be09 ("drm/amdgpu/vangogh: don't check for dpm in is_dpm_running when in suspend")
+cirrus:
+    3ca44a28e43d92ff117e245a627b73449c705e3a ("audio: cs35l41: Fix property renaming")
+cirrus:
+    5f9e8a41a399369ab4a5e8e40c6b27cc5640dcd1 ("ASoC: cs35l41: Enable extended standby state in probe")
+fan:
+    f02a2b3379b98ad8e0429cf5ea3de665a8481889 ("drivers/platform/x86: Add Jupiter ACPI platform driver")
+futex2:
+    875f5b7d5d16c644e4f67a5a8824b2ccdb39ead4 ("futex2: Add sysfs entry for syscall numbers")
+futex-wait-multiple:
+    38d3381f594a4c8ee689adc7770a6cec0f44799e ("futex: Change WAIT_MULTIPLE opcode to 31")
+mm-soft-dirty-file:
+    e9bc9947d3121e1108c29015c3805b2555e2e8ec ("mm: Support soft dirty flag read with reset.")
+setup-gitlabci:
+    890735327cc4f4b64a1e3bcf0fd9f137062fe3a1 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
+simon:
+    39828525df2f1342d5f6ac0f5c087d9f32f7632b ("amd/display: re-introduce cursor plane rotation prop")
