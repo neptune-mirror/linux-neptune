@@ -171,10 +171,8 @@ huge_pages_object(struct drm_i915_private *i915,
 	i915_gem_object_init(obj, &huge_page_ops, &lock_class);
 
 	i915_gem_object_set_volatile(obj);
-
-	obj->write_domain = I915_GEM_DOMAIN_CPU;
-	obj->read_domains = I915_GEM_DOMAIN_CPU;
-	obj->cache_level = I915_CACHE_NONE;
+	i915_gem_object_set_cache_coherency(obj, I915_CACHE_NONE);
+	__start_cpu_write(obj);
 
 	obj->mm.page_mask = page_mask;
 
@@ -324,10 +322,8 @@ fake_huge_pages_object(struct drm_i915_private *i915, u64 size, bool single)
 		i915_gem_object_init(obj, &fake_ops, &lock_class);
 
 	i915_gem_object_set_volatile(obj);
-
-	obj->write_domain = I915_GEM_DOMAIN_CPU;
-	obj->read_domains = I915_GEM_DOMAIN_CPU;
-	obj->cache_level = I915_CACHE_NONE;
+	i915_gem_object_set_cache_coherency(obj, I915_CACHE_NONE);
+	__start_cpu_write(obj);
 
 	return obj;
 }
@@ -365,6 +361,27 @@ static int igt_check_page_sizes(struct i915_vma *vma)
 	if (vma->page_sizes.sg != obj->mm.page_sizes.sg) {
 		pr_err("vma->page_sizes.sg(%u) != obj->mm.page_sizes.sg(%u)\n",
 		       vma->page_sizes.sg, obj->mm.page_sizes.sg);
+		err = -EINVAL;
+	}
+
+	/*
+	 * The dma-api is like a box of chocolates when it comes to the
+	 * alignment of dma addresses, however for LMEM we have total control
+	 * and so can guarantee alignment, likewise when we allocate our blocks
+	 * they should appear in descending order, and if we know that we align
+	 * to the largest page size for the GTT address, we should be able to
+	 * assert that if we see 2M physical pages then we should also get 2M
+	 * GTT pages. If we don't then something might be wrong in our
+	 * construction of the backing pages.
+	 *
+	 * Maintaining alignment is required to utilise huge pages in the ppGGT.
+	 */
+	if (i915_gem_object_is_lmem(obj) &&
+	    IS_ALIGNED(vma->node.start, SZ_2M) &&
+	    vma->page_sizes.sg & SZ_2M &&
+	    vma->page_sizes.gtt < SZ_2M) {
+		pr_err("gtt pages mismatch for LMEM, expected 2M GTT pages, sg(%u), gtt(%u)\n",
+		       vma->page_sizes.sg, vma->page_sizes.gtt);
 		err = -EINVAL;
 	}
 
@@ -945,14 +962,6 @@ static int gpu_write(struct intel_context *ce,
 		     u32 dw,
 		     u32 val)
 {
-	int err;
-
-	i915_gem_object_lock(vma->obj, NULL);
-	err = i915_gem_object_set_to_gtt_domain(vma->obj, true);
-	i915_gem_object_unlock(vma->obj);
-	if (err)
-		return err;
-
 	return igt_gpu_fill_dw(ce, vma, dw * sizeof(u32),
 			       vma->size >> PAGE_SHIFT, val);
 }
@@ -973,7 +982,7 @@ __cpu_check_shmem(struct drm_i915_gem_object *obj, u32 dword, u32 val)
 		u32 *ptr = kmap_atomic(i915_gem_object_get_page(obj, n));
 
 		if (needs_flush & CLFLUSH_BEFORE)
-			drm_clflush_virt_range(ptr, PAGE_SIZE);
+			drm_clflush_virt_range(&ptr[dword], sizeof(val));
 
 		if (ptr[dword] != val) {
 			pr_err("n=%lu ptr[%u]=%u, val=%u\n",
@@ -1333,6 +1342,7 @@ static int igt_ppgtt_sanity_check(void *arg)
 		unsigned int flags;
 	} backends[] = {
 		{ igt_create_system, 0,                        },
+		{ igt_create_local,  0,                        },
 		{ igt_create_local,  I915_BO_ALLOC_CONTIGUOUS, },
 	};
 	struct {

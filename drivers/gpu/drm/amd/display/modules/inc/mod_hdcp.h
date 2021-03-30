@@ -101,8 +101,8 @@ enum mod_hdcp_status {
 
 struct mod_hdcp_displayport {
 	uint8_t rev;
-	uint8_t assr_supported;
-	uint8_t mst_supported;
+	uint8_t assr_enabled;
+	uint8_t mst_enabled;
 };
 
 struct mod_hdcp_hdmi {
@@ -118,6 +118,12 @@ enum mod_hdcp_display_state {
 	MOD_HDCP_DISPLAY_INACTIVE = 0,
 	MOD_HDCP_DISPLAY_ACTIVE,
 	MOD_HDCP_DISPLAY_ENCRYPTION_ENABLED
+};
+
+enum mod_hdcp_display_disable_option {
+	MOD_HDCP_DISPLAY_NOT_DISABLE = 0,
+	MOD_HDCP_DISPLAY_DISABLE_AUTHENTICATION,
+	MOD_HDCP_DISPLAY_DISABLE_ENCRYPTION,
 };
 
 struct mod_hdcp_ddc {
@@ -149,8 +155,8 @@ struct mod_hdcp_psp {
 };
 
 struct mod_hdcp_display_adjustment {
-	uint8_t disable			: 1;
-	uint8_t reserved		: 7;
+	uint8_t disable			: 2;
+	uint8_t reserved		: 6;
 };
 
 struct mod_hdcp_link_adjustment_hdcp1 {
