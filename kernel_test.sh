@@ -31,16 +31,10 @@ echo "========================================================================"
 echo -e "\t\t\t\t Run Perf benchmark"
 echo "========================================================================" 
 
-./perf bench futex2 hash -s
-./perf bench futex2 hash -s -S
-./perf bench -r 50 futex2 wake -s
-./perf bench -r 50 futex2 wake -s -S
-./perf bench -r 50 futex2 wake-parallel -s
-./perf bench -r 50 futex2 wake-parallel -s -S
-./perf bench -r 50 futex2 wake -s -t 1000
-./perf bench -r 50 futex2 wake -s -S  -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -S -t 1000
+cd /mnt/
+python3 run_perf.py
+
+test -f perf_error && cat perf_error
 
 echo -e "\t\t\t\t Completed perf run" 
 }
