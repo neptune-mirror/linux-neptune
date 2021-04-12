@@ -31,16 +31,17 @@ echo "========================================================================"
 echo -e "\t\t\t\t Run Perf benchmark"
 echo "========================================================================" 
 
-./perf bench futex2 hash -s
-./perf bench futex2 hash -s -S
-./perf bench -r 50 futex2 wake -s
-./perf bench -r 50 futex2 wake -s -S
-./perf bench -r 50 futex2 wake-parallel -s
-./perf bench -r 50 futex2 wake-parallel -s -S
-./perf bench -r 50 futex2 wake -s -t 1000
-./perf bench -r 50 futex2 wake -s -S  -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -S -t 1000
+TIME=360
+timeout -v $TIME ./perf bench futex2 hash -s
+timeout -v $TIME ./perf bench futex2 hash -s -S
+timeout -v $TIME ./perf bench -r 50 futex2 wake -s
+timeout -v $TIME ./perf bench -r 50 futex2 wake -s -S
+timeout -v $TIME ./perf bench -r 50 futex2 wake-parallel -s
+timeout -v $TIME ./perf bench -r 50 futex2 wake-parallel -s -S
+timeout -v $TIME ./perf bench -r 50 futex2 wake -s -t 500
+timeout -v $TIME ./perf bench -r 50 futex2 wake -s -S  -t 500
+timeout -v $TIME ./perf bench -r 50 futex2 wake-parallel -s -t 500
+timeout -v $TIME ./perf bench -r 50 futex2 wake-parallel -s -S -t 500
 
 echo -e "\t\t\t\t Completed perf run" 
 }
