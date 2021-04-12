@@ -79,3 +79,6 @@ echo
 
 echo
 ./futex2_waitv $COLOR
+
+echo
+./futex_wait_multiple $COLOR
