@@ -41,6 +41,7 @@ void usage(char *prog)
 int main(int argc, char *argv[])
 {
 	futex_t f1 = FUTEX_INITIALIZER;
+	struct futex_wait_block fwb = {&f1, f1, 0};
 	struct timespec to = {.tv_sec = 0, .tv_nsec = timeout_ns};
 	struct timespec64 to64;
 	int res, ret = RET_PASS;
@@ -67,7 +68,7 @@ int main(int argc, char *argv[])
 	}
 
 	ksft_print_header();
-	ksft_set_plan(3);
+	ksft_set_plan(4);
 	ksft_print_msg("%s: Block on a futex and wait for timeout\n",
 	       basename(argv[0]));
 	ksft_print_msg("\tArguments: timeout=%ldns\n", timeout_ns);
@@ -79,6 +80,17 @@ int main(int argc, char *argv[])
 		ret = RET_FAIL;
 	} else {
 		ksft_test_result_pass("futex_wait timeout succeeds\n");
+	}
+
+        info("Calling futex_wait_multiple on f1: %u @ %p\n", f1, &f1);
+
+        res = futex_wait_multiple(&fwb, 1, &to, FUTEX_PRIVATE_FLAG);
+        if (!res || errno != ETIMEDOUT) {
+                ksft_test_result_fail("futex_wait_multiple returned %d\n",
+                                      res < 0 ? errno : res);
+                ret = RET_FAIL;
+        } else {
+                ksft_test_result_pass("futex_wait_multiple timeout succeeds\n");
 	}
 
 	/* setting absolute monotonic timeout for futex2 */
