@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
 	struct timespec to = {.tv_sec = 0, .tv_nsec = timeout_ns};
 	struct timespec64 to64;
 	futex_t f1 = FUTEX_INITIALIZER;
+	struct futex_wait_block fwb = {&f1, f1+1, 0};
 	int res, ret = RET_PASS;
 	int c;
 
@@ -63,7 +64,7 @@ int main(int argc, char *argv[])
 	}
 
 	ksft_print_header();
-	ksft_set_plan(2);
+	ksft_set_plan(3);
 	ksft_print_msg("%s: Test the unexpected futex value in FUTEX_WAIT\n",
 	       basename(argv[0]));
 
@@ -75,6 +76,17 @@ int main(int argc, char *argv[])
 		ret = RET_FAIL;
 	} else {
 		ksft_test_result_pass("futex_wait wouldblock succeeds\n");
+	}
+
+        info("Calling futex_wait_multiple on f1: %u @ %p with val=%u\n",
+             f1, &f1, f1+1);
+        res = futex_wait_multiple(&fwb, 1, NULL, FUTEX_PRIVATE_FLAG);
+        if (!res || errno != EWOULDBLOCK) {
+                ksft_test_result_fail("futex_wait_multiple returned %d\n",
+                                      res < 0 ? errno : res);
+                ret = RET_FAIL;
+        } else {
+		ksft_test_result_pass("futex_wait_multiple wouldblock succeeds\n");
 	}
 
 	/* setting absolute timeout for futex2 */
