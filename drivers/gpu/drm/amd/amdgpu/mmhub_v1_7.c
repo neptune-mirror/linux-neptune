@@ -135,8 +135,7 @@ static void mmhub_v1_7_init_system_aperture_regs(struct amdgpu_device *adev)
 		return;
 
 	/* Set default page address. */
-	value = adev->vram_scratch.gpu_addr - adev->gmc.vram_start +
-		adev->vm_manager.vram_base_offset;
+	value = amdgpu_gmc_vram_mc2pa(adev, adev->vram_scratch.gpu_addr);
 	WREG32_SOC15(MMHUB, 0, regMC_VM_SYSTEM_APERTURE_DEFAULT_ADDR_LSB,
 		     (u32)(value >> 12));
 	WREG32_SOC15(MMHUB, 0, regMC_VM_SYSTEM_APERTURE_DEFAULT_ADDR_MSB,
@@ -1306,16 +1305,21 @@ static void mmhub_v1_7_query_ras_error_status(struct amdgpu_device *adev)
 	for (i = 0; i < ARRAY_SIZE(mmhub_v1_7_err_status_regs); i++) {
 		reg_value =
 			RREG32(SOC15_REG_ENTRY_OFFSET(mmhub_v1_7_err_status_regs[i]));
-		if (reg_value)
+		if ((reg_value & 0xFFF) != MMEA0_ERR_STATUS__SDP_RDRSP_DATASTATUS_MASK)
 			dev_warn(adev->dev, "MMHUB EA err detected at instance: %d, status: 0x%x!\n",
 					i, reg_value);
 	}
 }
 
-const struct amdgpu_mmhub_funcs mmhub_v1_7_funcs = {
+const struct amdgpu_mmhub_ras_funcs mmhub_v1_7_ras_funcs = {
 	.ras_late_init = amdgpu_mmhub_ras_late_init,
+	.ras_fini = amdgpu_mmhub_ras_fini,
 	.query_ras_error_count = mmhub_v1_7_query_ras_error_count,
 	.reset_ras_error_count = mmhub_v1_7_reset_ras_error_count,
+	.query_ras_error_status = mmhub_v1_7_query_ras_error_status,
+};
+
+const struct amdgpu_mmhub_funcs mmhub_v1_7_funcs = {
 	.get_fb_location = mmhub_v1_7_get_fb_location,
 	.init = mmhub_v1_7_init,
 	.gart_enable = mmhub_v1_7_gart_enable,
@@ -1324,5 +1328,4 @@ const struct amdgpu_mmhub_funcs mmhub_v1_7_funcs = {
 	.set_clockgating = mmhub_v1_7_set_clockgating,
 	.get_clockgating = mmhub_v1_7_get_clockgating,
 	.setup_vm_pt_regs = mmhub_v1_7_setup_vm_pt_regs,
-	.query_ras_error_status = mmhub_v1_7_query_ras_error_status,
 };

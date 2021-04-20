@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Advanced Micro Devices, Inc.
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,32 +20,18 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef __UMC_V8_7_H__
-#define __UMC_V8_7_H__
-
-#include "soc15_common.h"
-#include "amdgpu.h"
-
-/* HBM  Memory Channel Width */
-#define UMC_V8_7_HBM_MEMORY_CHANNEL_WIDTH	128
-/* number of umc channel instance with memory map register access */
-#define UMC_V8_7_CHANNEL_INSTANCE_NUM		2
-/* number of umc instance with memory map register access */
-#define UMC_V8_7_UMC_INSTANCE_NUM		8
-/* total channel instances in one umc block */
-#define UMC_V8_7_TOTAL_CHANNEL_NUM	(UMC_V8_7_CHANNEL_INSTANCE_NUM * UMC_V8_7_UMC_INSTANCE_NUM)
-/* UMC regiser per channel offset */
-#define UMC_V8_7_PER_CHANNEL_OFFSET_SIENNA	0x400
+#ifndef __UMC_V6_7_H__
+#define __UMC_V6_7_H__
 
 /* EccErrCnt max value */
-#define UMC_V8_7_CE_CNT_MAX		0xffff
+#define UMC_V6_7_CE_CNT_MAX		0xffff
 /* umc ce interrupt threshold */
-#define UMC_V8_7_CE_INT_THRESHOLD	0xffff
+#define UMC_V6_7_CE_INT_THRESHOLD	0xffff
 /* umc ce count initial value */
-#define UMC_V8_7_CE_CNT_INIT	(UMC_V8_7_CE_CNT_MAX - UMC_V8_7_CE_INT_THRESHOLD)
+#define UMC_V6_7_CE_CNT_INIT	(UMC_V6_7_CE_CNT_MAX - UMC_V6_7_CE_INT_THRESHOLD)
 
-extern const struct amdgpu_umc_ras_funcs umc_v8_7_ras_funcs;
-extern const uint32_t
-	umc_v8_7_channel_idx_tbl[UMC_V8_7_UMC_INSTANCE_NUM][UMC_V8_7_CHANNEL_INSTANCE_NUM];
+#define UMC_V6_7_INST_DIST	0x40000
+
+extern const struct amdgpu_umc_ras_funcs umc_v6_7_ras_funcs;
 
 #endif

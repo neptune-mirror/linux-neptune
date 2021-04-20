@@ -113,6 +113,7 @@ struct dc_context {
 	struct gpio_service *gpio_service;
 	uint32_t dc_sink_id_count;
 	uint32_t dc_stream_id_count;
+	uint32_t dc_edp_id_count;
 	uint64_t fbc_gpu_addr;
 	struct dc_dmub_srv *dmub_srv;
 
@@ -687,7 +688,8 @@ enum dc_psr_state {
 	PSR_STATE5,
 	PSR_STATE5a,
 	PSR_STATE5b,
-	PSR_STATE5c
+	PSR_STATE5c,
+	PSR_STATE_INVALID = 0xFF
 };
 
 struct psr_config {
