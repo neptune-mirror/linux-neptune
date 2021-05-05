@@ -3740,8 +3740,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	/* CS35L41 needs INT for PDN_DONE */
 	if (ret != 0) {
 		dev_err(cs35l41->dev, "Failed to request IRQ: %d\n", ret);
-		ret = -ENODEV;
-		goto err;
+// 		ret = -ENODEV;
+// 		goto err;
 	}
 
 	/* Set interrupt masks for critical errors */
