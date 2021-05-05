@@ -10,7 +10,7 @@ futex:
     f59c168aea106f6882955cd70f044351f57801d6 ("selftests: futex: Fix out of tree build")
 mm-soft-dirty-file:
     e9bc9947d3121e1108c29015c3805b2555e2e8ec ("mm: Support soft dirty flag read with reset.")
-setup-gitlabci:
-    bed8aacb5041f5c18cfb59e9fdf8d3b0638d9569 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
+Gitlab CI:
+    3374f5408e991b9f4b6313b7ee549d5bb34fc845 ("GitLabCI: Save final bzImage file under packages registry")
 simon:
     39828525df2f1342d5f6ac0f5c087d9f32f7632b ("amd/display: re-introduce cursor plane rotation prop")
