@@ -6,9 +6,8 @@ cirrus:
     5f9e8a41a399369ab4a5e8e40c6b27cc5640dcd1 ("ASoC: cs35l41: Enable extended standby state in probe")
 fan:
     2e63e66f82867f080ccffa27bf98b0e7d0ffa673 ("platform: jupiter: Plumb additional ACPI interfaces")
-futex2:
-    71d42ebfab53b6d168208811c6be02789595c953 ("gitlab-ci: Add timeout for perf tests
-")
+futex:
+    f59c168aea106f6882955cd70f044351f57801d6 ("selftests: futex: Fix out of tree build")
 mm-soft-dirty-file:
     e9bc9947d3121e1108c29015c3805b2555e2e8ec ("mm: Support soft dirty flag read with reset.")
 setup-gitlabci:
