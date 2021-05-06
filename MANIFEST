@@ -16,3 +16,9 @@ simon:
     39828525df2f1342d5f6ac0f5c087d9f32f7632b ("amd/display: re-introduce cursor plane rotation prop")
 pierre-loup:
     5da2c6c54a704932282551891ac98aa9bfc23f44 ("cs35l41_spi: don't probe cs35l41")
+jeremys/backlight-minvalue-default:
+    fa682dd70738ad564ee07732b512cc67b58f379e ("drm/amd/display: change default backlight min value from 12 -> 1")
+jeremys/backlight-precision:
+    1c565be52dbcbc40f130da31463572eabd18d542 ("drm/amd: bump backlight brightness precision from 8 -> 16-bits")
+krisman/spi-amd-fix:
+    909f6568cb22c0d61fd21766972c93716d694a70 ("pinctrl-amd: Add quirk to timeout irq pin reconfiguration")
