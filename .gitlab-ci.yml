@@ -48,3 +48,5 @@ kernel build:
       - bzImage
       - kernel_config
       - kernel_results.log
+  except:
+    - tags
