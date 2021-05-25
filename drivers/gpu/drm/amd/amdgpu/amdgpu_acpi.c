@@ -210,6 +210,7 @@ out:
 
 static acpi_handle amdgpu_atif_probe_handle(acpi_handle dhandle)
 {
+    printk( KERN_INFO "VLV %s:%d amdgpu_atif_probe_handle\n", __FILE__, __LINE__ );
 	acpi_handle handle = NULL;
 	char acpi_method_name[255] = { 0 };
 	struct acpi_buffer buffer = { sizeof(acpi_method_name), acpi_method_name };
@@ -218,22 +219,26 @@ static acpi_handle amdgpu_atif_probe_handle(acpi_handle dhandle)
 	/* For PX/HG systems, ATIF and ATPX are in the iGPU's namespace, on dGPU only
 	 * systems, ATIF is in the dGPU's namespace.
 	 */
+    printk( KERN_INFO "VLV %s:%d acpi_get_handle ATIF\n", __FILE__, __LINE__ );
 	status = acpi_get_handle(dhandle, "ATIF", &handle);
 	if (ACPI_SUCCESS(status))
 		goto out;
 
 	if (amdgpu_has_atpx()) {
+		printk( KERN_INFO "VLV %s:%d amdgpu_has_atpx amdgpu_atpx_get_dhandle ATIF\n", __FILE__, __LINE__ );
 		status = acpi_get_handle(amdgpu_atpx_get_dhandle(), "ATIF",
 					 &handle);
 		if (ACPI_SUCCESS(status))
 			goto out;
 	}
 
+	printk( KERN_INFO "VLV %s:%d ERROR: NULL ATIF handle\n", __FILE__, __LINE__ );
 	DRM_DEBUG_DRIVER("No ATIF handle found\n");
 	return NULL;
 out:
 	acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer);
 	DRM_DEBUG_DRIVER("Found ATIF handle %s\n", acpi_method_name);
+	printk( KERN_INFO "VLV %s:%d Found ATIF handle %s\n", __FILE__, __LINE__, acpi_method_name );
 	return handle;
 }
 
@@ -769,28 +774,36 @@ static int amdgpu_acpi_event(struct notifier_block *nb,
  */
 int amdgpu_acpi_init(struct amdgpu_device *adev)
 {
+    printk(KERN_INFO "VLV %s:%d amdgpu_acpi_init\n", __FILE__, __LINE__ );
 	acpi_handle handle, atif_handle;
 	struct amdgpu_atif *atif;
 	struct amdgpu_atcs *atcs = &adev->atcs;
 	int ret;
 
 	/* Get the device handle */
+    printk( KERN_INFO "VLV %s:%d ACPI_HANDLE\n", __FILE__, __LINE__ );
 	handle = ACPI_HANDLE(&adev->pdev->dev);
+
+    printk( KERN_INFO "VLV %s:%d handle %px \n", __FILE__, __LINE__, handle );
+    printk( KERN_INFO "VLV %s:%d adev->bios %px \n", __FILE__, __LINE__, adev->bios );
 
 	if (!adev->bios || !handle)
 		return 0;
 
 	/* Call the ATCS method */
+    printk( KERN_INFO "VLV %s:%d amdgpu_atcs_verify_interface\n", __FILE__, __LINE__ );
 	ret = amdgpu_atcs_verify_interface(handle, atcs);
 	if (ret) {
 		DRM_DEBUG_DRIVER("Call to ATCS verify_interface failed: %d\n", ret);
 	}
 
 	/* Probe for ATIF, and initialize it if found */
+    printk( KERN_INFO "VLV %s:%d amdgpu_atif_probe_handle\n", __FILE__, __LINE__ );
 	atif_handle = amdgpu_atif_probe_handle(handle);
 	if (!atif_handle)
 		goto out;
 
+    printk( KERN_INFO "VLV %s:%d kzalloc\n", __FILE__, __LINE__ );
 	atif = kzalloc(sizeof(*atif), GFP_KERNEL);
 	if (!atif) {
 		DRM_WARN("Not enough memory to initialize ATIF\n");
@@ -799,6 +812,7 @@ int amdgpu_acpi_init(struct amdgpu_device *adev)
 	atif->handle = atif_handle;
 
 	/* Call the ATIF method */
+    printk( KERN_INFO "VLV %s:%d amdgpu_atif_verify_interface\n", __FILE__, __LINE__ );
 	ret = amdgpu_atif_verify_interface(atif);
 	if (ret) {
 		DRM_DEBUG_DRIVER("Call to ATIF verify_interface failed: %d\n", ret);
@@ -806,6 +820,7 @@ int amdgpu_acpi_init(struct amdgpu_device *adev)
 		goto out;
 	}
 	adev->atif = atif;
+    printk( KERN_INFO "VLV %s:%d adev-> %px \n", __FILE__, __LINE__, adev->atif );
 
 #if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) || defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
 	if (atif->notifications.brightness_change) {
@@ -874,7 +889,9 @@ out:
 void amdgpu_acpi_get_backlight_caps(struct amdgpu_device *adev,
 		struct amdgpu_dm_backlight_caps *caps)
 {
+    printk(KERN_INFO "VLV %s:%d amdgpu_acpi_get_backlight_caps\n", __FILE__, __LINE__ );
 	if (!adev->atif) {
+        printk(KERN_INFO "VLV %s:%d adev->atif null\n", __FILE__, __LINE__ );
 		caps->caps_valid = false;
 		return;
 	}
@@ -892,6 +909,7 @@ void amdgpu_acpi_get_backlight_caps(struct amdgpu_device *adev,
  */
 void amdgpu_acpi_fini(struct amdgpu_device *adev)
 {
+    printk(KERN_INFO "VLV %s:%d amdgpu_acpi_fini\n", __FILE__, __LINE__ );
 	unregister_acpi_notifier(&adev->acpi_nb);
 	kfree(adev->atif);
 }

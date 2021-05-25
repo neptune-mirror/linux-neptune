@@ -55,6 +55,7 @@ acpi_get_handle(acpi_handle parent,
 	/* Parameter Validation */
 
 	if (!ret_handle || !pathname) {
+    	printk( KERN_INFO "VLV %s:%d acpi_get_handle failed parameter validation\n", __FILE__, __LINE__ );
 		return (AE_BAD_PARAMETER);
 	}
 
@@ -63,6 +64,7 @@ acpi_get_handle(acpi_handle parent,
 	if (parent) {
 		prefix_node = acpi_ns_validate_handle(parent);
 		if (!prefix_node) {
+    		printk( KERN_INFO "VLV %s:%d null prefix_node\n", __FILE__, __LINE__ );
 			return (AE_BAD_PARAMETER);
 		}
 	}
@@ -88,12 +90,11 @@ acpi_get_handle(acpi_handle parent,
 	} else if (!prefix_node) {
 
 		/* Relative path with null prefix is disallowed */
-
+    	printk( KERN_INFO "VLV %s:%d null prefix_node\n", __FILE__, __LINE__ );
 		return (AE_BAD_PARAMETER);
 	}
 
 	/* Find the Node and convert to a handle */
-
 	status =
 	    acpi_ns_get_node(prefix_node, pathname, ACPI_NS_NO_UPSEARCH, &node);
 	if (ACPI_SUCCESS(status)) {

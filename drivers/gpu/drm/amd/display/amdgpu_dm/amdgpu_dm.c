@@ -2405,6 +2405,8 @@ static void update_connector_ext_caps(struct amdgpu_dm_connector *aconnector)
 
 	caps->aux_max_input_signal = max;
 	caps->aux_min_input_signal = min;
+
+	printk(KERN_INFO "VLV update_connector_ext_caps %d %d\n", (int) min, (int) max );
 }
 
 void amdgpu_dm_update_connector_after_detect(
@@ -3346,14 +3348,20 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm)
 	if (dm->backlight_caps.caps_valid)
 		return;
 
+	printk(KERN_INFO "VLV %s:%d amdgpu_acpi_get_backlight_caps\n", __FILE__, __LINE__ );
 	amdgpu_acpi_get_backlight_caps(dm->adev, &caps);
+	printk(KERN_INFO "VLV %s:%d ACPI result caps_valid caps_valid %d min_input_signal %d\n", __FILE__, __LINE__, (int) caps.caps_valid, (int) caps.min_input_signal );
+
 	if (caps.caps_valid) {
 		dm->backlight_caps.caps_valid = true;
 		if (caps.aux_support)
 			return;
+
+		printk(KERN_INFO "VLV %s:%d ACPI SUCCESS, using queried values\n", __FILE__, __LINE__ );
 		dm->backlight_caps.min_input_signal = caps.min_input_signal;
 		dm->backlight_caps.max_input_signal = caps.max_input_signal;
 	} else {
+		printk(KERN_INFO "VLV %s:%d ACPI FAILURE, using AMDGPU_DM_DEFAULT(s) %d %d\n", __FILE__, __LINE__, AMDGPU_DM_DEFAULT_MIN_BACKLIGHT, AMDGPU_DM_DEFAULT_MAX_BACKLIGHT );
 		dm->backlight_caps.min_input_signal =
 				AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 		dm->backlight_caps.max_input_signal =
@@ -3365,6 +3373,7 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm)
 
 	dm->backlight_caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 	dm->backlight_caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+
 #endif
 }
 
@@ -3430,8 +3439,10 @@ static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
 	brightness = convert_brightness_from_user(&caps, bd->props.brightness);
 	// Change brightness based on AUX property
 	if (caps.aux_support)
+	{
 		rc = dc_link_set_backlight_level_nits(link, true, brightness,
 						      AUX_BL_DEFAULT_TRANSITION_TIME_MS);
+	}
 	else
 		rc = dc_link_set_backlight_level(dm->backlight_link, brightness, 0);
 
