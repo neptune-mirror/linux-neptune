@@ -22,3 +22,5 @@ jeremys/backlight-precision:
     1c565be52dbcbc40f130da31463572eabd18d542 ("drm/amd: bump backlight brightness precision from 8 -> 16-bits")
 krisman/spi-amd-fix:
     909f6568cb22c0d61fd21766972c93716d694a70 ("pinctrl-amd: Add quirk to timeout irq pin reconfiguration")
+als:
+    877ecd2a69c6014ca77618d22aa58eeb177b8466 ("iio: ltrf216a: Add ALS driver")
