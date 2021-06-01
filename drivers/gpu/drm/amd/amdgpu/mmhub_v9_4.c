@@ -434,7 +434,7 @@ static void mmhub_v9_4_gart_disable(struct amdgpu_device *adev)
 }
 
 /**
- * mmhub_v1_0_set_fault_enable_default - update GART/VM fault handling
+ * mmhub_v9_4_set_fault_enable_default - update GART/VM fault handling
  *
  * @adev: amdgpu_device pointer
  * @value: true redirects VM faults to the default page
@@ -1643,9 +1643,15 @@ static void mmhub_v9_4_query_ras_error_status(struct amdgpu_device *adev)
 	for (i = 0; i < ARRAY_SIZE(mmhub_v9_4_err_status_regs); i++) {
 		reg_value =
 			RREG32(SOC15_REG_ENTRY_OFFSET(mmhub_v9_4_err_status_regs[i]));
-		if (reg_value)
+		if (REG_GET_FIELD(reg_value, MMEA0_ERR_STATUS, SDP_RDRSP_STATUS) ||
+		    REG_GET_FIELD(reg_value, MMEA0_ERR_STATUS, SDP_WRRSP_STATUS) ||
+		    REG_GET_FIELD(reg_value, MMEA0_ERR_STATUS, SDP_RDRSP_DATAPARITY_ERROR)) {
+			/* SDP read/write error/parity error in FUE_IS_FATAL mode
+			 * can cause system fatal error in arcturas. Harvest the error
+			 * status before GPU reset */
 			dev_warn(adev->dev, "MMHUB EA err detected at instance: %d, status: 0x%x!\n",
 					i, reg_value);
+		}
 	}
 }
 

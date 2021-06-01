@@ -63,6 +63,9 @@
 
 #include "atomfirmware.h"
 
+#include "dce110_hw_sequencer.h"
+#include "dcn10/dcn10_hw_sequencer.h"
+
 #define GAMMA_HW_POINTS_NUM 256
 
 /*
@@ -264,6 +267,7 @@ static void build_prescale_params(struct ipp_prescale_params *prescale_params,
 		prescale_params->scale = 0x2008;
 		break;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+	case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
 		prescale_params->scale = 0x2000;
 		break;
@@ -1695,6 +1699,8 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 	bool can_apply_edp_fast_boot = false;
 	bool can_apply_seamless_boot = false;
 	bool keep_edp_vdd_on = false;
+	DC_LOGGER_INIT();
+
 
 	get_edp_links_with_sink(dc, edp_links_with_sink, &edp_with_sink_num);
 	get_edp_links(dc, edp_links, &edp_num);
@@ -1717,6 +1723,8 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 					edp_stream = edp_streams[0];
 					can_apply_edp_fast_boot = !is_edp_ilr_optimization_required(edp_stream->link, &edp_stream->timing);
 					edp_stream->apply_edp_fast_boot_optimization = can_apply_edp_fast_boot;
+					if (can_apply_edp_fast_boot)
+						DC_LOG_EVENT_LINK_TRAINING("eDP fast boot disabled to optimize link rate\n");
 
 					break;
 				}

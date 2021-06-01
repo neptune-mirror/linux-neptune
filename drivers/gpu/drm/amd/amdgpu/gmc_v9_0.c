@@ -53,6 +53,7 @@
 #include "mmhub_v1_7.h"
 #include "umc_v6_1.h"
 #include "umc_v6_0.h"
+#include "hdp_v4_0.h"
 
 #include "ivsrcid/vmc/irqsrcs_vmc_1_0.h"
 
@@ -574,7 +575,8 @@ static int gmc_v9_0_process_interrupt(struct amdgpu_device *adev,
 	 * be updated to avoid reading an incorrect value due to
 	 * the new fast GRBM interface.
 	 */
-	if (entry->vmid_src == AMDGPU_GFXHUB_0)
+	if ((entry->vmid_src == AMDGPU_GFXHUB_0) &&
+	    (adev->asic_type < CHIP_ALDEBARAN))
 		RREG32(hub->vm_l2_pro_fault_status);
 
 	status = RREG32(hub->vm_l2_pro_fault_status);
@@ -802,7 +804,8 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 		 * be cleared to avoid a false ACK due to the new fast
 		 * GRBM interface.
 		 */
-		if (vmhub == AMDGPU_GFXHUB_0)
+		if ((vmhub == AMDGPU_GFXHUB_0) &&
+		    (adev->asic_type < CHIP_ALDEBARAN))
 			RREG32_NO_KIQ(hub->vm_inv_eng0_req +
 				      hub->eng_distance * eng);
 
@@ -1208,6 +1211,11 @@ static void gmc_v9_0_set_gfxhub_funcs(struct amdgpu_device *adev)
 	adev->gfxhub.funcs = &gfxhub_v1_0_funcs;
 }
 
+static void gmc_v9_0_set_hdp_ras_funcs(struct amdgpu_device *adev)
+{
+	adev->hdp.ras_funcs = &hdp_v4_0_ras_funcs;
+}
+
 static int gmc_v9_0_early_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
@@ -1228,6 +1236,7 @@ static int gmc_v9_0_early_init(void *handle)
 	gmc_v9_0_set_mmhub_funcs(adev);
 	gmc_v9_0_set_mmhub_ras_funcs(adev);
 	gmc_v9_0_set_gfxhub_funcs(adev);
+	gmc_v9_0_set_hdp_ras_funcs(adev);
 
 	adev->gmc.shared_aperture_start = 0x2000000000000000ULL;
 	adev->gmc.shared_aperture_end =
@@ -1257,15 +1266,21 @@ static int gmc_v9_0_late_init(void *handle)
 	 * writes, while disables HBM ECC for vega10.
 	 */
 	if (!amdgpu_sriov_vf(adev) && (adev->asic_type == CHIP_VEGA10)) {
-		if (!(adev->ras_features & (1 << AMDGPU_RAS_BLOCK__UMC))) {
+		if (!(adev->ras_enabled & (1 << AMDGPU_RAS_BLOCK__UMC))) {
 			if (adev->df.funcs->enable_ecc_force_par_wr_rmw)
 				adev->df.funcs->enable_ecc_force_par_wr_rmw(adev, false);
 		}
 	}
 
-	if (adev->mmhub.ras_funcs &&
-	    adev->mmhub.ras_funcs->reset_ras_error_count)
-		adev->mmhub.ras_funcs->reset_ras_error_count(adev);
+	if (!amdgpu_persistent_edc_harvesting_supported(adev)) {
+		if (adev->mmhub.ras_funcs &&
+		    adev->mmhub.ras_funcs->reset_ras_error_count)
+			adev->mmhub.ras_funcs->reset_ras_error_count(adev);
+
+		if (adev->hdp.ras_funcs &&
+		    adev->hdp.ras_funcs->reset_ras_error_count)
+			adev->hdp.ras_funcs->reset_ras_error_count(adev);
+	}
 
 	r = amdgpu_gmc_ras_late_init(adev);
 	if (r)

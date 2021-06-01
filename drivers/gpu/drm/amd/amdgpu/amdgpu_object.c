@@ -157,7 +157,9 @@ void amdgpu_bo_placement_from_domain(struct amdgpu_bo *abo, u32 domain)
 	if (domain & AMDGPU_GEM_DOMAIN_GTT) {
 		places[c].fpfn = 0;
 		places[c].lpfn = 0;
-		places[c].mem_type = TTM_PL_TT;
+		places[c].mem_type =
+			abo->flags & AMDGPU_GEM_CREATE_PREEMPTIBLE ?
+			AMDGPU_PL_PREEMPT : TTM_PL_TT;
 		places[c].flags = 0;
 		c++;
 	}
@@ -515,7 +517,18 @@ bool amdgpu_bo_support_uswc(u64 bo_flags)
 #endif
 }
 
-static int amdgpu_bo_do_create(struct amdgpu_device *adev,
+/**
+ * amdgpu_bo_create - create an &amdgpu_bo buffer object
+ * @adev: amdgpu device object
+ * @bp: parameters to be used for the buffer object
+ * @bo_ptr: pointer to the buffer object pointer
+ *
+ * Creates an &amdgpu_bo buffer object.
+ *
+ * Returns:
+ * 0 for success or a negative error code on failure.
+ */
+int amdgpu_bo_create(struct amdgpu_device *adev,
 			       struct amdgpu_bo_param *bp,
 			       struct amdgpu_bo **bo_ptr)
 {
@@ -625,9 +638,9 @@ fail_unreserve:
 	return r;
 }
 
-static int amdgpu_bo_create_shadow(struct amdgpu_device *adev,
-				   unsigned long size,
-				   struct amdgpu_bo *bo)
+int amdgpu_bo_create_shadow(struct amdgpu_device *adev,
+			    unsigned long size,
+			    struct amdgpu_bo *bo)
 {
 	struct amdgpu_bo_param bp;
 	int r;
@@ -638,62 +651,17 @@ static int amdgpu_bo_create_shadow(struct amdgpu_device *adev,
 	memset(&bp, 0, sizeof(bp));
 	bp.size = size;
 	bp.domain = AMDGPU_GEM_DOMAIN_GTT;
-	bp.flags = AMDGPU_GEM_CREATE_CPU_GTT_USWC |
-		AMDGPU_GEM_CREATE_SHADOW;
+	bp.flags = AMDGPU_GEM_CREATE_CPU_GTT_USWC;
 	bp.type = ttm_bo_type_kernel;
 	bp.resv = bo->tbo.base.resv;
 	bp.bo_ptr_size = sizeof(struct amdgpu_bo);
 
-	r = amdgpu_bo_do_create(adev, &bp, &bo->shadow);
+	r = amdgpu_bo_create(adev, &bp, &bo->shadow);
 	if (!r) {
 		bo->shadow->parent = amdgpu_bo_ref(bo);
 		mutex_lock(&adev->shadow_list_lock);
 		list_add_tail(&bo->shadow->shadow_list, &adev->shadow_list);
 		mutex_unlock(&adev->shadow_list_lock);
-	}
-
-	return r;
-}
-
-/**
- * amdgpu_bo_create - create an &amdgpu_bo buffer object
- * @adev: amdgpu device object
- * @bp: parameters to be used for the buffer object
- * @bo_ptr: pointer to the buffer object pointer
- *
- * Creates an &amdgpu_bo buffer object; and if requested, also creates a
- * shadow object.
- * Shadow object is used to backup the original buffer object, and is always
- * in GTT.
- *
- * Returns:
- * 0 for success or a negative error code on failure.
- */
-int amdgpu_bo_create(struct amdgpu_device *adev,
-		     struct amdgpu_bo_param *bp,
-		     struct amdgpu_bo **bo_ptr)
-{
-	u64 flags = bp->flags;
-	int r;
-
-	bp->flags = bp->flags & ~AMDGPU_GEM_CREATE_SHADOW;
-
-	r = amdgpu_bo_do_create(adev, bp, bo_ptr);
-	if (r)
-		return r;
-
-	if ((flags & AMDGPU_GEM_CREATE_SHADOW) && !(adev->flags & AMD_IS_APU)) {
-		if (!bp->resv)
-			WARN_ON(dma_resv_lock((*bo_ptr)->tbo.base.resv,
-							NULL));
-
-		r = amdgpu_bo_create_shadow(adev, bp->size, *bo_ptr);
-
-		if (!bp->resv)
-			dma_resv_unlock((*bo_ptr)->tbo.base.resv);
-
-		if (r)
-			amdgpu_bo_unref(bo_ptr);
 	}
 
 	return r;
@@ -718,9 +686,8 @@ int amdgpu_bo_create_user(struct amdgpu_device *adev,
 	struct amdgpu_bo *bo_ptr;
 	int r;
 
-	bp->flags = bp->flags & ~AMDGPU_GEM_CREATE_SHADOW;
 	bp->bo_ptr_size = sizeof(struct amdgpu_bo_user);
-	r = amdgpu_bo_do_create(adev, bp, &bo_ptr);
+	r = amdgpu_bo_create(adev, bp, &bo_ptr);
 	if (r)
 		return r;
 
@@ -1304,6 +1271,26 @@ void amdgpu_bo_move_notify(struct ttm_buffer_object *bo,
 	trace_amdgpu_bo_move(abo, new_mem->mem_type, old_mem->mem_type);
 }
 
+void amdgpu_bo_get_memory(struct amdgpu_bo *bo, uint64_t *vram_mem,
+				uint64_t *gtt_mem, uint64_t *cpu_mem)
+{
+	unsigned int domain;
+
+	domain = amdgpu_mem_type_to_domain(bo->tbo.mem.mem_type);
+	switch (domain) {
+	case AMDGPU_GEM_DOMAIN_VRAM:
+		*vram_mem += amdgpu_bo_size(bo);
+		break;
+	case AMDGPU_GEM_DOMAIN_GTT:
+		*gtt_mem += amdgpu_bo_size(bo);
+		break;
+	case AMDGPU_GEM_DOMAIN_CPU:
+	default:
+		*cpu_mem += amdgpu_bo_size(bo);
+		break;
+	}
+}
+
 /**
  * amdgpu_bo_release_notify - notification about a BO being released
  * @bo: pointer to a buffer object
@@ -1592,7 +1579,6 @@ u64 amdgpu_bo_print_info(int id, struct amdgpu_bo *bo, struct seq_file *m)
 	amdgpu_bo_print_flag(m, bo, NO_CPU_ACCESS);
 	amdgpu_bo_print_flag(m, bo, CPU_GTT_USWC);
 	amdgpu_bo_print_flag(m, bo, VRAM_CLEARED);
-	amdgpu_bo_print_flag(m, bo, SHADOW);
 	amdgpu_bo_print_flag(m, bo, VRAM_CONTIGUOUS);
 	amdgpu_bo_print_flag(m, bo, VM_ALWAYS_VALID);
 	amdgpu_bo_print_flag(m, bo, EXPLICIT_SYNC);

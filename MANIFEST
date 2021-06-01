@@ -1,5 +1,5 @@
 amd-staging-drm-next:
-    b54280b32ebb9381e045e645eabd99dbbe607ec2 ("drm/radeon/si: Fix inconsistent indenting")
+    0c53c5194ddf098fcbd3f374127ca87057e70ef6 ("drm/amd/display: Enable support for 16 bpc fixed-point framebuffers.")
 cirrus:
     3ca44a28e43d92ff117e245a627b73449c705e3a ("audio: cs35l41: Fix property renaming")
 cirrus:
