@@ -332,6 +332,17 @@ config LTR501
 	  This driver can also be built as a module.  If so, the module
 	  will be called ltr501.
 
+config LTRF216A
+	tristate "LTRF216A light sensor"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  If you say yes here you get support for the LTRF216A
+	  ambient light.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called ltrf216a.
+
 config LV0104CS
 	tristate "LV0104CS Ambient Light Sensor"
 	depends on I2C
