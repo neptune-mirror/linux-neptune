@@ -15,7 +15,7 @@ Gitlab CI:
 simon:
     39828525df2f1342d5f6ac0f5c087d9f32f7632b ("amd/display: re-introduce cursor plane rotation prop")
 pierre-loup:
-    5da2c6c54a704932282551891ac98aa9bfc23f44 ("cs35l41_spi: don't probe cs35l41")
+    f0bf08a50bdea285ec4cba60aff7480855f6cb5c ("drm/amdgpu/vcn: drop gfxoff handling in VCN")
 jeremys/backlight-minvalue-default:
     fa682dd70738ad564ee07732b512cc67b58f379e ("drm/amd/display: change default backlight min value from 12 -> 1")
 jeremys/backlight-precision:
