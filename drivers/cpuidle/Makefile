@@ -3,6 +3,7 @@
 # Makefile for cpuidle.
 #
 
+obj-y += idle_sleep.o
 obj-y += cpuidle.o driver.o governor.o sysfs.o governors/
 obj-$(CONFIG_ARCH_NEEDS_CPU_IDLE_COUPLED) += coupled.o
 obj-$(CONFIG_DT_IDLE_STATES)		  += dt_idle_states.o

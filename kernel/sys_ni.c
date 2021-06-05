@@ -393,6 +393,7 @@ COND_SYSCALL(spu_run);
 COND_SYSCALL(spu_create);
 COND_SYSCALL(subpage_prot);
 
+COND_SYSCALL(idle_sleep);
 
 /*
  * Deprecated system calls which are still defined in

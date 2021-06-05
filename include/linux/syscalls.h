@@ -634,6 +634,8 @@ asmlinkage long sys_futex_requeue(struct futex_requeue __user *uaddr1,
 				  unsigned int nr_wake, unsigned int nr_requeue,
 				  unsigned int cmpval, unsigned int flags);
 
+asmlinkage long sys_idle_sleep(unsigned long long idle_time_ms, int mode);
+
 /* kernel/hrtimer.c */
 asmlinkage long sys_nanosleep(struct __kernel_timespec __user *rqtp,
 			      struct __kernel_timespec __user *rmtp);

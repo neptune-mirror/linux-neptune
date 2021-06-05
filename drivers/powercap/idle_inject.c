@@ -70,6 +70,7 @@ struct idle_inject_device {
 	unsigned int idle_duration_us;
 	unsigned int run_duration_us;
 	unsigned int latency_us;
+	ktime_t time;
 	unsigned long cpumask[];
 };
 
@@ -114,8 +115,6 @@ static enum hrtimer_restart idle_inject_timer_fn(struct hrtimer *timer)
 	duration_us = READ_ONCE(ii_dev->run_duration_us);
 	duration_us += READ_ONCE(ii_dev->idle_duration_us);
 
-	idle_inject_wakeup(ii_dev);
-
 	hrtimer_forward_now(timer, ns_to_ktime(duration_us * NSEC_PER_USEC));
 
 	return HRTIMER_RESTART;
@@ -132,17 +131,20 @@ static void idle_inject_fn(unsigned int cpu)
 {
 	struct idle_inject_device *ii_dev;
 	struct idle_inject_thread *iit;
+	ktime_t time;
 
 	ii_dev = per_cpu(idle_inject_device, cpu);
 	iit = per_cpu_ptr(&idle_inject_thread, cpu);
 
+	time = ii_dev->time - ktime_get();
 	/*
 	 * Let the smpboot main loop know that the task should not run again.
 	 */
 	iit->should_run = 0;
 
-	play_idle_precise(READ_ONCE(ii_dev->idle_duration_us) * NSEC_PER_USEC,
-			  READ_ONCE(ii_dev->latency_us) * NSEC_PER_USEC);
+	if (time > 0)
+		play_idle_precise(time,
+				  READ_ONCE(ii_dev->latency_us) * NSEC_PER_USEC);
 }
 
 /**
@@ -158,6 +160,13 @@ void idle_inject_set_duration(struct idle_inject_device *ii_dev,
 		WRITE_ONCE(ii_dev->run_duration_us, run_duration_us);
 		WRITE_ONCE(ii_dev->idle_duration_us, idle_duration_us);
 	}
+}
+
+void idle_inject_set_time(struct idle_inject_device *ii_dev,
+			  ktime_t time)
+{
+	if (time)
+		WRITE_ONCE(ii_dev->time, time);
 }
 
 /**
@@ -195,21 +204,10 @@ void idle_inject_set_latency(struct idle_inject_device *ii_dev,
  */
 int idle_inject_start(struct idle_inject_device *ii_dev)
 {
-	unsigned int idle_duration_us = READ_ONCE(ii_dev->idle_duration_us);
-	unsigned int run_duration_us = READ_ONCE(ii_dev->run_duration_us);
-
-	if (!idle_duration_us || !run_duration_us)
-		return -EINVAL;
-
 	pr_debug("Starting injecting idle cycles on CPUs '%*pbl'\n",
 		 cpumask_pr_args(to_cpumask(ii_dev->cpumask)));
 
 	idle_inject_wakeup(ii_dev);
-
-	hrtimer_start(&ii_dev->timer,
-		      ns_to_ktime((idle_duration_us + run_duration_us) *
-				  NSEC_PER_USEC),
-		      HRTIMER_MODE_REL);
 
 	return 0;
 }
