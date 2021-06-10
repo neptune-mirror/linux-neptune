@@ -44,9 +44,17 @@
 #include <asm/processor.h>
 #include <asm/cpufeature.h>
 #include <asm/cpu_device_id.h>
+#include "amd-pstate-trace.h"
 
 #define AMD_PSTATE_TRANSITION_LATENCY	0x20000
 #define AMD_PSTATE_TRANSITION_DELAY	500
+
+enum switch_type
+{
+	AMD_TARGET = 0,
+	AMD_ADJUST_PERF,
+	AMD_FAST_SWITCH,
+};
 
 static struct cpufreq_driver amd_pstate_driver;
 
@@ -195,7 +203,8 @@ amd_pstate_update_perf(struct amd_cpudata *cpudata, u32 min_perf,
 
 static int
 amd_pstate_update(struct amd_cpudata *cpudata, u32 min_perf,
-		  u32 des_perf, u32 max_perf, bool fast_switch)
+		  u32 des_perf, u32 max_perf, bool fast_switch,
+		  enum switch_type type)
 {
 	u64 prev = READ_ONCE(cpudata->cppc_req_cached);
 	u64 value = prev;
@@ -209,6 +218,8 @@ amd_pstate_update(struct amd_cpudata *cpudata, u32 min_perf,
 	value &= ~REQ_MAX_PERF(~0L);
 	value |= REQ_MAX_PERF(max_perf);
 
+	trace_amd_pstate_perf(min_perf, des_perf, max_perf,
+			      cpudata->cpu, prev, value, type);
 	if (value == prev)
 		return 0;
 
@@ -250,7 +261,7 @@ static int amd_pstate_target(struct cpufreq_policy *policy,
 
 	cpufreq_freq_transition_begin(policy, &freqs);
 	ret = amd_pstate_update(cpudata, amd_min_perf, amd_des_perf,
-				amd_max_perf, false);
+				amd_max_perf, false, AMD_TARGET);
 	cpufreq_freq_transition_end(policy, &freqs, false);
 
 	return ret;
@@ -288,7 +299,7 @@ static void amd_pstate_adjust_perf(unsigned int cpu,
 			       amd_min_perf, amd_max_perf);
 
 	amd_pstate_update(cpudata, amd_min_perf, amd_des_perf,
-			  amd_max_perf, true);
+			  amd_max_perf, true, AMD_ADJUST_PERF);
 }
 
 static unsigned int amd_pstate_fast_switch(struct cpufreq_policy *policy,
@@ -308,7 +319,7 @@ static unsigned int amd_pstate_fast_switch(struct cpufreq_policy *policy,
 				    cpudata->max_freq);
 
 	amd_pstate_update(cpudata, amd_min_perf, amd_des_perf,
-			  amd_max_perf, true);
+			  amd_max_perf, true, AMD_FAST_SWITCH);
 
 	nominal_perf = READ_ONCE(cpudata->nominal_perf);
 	ratio = div_u64(amd_des_perf << SCHED_CAPACITY_SHIFT, nominal_perf);
