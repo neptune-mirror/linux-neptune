@@ -810,3 +810,9 @@ int amd_pstate_boost_enabled(unsigned int cpu)
 
 	return cpuinfo_max == amd_pstate_max ? 1 : 0;
 }
+
+unsigned amd_pstate_get_data(unsigned int cpu, enum amd_pstate_param param)
+{
+	return sysfs_cpufreq_get_one_value(cpu,
+					   param + AMD_PSTATE_HIGHEST_PERF);
+}

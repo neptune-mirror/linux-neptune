@@ -206,6 +206,19 @@ int cpufreq_set_frequency(unsigned int cpu,
 int amd_pstate_boost_support(unsigned int cpu);
 int amd_pstate_boost_enabled(unsigned int cpu);
 
+enum amd_pstate_param {
+	HIGHEST_PERF,
+	NOMINAL_PERF,
+	LOWEST_NONLINEAR_PERF,
+	LOWEST_PERF,
+	MAX_FREQ,
+	NOMINAL_FREQ,
+	LOWEST_NONLINEAR_FREQ,
+	MIN_FREQ,
+};
+
+unsigned amd_pstate_get_data(unsigned int cpu, enum amd_pstate_param param);
+
 #ifdef __cplusplus
 }
 #endif
