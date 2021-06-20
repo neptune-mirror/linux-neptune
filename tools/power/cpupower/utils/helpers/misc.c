@@ -10,6 +10,7 @@
 #if defined(__i386__) || defined(__x86_64__)
 
 #include "cpupower_intern.h"
+#include "cpufreq.h"
 
 #define MSR_AMD_HWCR	0xc0010015
 
@@ -39,6 +40,12 @@ int cpufreq_has_boost_support(unsigned int cpu, int *support, int *active,
 			if (ret)
 				return ret;
 		}
+	} if ((cpupower_cpu_info.caps & CPUPOWER_CAP_AMD_PSTATE) &&
+	      amd_pstate_boost_support(cpu)) {
+		*support = 1;
+
+		if (amd_pstate_boost_enabled(cpu))
+			*active = 1;
 	} else if (cpupower_cpu_info.caps & CPUPOWER_CAP_INTEL_IDA)
 		*support = *active = 1;
 	return 0;

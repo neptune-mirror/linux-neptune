@@ -203,6 +203,9 @@ int cpufreq_modify_policy_governor(unsigned int cpu, char *governor);
 int cpufreq_set_frequency(unsigned int cpu,
 				unsigned long target_frequency);
 
+int amd_pstate_boost_support(unsigned int cpu);
+int amd_pstate_boost_enabled(unsigned int cpu);
+
 #ifdef __cplusplus
 }
 #endif
