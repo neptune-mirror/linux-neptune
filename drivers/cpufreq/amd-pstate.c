@@ -647,6 +647,62 @@ static ssize_t show_amd_pstate_min_freq(struct cpufreq_policy *policy, char *buf
 	return ret;
 }
 
+static ssize_t
+show_amd_pstate_highest_perf(struct cpufreq_policy *policy, char *buf)
+{
+	int ret = 0;
+	u32 perf;
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	perf = READ_ONCE(cpudata->highest_perf);
+
+	ret += sprintf(&buf[ret], "%u\n", perf);
+
+	return ret;
+}
+
+static ssize_t
+show_amd_pstate_nominal_perf(struct cpufreq_policy *policy, char *buf)
+{
+	int ret = 0;
+	u32 perf;
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	perf = READ_ONCE(cpudata->nominal_perf);
+
+	ret += sprintf(&buf[ret], "%u\n", perf);
+
+	return ret;
+}
+
+static ssize_t
+show_amd_pstate_lowest_nonlinear_perf(struct cpufreq_policy *policy, char *buf)
+{
+	int ret = 0;
+	u32 perf;
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	perf = READ_ONCE(cpudata->lowest_nonlinear_perf);
+
+	ret += sprintf(&buf[ret], "%u\n", perf);
+
+	return ret;
+}
+
+static ssize_t
+show_amd_pstate_lowest_perf(struct cpufreq_policy *policy, char *buf)
+{
+	int ret = 0;
+	u32 perf;
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	perf = READ_ONCE(cpudata->lowest_perf);
+
+	ret += sprintf(&buf[ret], "%u\n", perf);
+
+	return ret;
+}
+
 static ssize_t show_is_amd_pstate_enabled(struct cpufreq_policy *policy,
 					  char *buf)
 {
@@ -654,10 +710,16 @@ static ssize_t show_is_amd_pstate_enabled(struct cpufreq_policy *policy,
 }
 
 cpufreq_freq_attr_ro(is_amd_pstate_enabled);
+
 cpufreq_freq_attr_ro(amd_pstate_max_freq);
 cpufreq_freq_attr_ro(amd_pstate_nominal_freq);
 cpufreq_freq_attr_ro(amd_pstate_lowest_nonlinear_freq);
 cpufreq_freq_attr_ro(amd_pstate_min_freq);
+
+cpufreq_freq_attr_ro(amd_pstate_highest_perf);
+cpufreq_freq_attr_ro(amd_pstate_nominal_perf);
+cpufreq_freq_attr_ro(amd_pstate_lowest_nonlinear_perf);
+cpufreq_freq_attr_ro(amd_pstate_lowest_perf);
 
 static struct freq_attr *amd_pstate_attr[] = {
 	&is_amd_pstate_enabled,
@@ -665,6 +727,10 @@ static struct freq_attr *amd_pstate_attr[] = {
 	&amd_pstate_nominal_freq,
 	&amd_pstate_lowest_nonlinear_freq,
 	&amd_pstate_min_freq,
+	&amd_pstate_highest_perf,
+	&amd_pstate_nominal_perf,
+	&amd_pstate_lowest_nonlinear_perf,
+	&amd_pstate_lowest_perf,
 	NULL,
 };
 
