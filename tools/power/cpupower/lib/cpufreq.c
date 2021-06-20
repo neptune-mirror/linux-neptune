@@ -790,3 +790,23 @@ unsigned long cpufreq_get_transitions(unsigned int cpu)
 {
 	return sysfs_cpufreq_get_one_value(cpu, STATS_NUM_TRANSITIONS);
 }
+
+int amd_pstate_boost_support(unsigned int cpu)
+{
+	unsigned int highest_perf, nominal_perf;
+
+	highest_perf = sysfs_cpufreq_get_one_value(cpu, AMD_PSTATE_HIGHEST_PERF);
+	nominal_perf = sysfs_cpufreq_get_one_value(cpu, AMD_PSTATE_NOMINAL_PERF);
+
+	return highest_perf > nominal_perf ? 1 : 0;
+}
+
+int amd_pstate_boost_enabled(unsigned int cpu)
+{
+	unsigned int cpuinfo_max, amd_pstate_max;
+
+	cpuinfo_max = sysfs_cpufreq_get_one_value(cpu, CPUINFO_MAX_FREQ);
+	amd_pstate_max = sysfs_cpufreq_get_one_value(cpu, AMD_PSTATE_MAX_FREQ);
+
+	return cpuinfo_max == amd_pstate_max ? 1 : 0;
+}
