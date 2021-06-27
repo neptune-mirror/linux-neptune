@@ -136,6 +136,11 @@ extern int decode_pstates(unsigned int cpu, int boost_states,
 
 extern int cpufreq_has_boost_support(unsigned int cpu, int *support,
 				     int *active, int * states);
+
+/* AMD PSTATE enabling **************************/
+
+extern unsigned long cpupower_amd_pstate_enabled(unsigned int cpu);
+
 /*
  * CPUID functions returning a single datum
  */
