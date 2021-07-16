@@ -553,6 +553,7 @@ void amdgpu_gmc_tmz_set(struct amdgpu_device *adev)
 	case CHIP_NAVI14:
 	case CHIP_NAVI12:
 	case CHIP_VANGOGH:
+	case CHIP_YELLOW_CARP:
 		/* Don't enable it by default yet.
 		 */
 		if (amdgpu_tmz < 1) {
@@ -590,6 +591,7 @@ void amdgpu_gmc_noretry_set(struct amdgpu_device *adev)
 	case CHIP_ARCTURUS:
 	case CHIP_ALDEBARAN:
 	case CHIP_BEIGE_GOBY:
+	case CHIP_YELLOW_CARP:
 		/*
 		 * noretry = 0 will cause kfd page fault tests fail
 		 * for some ASICs, so set default to 1 for these ASICs.
@@ -776,4 +778,23 @@ uint64_t amdgpu_gmc_vram_pa(struct amdgpu_device *adev, struct amdgpu_bo *bo)
 uint64_t amdgpu_gmc_vram_cpu_pa(struct amdgpu_device *adev, struct amdgpu_bo *bo)
 {
 	return amdgpu_bo_gpu_offset(bo) - adev->gmc.vram_start + adev->gmc.aper_base;
+}
+
+void amdgpu_gmc_get_reserved_allocation(struct amdgpu_device *adev)
+{
+	/* Some ASICs need to reserve a region of video memory to avoid access
+	 * from driver */
+	adev->mman.stolen_reserved_offset = 0;
+	adev->mman.stolen_reserved_size = 0;
+
+	switch (adev->asic_type) {
+	case CHIP_YELLOW_CARP:
+		if (amdgpu_discovery == 0) {
+			adev->mman.stolen_reserved_offset = 0x1ffb0000;
+			adev->mman.stolen_reserved_size = 64 * PAGE_SIZE;
+		}
+		break;
+	default:
+		break;
+	}
 }

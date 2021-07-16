@@ -49,6 +49,7 @@
 #define FIRMWARE_DIMGREY_CAVEFISH	"amdgpu/dimgrey_cavefish_vcn.bin"
 #define FIRMWARE_ALDEBARAN	"amdgpu/aldebaran_vcn.bin"
 #define FIRMWARE_BEIGE_GOBY	"amdgpu/beige_goby_vcn.bin"
+#define FIRMWARE_YELLOW_CARP	"amdgpu/yellow_carp_vcn.bin"
 
 MODULE_FIRMWARE(FIRMWARE_RAVEN);
 MODULE_FIRMWARE(FIRMWARE_PICASSO);
@@ -65,6 +66,7 @@ MODULE_FIRMWARE(FIRMWARE_NAVY_FLOUNDER);
 MODULE_FIRMWARE(FIRMWARE_VANGOGH);
 MODULE_FIRMWARE(FIRMWARE_DIMGREY_CAVEFISH);
 MODULE_FIRMWARE(FIRMWARE_BEIGE_GOBY);
+MODULE_FIRMWARE(FIRMWARE_YELLOW_CARP);
 
 static void amdgpu_vcn_idle_work_handler(struct work_struct *work);
 
@@ -155,6 +157,12 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 		break;
 	case CHIP_BEIGE_GOBY:
 		fw_name = FIRMWARE_BEIGE_GOBY;
+		if ((adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) &&
+		    (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG))
+			adev->vcn.indirect_sram = true;
+		break;
+	case CHIP_YELLOW_CARP:
+		fw_name = FIRMWARE_YELLOW_CARP;
 		if ((adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) &&
 		    (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG))
 			adev->vcn.indirect_sram = true;
@@ -277,6 +285,29 @@ int amdgpu_vcn_sw_fini(struct amdgpu_device *adev)
 	mutex_destroy(&adev->vcn.vcn_pg_lock);
 
 	return 0;
+}
+
+bool amdgpu_vcn_is_disabled_vcn(struct amdgpu_device *adev, enum vcn_ring_type type, uint32_t vcn_instance)
+{
+	bool ret = false;
+
+	int major;
+	int minor;
+	int revision;
+
+	/* if cannot find IP data, then this VCN does not exist */
+	if (amdgpu_discovery_get_vcn_version(adev, vcn_instance, &major, &minor, &revision) != 0)
+		return true;
+
+	if ((type == VCN_ENCODE_RING) && (revision & VCN_BLOCK_ENCODE_DISABLE_MASK)) {
+		ret = true;
+	} else if ((type == VCN_DECODE_RING) && (revision & VCN_BLOCK_DECODE_DISABLE_MASK)) {
+		ret = true;
+	} else if ((type == VCN_UNIFIED_RING) && (revision & VCN_BLOCK_QUEUE_DISABLE_MASK)) {
+		ret = true;
+	}
+
+	return ret;
 }
 
 int amdgpu_vcn_suspend(struct amdgpu_device *adev)

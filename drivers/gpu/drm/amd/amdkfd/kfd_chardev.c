@@ -1475,7 +1475,7 @@ static int kfd_ioctl_map_memory_to_gpu(struct file *filep,
 		peer_pdd = kfd_get_process_device_data(peer, p);
 		if (WARN_ON_ONCE(!peer_pdd))
 			continue;
-		kfd_flush_tlb(peer_pdd);
+		kfd_flush_tlb(peer_pdd, TLB_FLUSH_LEGACY);
 	}
 
 	kfree(devices_arr);
@@ -1775,9 +1775,6 @@ static int kfd_ioctl_svm(struct file *filep, struct kfd_process *p, void *data)
 {
 	struct kfd_ioctl_svm_args *args = data;
 	int r = 0;
-
-	if (p->svm_disabled)
-		return -EPERM;
 
 	pr_debug("start 0x%llx size 0x%llx op 0x%x nattr 0x%x\n",
 		 args->start_addr, args->size, args->op, args->nattr);
