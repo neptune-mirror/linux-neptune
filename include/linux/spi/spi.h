@@ -511,6 +511,10 @@ struct spi_controller {
 #define SPI_CONTROLLER_MUST_TX		BIT(4)	/* requires tx */
 
 #define SPI_MASTER_GPIO_SS		BIT(5)	/* GPIO CS must select slave */
+#define SPI_CONTROLLER_SINGLE_FIFO	BIT(6)	/* Read and write shares the same fifo
+						 * So the total number of bytes (Read + Write) must
+						 * not be more than max_transfer_size
+						 */
 
 	/* flag indicating this is an SPI slave controller */
 	bool			slave;
@@ -1542,6 +1546,7 @@ of_find_spi_device_by_node(struct device_node *node)
 #define SPI_MASTER_NO_TX		SPI_CONTROLLER_NO_TX
 #define SPI_MASTER_MUST_RX		SPI_CONTROLLER_MUST_RX
 #define SPI_MASTER_MUST_TX		SPI_CONTROLLER_MUST_TX
+#define SPI_MASTER_SINGLE_FIFO		SPI_CONTROLLER_SINGLE_FIFO
 
 #define spi_master_get_devdata(_ctlr)	spi_controller_get_devdata(_ctlr)
 #define spi_master_set_devdata(_ctlr, _data)	\
