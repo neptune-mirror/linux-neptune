@@ -521,6 +521,7 @@ struct regmap_bus {
 	size_t max_raw_read;
 	size_t max_raw_write;
 	bool free_on_exit;
+	bool reg_pad_affects_max_raw_rw;
 };
 
 /*

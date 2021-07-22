@@ -115,14 +115,18 @@ static const struct regmap_bus *regmap_get_spi_bus(struct spi_device *spi,
 	struct spi_master *master = spi->master;
 	struct regmap_bus *bus = NULL;
 
-	if (master->max_transfer_size) {
+	if (master->max_transfer_size || (master->flags & SPI_CONTROLLER_SINGLE_FIFO)) {
 		bus = kmemdup(&regmap_spi, sizeof(*bus), GFP_KERNEL);
 		if (!bus)
 			return ERR_PTR(-ENOMEM);
 		bus->free_on_exit = true;
 
-		bus->max_raw_read = master->max_transfer_size(spi);
-		bus->max_raw_write = master->max_transfer_size(spi);
+		bus->reg_pad_affects_max_raw_rw = master->flags & SPI_CONTROLLER_SINGLE_FIFO;
+
+		if (master->max_transfer_size) {
+			bus->max_raw_read = master->max_transfer_size(spi);
+			bus->max_raw_write = master->max_transfer_size(spi);
+		}
 
 		return bus;
 	}

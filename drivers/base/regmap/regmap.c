@@ -805,6 +805,10 @@ struct regmap *__regmap_init(struct device *dev,
 	if (bus) {
 		map->max_raw_read = bus->max_raw_read;
 		map->max_raw_write = bus->max_raw_write;
+		if (bus->reg_pad_affects_max_raw_rw) {
+			map->max_raw_read -= (map->format.reg_bytes + map->format.pad_bytes);
+			map->max_raw_write -= (map->format.reg_bytes + map->format.pad_bytes);
+		}
 	}
 	map->dev = dev;
 	map->bus = bus;
