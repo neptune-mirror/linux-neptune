@@ -6,6 +6,7 @@
 //
 // Authors: Sanjay R Mehta <sanju.mehta@amd.com>
 //          Nehal Bakulchandra Shah <nehal-bakulchandra.shah@amd.com>
+//          Lucas Tanure <tanureal@opensource.cirrus.com>
 
 #include <linux/acpi.h>
 #include <linux/init.h>
@@ -14,25 +15,56 @@
 #include <linux/delay.h>
 #include <linux/spi/spi.h>
 
-#define AMD_SPI_CTRL0_REG	0x00
-#define AMD_SPI_OPCODE_REG  0x45
-#define AMD_SPI_CMD_TRIGGER_REG 0x47
-#define AMD_SPI_EXEC_CMD	BIT(16)
-#define AMD_SPI_FIFO_CLEAR	BIT(20)
-#define AMD_SPI_BUSY		BIT(31)
-#define AMD_SPI_TRIGGER_CMD	BIT(7)
-#define AMD_SPI_OPCODE_MASK	0xFF
-#define AMD_SPI_ALT_CS_REG	0x1D
-#define AMD_SPI_ALT_CS_MASK	0x3
-#define AMD_SPI_FIFO_BASE	0x80
-#define AMD_SPI_TX_COUNT_REG	0x48
-#define AMD_SPI_RX_COUNT_REG	0x4B
-#define AMD_SPI_STATUS_REG	0x4C
-#define AMD_SPI_FIFO_SIZE	72
-#define AMD_SPI_MEM_SIZE	200
+#define AMD_SPI_CTRL0_REG		0x00
+#define AMD_SPI_ENABLE_REG		0x20
+#define AMD_SPI_NRM_SPD_SHIFT		28
+#define AMD_SPI_NRM_SPD_MASK		GENMASK(31, AMD_SPI_NRM_SPD_SHIFT)
+#define AMD_SPI_FST_SPD_SHIFT		24
+#define AMD_SPI_FST_SPD_MASK		GENMASK(27, AMD_SPI_FST_SPD_SHIFT)
+#define AMD_SPI_ALT_SPD_SHIFT		20
+#define AMD_SPI_ALT_SPD_MASK		GENMASK(23, AMD_SPI_ALT_SPD_SHIFT)
+#define AMD_SPI_TMP_SPD_SHIFT		16
+#define AMD_SPI_TMP_SPD_MASK		GENMASK(19, AMD_SPI_TMP_SPD_SHIFT)
+
+#define AMD_SPI_DUMMY_CYCL_REG		0x32
+#define AMD_SPI_OPCODE_REG		0x45
+#define AMD_SPI_CMD_TRIGGER_REG		0x47
+#define AMD_SPI_EXEC_CMD		BIT(16)
+#define AMD_SPI_FIFO_CLEAR		BIT(20)
+#define AMD_SPI_BUSY			BIT(31)
+#define AMD_SPI_TRIGGER_CMD		BIT(7)
+#define AMD_SPI_OPCODE_MASK		0xFF
+#define AMD_SPI_ALT_CS_REG		0x1D
+#define AMD_SPI_ALT_CS_MASK		0x3
+#define AMD_SPI_FIFO_BASE		0x80
+#define AMD_SPI_TX_COUNT_REG		0x48
+#define AMD_SPI_RX_COUNT_REG		0x4B
+#define AMD_SPI_STATUS_REG		0x4C
+#define AMD_SPI_SPEED_REG		0x6C
+#define AMD_SPI_SPD7_SHIFT		8
+#define AMD_SPI_SPD7_MASK		GENMASK(13, AMD_SPI_SPD7_SHIFT)
+#define AMD_SPI_SPD6_SHIFT		0
+#define AMD_SPI_SPD6_MASK		GENMASK(5, AMD_SPI_SPD6_SHIFT)
+
+#define AMD_SPI_FIFO_SIZE		72
+#define AMD_SPI_MEM_SIZE		200
 /* M_CMD OP codes for SPI */
-#define AMD_SPI_XFER_TX		1
-#define AMD_SPI_XFER_RX		2
+#define AMD_SPI_XFER_TX			1
+#define AMD_SPI_XFER_RX			2
+
+enum amd_spi_speed {
+	SPI_66_66MHz,
+	SPI_33_33MHz,
+	SPI_22_22MHz,
+	SPI_16_66MHz,
+	SPI_100MHz,
+	SPI_800KHz,
+	SPI_SPD6,
+	SPI_SPD7,
+	SPI_50MHz = 0x4,
+	SPI_4MHz = 0x32,
+	SPI_3_17MHz = 0x3F
+};
 
 struct amd_spi_devtype_data {
 	u32 spi_status;
@@ -53,281 +85,264 @@ struct amd_spi {
 	void __iomem *io_remap_addr;
 	unsigned long io_base_addr;
 	u32 rom_addr;
-	u8 chip_select;
 	const struct amd_spi_devtype_data *devtype_data;
 	struct spi_device *spi_dev;
 	struct spi_master *master;
 };
 
-static inline u8 amd_spi_readreg8(struct spi_master *master, int idx)
+static inline u8 amd_spi_readreg8(struct amd_spi *amd_spi, int idx)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-
 	return ioread8((u8 __iomem *)amd_spi->io_remap_addr + idx);
 }
 
-static inline void amd_spi_writereg8(struct spi_master *master, int idx,
-				     u8 val)
+static inline void amd_spi_writereg8(struct amd_spi *amd_spi, int idx, u8 val)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-
 	iowrite8(val, ((u8 __iomem *)amd_spi->io_remap_addr + idx));
 }
 
-static inline void amd_spi_setclear_reg8(struct spi_master *master, int idx,
-					 u8 set, u8 clear)
+static void amd_spi_setclear_reg8(struct amd_spi *amd_spi, int idx, u8 set, u8 clear)
 {
-	u8 tmp = amd_spi_readreg8(master, idx);
+	u8 tmp = amd_spi_readreg8(amd_spi, idx);
 
 	tmp = (tmp & ~clear) | set;
-	amd_spi_writereg8(master, idx, tmp);
+	amd_spi_writereg8(amd_spi, idx, tmp);
 }
 
-static inline u32 amd_spi_readreg32(struct spi_master *master, int idx)
+static inline u32 amd_spi_readreg32(struct amd_spi *amd_spi, int idx)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-
 	return ioread32((u8 __iomem *)amd_spi->io_remap_addr + idx);
 }
 
-static inline void amd_spi_writereg32(struct spi_master *master, int idx,
-				      u32 val)
+static inline void amd_spi_writereg32(struct amd_spi *amd_spi, int idx, u32 val)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-
 	iowrite32(val, ((u8 __iomem *)amd_spi->io_remap_addr + idx));
 }
 
-static inline void amd_spi_setclear_reg32(struct spi_master *master, int idx,
-					  u32 set, u32 clear)
+static void amd_spi_setclear_reg32(struct amd_spi *amd_spi, int idx, u32 set, u32 clear)
 {
-	u32 tmp = amd_spi_readreg32(master, idx);
+	u32 tmp = amd_spi_readreg32(amd_spi, idx);
 
 	tmp = (tmp & ~clear) | set;
-	amd_spi_writereg32(master, idx, tmp);
+	amd_spi_writereg32(amd_spi, idx, tmp);
 }
 
-static void amd_spi_select_chip(struct spi_master *master)
+static inline void amd_spi_select_chip(struct amd_spi *amd_spi, u8 chip_select)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-	u8 chip_select = amd_spi->chip_select;
-
-	amd_spi_setclear_reg8(master, AMD_SPI_ALT_CS_REG, chip_select,
-			      AMD_SPI_ALT_CS_MASK);
+	amd_spi_setclear_reg8(amd_spi, AMD_SPI_ALT_CS_REG, chip_select, AMD_SPI_ALT_CS_MASK);
 }
 
-static void amd_spi_clear_chip(struct spi_master *master)
+static inline void amd_spi_clear_chip(struct amd_spi *amd_spi, u8 chip_select)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-	u8 chip_select = amd_spi->chip_select;
-
-	amd_spi_writereg8(master, AMD_SPI_ALT_CS_REG, chip_select & 0XFC);
+	amd_spi_writereg8(amd_spi, AMD_SPI_ALT_CS_REG, chip_select & 0XFC);
 }
 
-static void amd_spi_clear_fifo_ptr(struct spi_master *master)
+static void amd_spi_clear_fifo_ptr(struct amd_spi *amd_spi)
 {
-	amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, AMD_SPI_FIFO_CLEAR,
-			       AMD_SPI_FIFO_CLEAR);
+	amd_spi_setclear_reg32(amd_spi, AMD_SPI_CTRL0_REG, AMD_SPI_FIFO_CLEAR, AMD_SPI_FIFO_CLEAR);
 }
 
-static void amd_spi_set_opcode(struct spi_master *master, u8 cmd_opcode)
+static void amd_spi_set_opcode(struct amd_spi *amd_spi, u8 cmd_opcode)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-
 	if (!amd_spi->devtype_data->version)
-		amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, cmd_opcode,
-				       AMD_SPI_OPCODE_MASK);
+		amd_spi_setclear_reg32(amd_spi, AMD_SPI_CTRL0_REG, cmd_opcode, AMD_SPI_OPCODE_MASK);
 	else
-		amd_spi_writereg8(master, AMD_SPI_OPCODE_REG, cmd_opcode);
+		amd_spi_writereg8(amd_spi, AMD_SPI_OPCODE_REG, cmd_opcode);
 }
 
-static inline void amd_spi_set_rx_count(struct spi_master *master,
-					u8 rx_count)
+static inline void amd_spi_set_rx_count(struct amd_spi *amd_spi, u8 rx_count)
 {
-	amd_spi_setclear_reg8(master, AMD_SPI_RX_COUNT_REG, rx_count, 0xff);
+	amd_spi_setclear_reg8(amd_spi, AMD_SPI_RX_COUNT_REG, rx_count, 0xff);
 }
 
-static inline void amd_spi_set_tx_count(struct spi_master *master,
-					u8 tx_count)
+static inline void amd_spi_set_tx_count(struct amd_spi *amd_spi, u8 tx_count)
 {
-	amd_spi_setclear_reg8(master, AMD_SPI_TX_COUNT_REG, tx_count, 0xff);
+	amd_spi_setclear_reg8(amd_spi, AMD_SPI_TX_COUNT_REG, tx_count, 0xff);
 }
 
-static inline int amd_spi_busy_wait(struct amd_spi *amd_spi)
+static int amd_spi_busy_wait(struct amd_spi *amd_spi)
 {
 	bool spi_busy;
 	int timeout = 100000;
 	u32 status_reg = amd_spi->devtype_data->spi_status;
 
-	/* poll for SPI bus to become idle */
-	spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
-				status_reg) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+	spi_busy = amd_spi_readreg32(amd_spi, status_reg);
 
-	while (spi_busy) {
+	/* poll for SPI bus to become idle */
+	while (spi_busy & AMD_SPI_BUSY) {
 		usleep_range(10, 20);
 		if (timeout-- < 0)
 			return -ETIMEDOUT;
 
-		/* poll for SPI bus to become idle */
-		spi_busy = (ioread32((u8 __iomem *)amd_spi->io_remap_addr +
-				status_reg) & AMD_SPI_BUSY) == AMD_SPI_BUSY;
+		spi_busy = amd_spi_readreg32(amd_spi, status_reg);
 	}
 
 	return 0;
 }
 
-static void amd_spi_execute_opcode(struct spi_master *master)
+static int amd_spi_execute_opcode(struct amd_spi *amd_spi)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
+	int ret;
 
-	amd_spi_busy_wait(amd_spi);
+	ret  = amd_spi_busy_wait(amd_spi);
+	if (ret)
+		return ret;
 	/* Set ExecuteOpCode bit in the CTRL0 register */
 	if (!amd_spi->devtype_data->version)
-		amd_spi_setclear_reg32(master, AMD_SPI_CTRL0_REG, AMD_SPI_EXEC_CMD,
+		amd_spi_setclear_reg32(amd_spi, AMD_SPI_CTRL0_REG, AMD_SPI_EXEC_CMD,
 				       AMD_SPI_EXEC_CMD);
 	else
-		amd_spi_setclear_reg8(master, AMD_SPI_CMD_TRIGGER_REG, AMD_SPI_TRIGGER_CMD,
+		amd_spi_setclear_reg8(amd_spi, AMD_SPI_CMD_TRIGGER_REG, AMD_SPI_TRIGGER_CMD,
 				      AMD_SPI_TRIGGER_CMD);
 
-	amd_spi_busy_wait(amd_spi);
+	ret = amd_spi_busy_wait(amd_spi);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static int amd_spi_master_setup(struct spi_device *spi)
 {
 	struct spi_master *master = spi->master;
+	struct amd_spi *amd_spi = spi_master_get_devdata(master);
 
-	amd_spi_clear_fifo_ptr(master);
+	amd_spi_clear_fifo_ptr(amd_spi);
 
 	return 0;
 }
 
-static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
-				    struct spi_master *master,
-				    struct spi_message *message)
+static int amd_spi_double_write(struct spi_master *mst, u8 *tx1_buf, u8 tx1_len, u8 *tx2_buf,
+				u8 tx2_len)
 {
-	struct spi_transfer *xfer = NULL;
-	u8 cmd_opcode;
-	u8 *buf = NULL;
-	u32 m_cmd = 0;
-	u32 i = 0, it = 0, tx_index = 0, rx_index = 0;
-	u32 tx_len = 0, rx_len = 0, iters = 0, remaining =  0;
+	struct amd_spi *amd_spi = spi_master_get_devdata(mst);
+	int i, ret;
 
-	list_for_each_entry(xfer, &message->transfers,
-			    transfer_list) {
-		if (xfer->rx_buf)
-			m_cmd = AMD_SPI_XFER_RX;
-		if (xfer->tx_buf)
-			m_cmd = AMD_SPI_XFER_TX;
+	if (tx1_len + tx2_len > AMD_SPI_FIFO_SIZE)
+		return -EINVAL;
 
-		if (m_cmd & AMD_SPI_XFER_TX) {
-			buf = (u8 *)xfer->tx_buf;
-			cmd_opcode = *(u8 *)xfer->tx_buf;
-			tx_len = xfer->len - 1;
-			buf++;
+	amd_spi_clear_fifo_ptr(amd_spi);
+	amd_spi_writereg8(amd_spi, AMD_SPI_RX_COUNT_REG, 0);
 
-			tx_index = 0;
-			iters = tx_len / AMD_SPI_FIFO_SIZE;
-			remaining = tx_len % AMD_SPI_FIFO_SIZE;
+	amd_spi_set_opcode(amd_spi, tx1_buf[0]);
+	tx1_len--;
+	tx1_buf++;
 
-			for (it = 0; it < iters; it++) {
-				amd_spi_clear_fifo_ptr(master);
-				amd_spi_set_opcode(master, cmd_opcode);
+	for (i = 0; i < tx1_len; i++)
+		amd_spi_writereg8(amd_spi, (u8)(AMD_SPI_FIFO_BASE + i), tx1_buf[i]);
 
-				amd_spi_set_tx_count(master, AMD_SPI_FIFO_SIZE);
-				/* Write data into the FIFO. */
-				for (i = 0; i < AMD_SPI_FIFO_SIZE; i++) {
-					iowrite8(buf[tx_index],
-						 ((u8 __iomem *)amd_spi->io_remap_addr +
-						 AMD_SPI_FIFO_BASE + i));
-					tx_index++;
-				}
+	for (i = 0; i < tx2_len; i++)
+		amd_spi_writereg8(amd_spi, (u8)(AMD_SPI_FIFO_BASE + tx1_len + i), tx2_buf[i]);
 
-				/* Execute command */
-				amd_spi_execute_opcode(master);
-			}
+	amd_spi_set_tx_count(amd_spi, tx1_len + tx2_len);
+	ret = amd_spi_execute_opcode(amd_spi);
+	if (ret)
+		return ret;
 
-			amd_spi_clear_fifo_ptr(master);
-			amd_spi_set_opcode(master, cmd_opcode);
+	return tx1_len + tx2_len;
+}
 
-			amd_spi_set_tx_count(master, remaining);
-			/* Write data into the FIFO. */
-			for (i = 0; i < remaining; i++) {
-				iowrite8(buf[tx_index],
-					 ((u8 __iomem *)amd_spi->io_remap_addr +
-					AMD_SPI_FIFO_BASE + i));
-				tx_index++;
-			}
+static int amd_spi_write_read(struct spi_master *mst, u8 *tx_buf, u8 tx_len, u8 *rx_buf, u8 rx_len)
+{
+	struct amd_spi *amd_spi = spi_master_get_devdata(mst);
+	int i, ret;
 
-			/* Execute command */
-			amd_spi_execute_opcode(master);
-		}
-		if (m_cmd & AMD_SPI_XFER_RX) {
-			/*
-			 * Store no. of bytes to be received from
-			 * FIFO
-			 */
-			rx_len = xfer->len;
-			rx_index = 0;
-			iters = rx_len / AMD_SPI_FIFO_SIZE;
-			remaining = rx_len % AMD_SPI_FIFO_SIZE;
-			buf = (u8 *)xfer->rx_buf;
+	if (tx_len + rx_len > AMD_SPI_FIFO_SIZE)
+		return -EINVAL;
 
-			for (it = 0 ; it < iters; it++) {
-				amd_spi_clear_fifo_ptr(master);
+	amd_spi_clear_fifo_ptr(amd_spi);
+	amd_spi_writereg8(amd_spi, AMD_SPI_RX_COUNT_REG, 0);
 
-				amd_spi_set_rx_count(master, AMD_SPI_FIFO_SIZE);
+	if (tx_buf) {
+		amd_spi_set_opcode(amd_spi, tx_buf[0]);
+		tx_len--;
+		tx_buf++;
 
-				/* Execute command */
-				amd_spi_execute_opcode(master);
-				/* Read data from FIFO to receive buffer  */
-				for (i = 0; i < AMD_SPI_FIFO_SIZE; i++) {
-					buf[rx_index] = amd_spi_readreg8(master, AMD_SPI_FIFO_BASE +
-									tx_len + i);
-					rx_index++;
-				}
-			}
-
-			amd_spi_clear_fifo_ptr(master);
-
-			amd_spi_set_rx_count(master, remaining);
-
-			/* Execute command */
-			amd_spi_execute_opcode(master);
-			/* Read data from FIFO to receive buffer  */
-			for (i = 0; i < remaining; i++) {
-				buf[rx_index] = amd_spi_readreg8(master, AMD_SPI_FIFO_BASE +
-								tx_len + i);
-				rx_index++;
-			}
-		}
+		amd_spi_set_tx_count(amd_spi, tx_len);
+		for (i = 0; i < tx_len; i++)
+			amd_spi_writereg8(amd_spi, (u8)(AMD_SPI_FIFO_BASE + i), tx_buf[i]);
 	}
 
-	/* Update statistics */
-	message->actual_length = tx_len + rx_len + 1;
-	/* complete the transaction */
-	message->status = 0;
-	spi_finalize_current_message(master);
+	if (rx_buf)
+		amd_spi_set_rx_count(amd_spi, rx_len);
 
-	return 0;
+	ret = amd_spi_execute_opcode(amd_spi);
+	if (ret)
+		return ret;
+
+	if (rx_buf) {
+		for (i = 0; i < rx_len; i++)
+			rx_buf[i] = amd_spi_readreg8(amd_spi, AMD_SPI_FIFO_BASE + tx_len + i);
+	}
+
+	return tx_len + 1 + rx_len;
 }
 
-static int amd_spi_master_transfer(struct spi_master *master,
-				   struct spi_message *msg)
+static int amd_spi_master_transfer(struct spi_master *mst, struct spi_message *msg)
 {
-	struct amd_spi *amd_spi = spi_master_get_devdata(master);
-	struct spi_device *spi = msg->spi;
+	struct amd_spi *amd_spi = spi_master_get_devdata(mst);
+	struct spi_transfer *xfer, *xfer_n;
+	struct list_head *pos;
+	int ret, count = 0;
 
-	amd_spi->chip_select = spi->chip_select;
-	amd_spi_select_chip(master);
+	list_for_each(pos, &msg->transfers)
+		count++;
 
-	/*
-	 * Extract spi_transfers from the spi message and
-	 * program the controller.
-	 */
-	amd_spi_fifo_xfer(amd_spi, master, msg);
+	amd_spi_select_chip(amd_spi, msg->spi->chip_select);
+
+	xfer = list_first_entry(&msg->transfers, struct spi_transfer, transfer_list);
+	switch (count) {
+	case 1:
+		ret = amd_spi_write_read(mst, (u8*)xfer->tx_buf, xfer->len,
+					      (u8*)xfer->rx_buf, xfer->len);
+		if (ret < 0)
+			goto complete;
+		break;
+	case 2:
+		xfer_n = list_last_entry(&msg->transfers, struct spi_transfer, transfer_list);
+		if (xfer->tx_buf && !xfer->rx_buf) {
+			if (xfer_n->rx_buf && !xfer_n->tx_buf) {
+				ret = amd_spi_write_read(mst, (u8*)xfer->tx_buf, xfer->len,
+							      (u8*)xfer_n->rx_buf, xfer_n->len);
+				if (ret < 0)
+					goto complete;
+				break;
+			} else if (xfer_n->tx_buf && !xfer_n->rx_buf) {
+				ret = amd_spi_double_write(mst, (u8*)xfer->tx_buf, xfer->len,
+								(u8*)xfer_n->tx_buf, xfer_n->len);
+				if (ret < 0)
+					goto complete;
+				break;
+			} else {
+				dev_err(&mst->dev,
+				"Error. Second transfer not a write only or read only\n");
+			}
+		} else {
+			dev_err(&mst->dev, "Error. First transfer not a write only\n");
+			goto complete;
+		}
+		break;
+	default:
+		dev_err(&mst->dev, "Message with %d transfers is not supported\n", count);
+		goto complete;
+	}
+
+	msg->actual_length += ret;
+	ret = 0;
+
+complete:
+	/* complete the transaction */
+	msg->status = ret;
+	spi_finalize_current_message(mst);
+
 	if (amd_spi->devtype_data->version)
-		amd_spi_clear_chip(master);
-	return 0;
+		amd_spi_clear_chip(amd_spi, msg->spi->chip_select);
+
+	return ret;
+}
+
+static size_t amd_spi_max_transfer_size(struct spi_device *spi)
+{
+	return AMD_SPI_FIFO_SIZE;
 }
 
 static int amd_spi_probe(struct platform_device *pdev)
@@ -337,6 +352,7 @@ static int amd_spi_probe(struct platform_device *pdev)
 	struct amd_spi *amd_spi;
 	struct resource *res;
 	int err = 0;
+	static u32 spi_reg;
 
 	/* Allocate storage for spi_master and driver private data */
 	master = spi_alloc_master(dev, sizeof(struct amd_spi));
@@ -360,14 +376,23 @@ static int amd_spi_probe(struct platform_device *pdev)
 		err = -ENODEV;
 		goto err_free_master;
 	}
-	dev_dbg(dev, "io_remap_address: %p\n", amd_spi->io_remap_addr);
+	dev_info(dev, "AMDSPI io_remap_address: %p Version %u\n", amd_spi->io_remap_addr, amd_spi->devtype_data->version);
 	/* Initialize the spi_master fields */
 	master->bus_num = 0;
 	master->num_chipselect = 4;
 	master->mode_bits = 0;
-	master->flags = SPI_MASTER_HALF_DUPLEX;
+	master->flags = SPI_MASTER_HALF_DUPLEX | SPI_MASTER_SINGLE_FIFO;
 	master->setup = amd_spi_master_setup;
+	master->max_transfer_size = amd_spi_max_transfer_size;
 	master->transfer_one_message = amd_spi_master_transfer;
+
+	spi_reg = amd_spi_readreg32(amd_spi, AMD_SPI_ENABLE_REG);
+	spi_reg = (spi_reg & ~AMD_SPI_ALT_SPD_MASK) | ((SPI_SPD7 << AMD_SPI_ALT_SPD_SHIFT) & AMD_SPI_ALT_SPD_MASK);
+	amd_spi_writereg32(amd_spi, AMD_SPI_ENABLE_REG, spi_reg);
+
+	spi_reg = amd_spi_readreg32(amd_spi, AMD_SPI_SPEED_REG);
+	spi_reg = (spi_reg & ~AMD_SPI_SPD7_MASK) | ((SPI_4MHz << AMD_SPI_SPD7_SHIFT) & AMD_SPI_SPD7_MASK);
+	amd_spi_writereg32(amd_spi, AMD_SPI_SPEED_REG, spi_reg);
 
 	/* Register the controller with SPI framework */
 	err = devm_spi_register_master(dev, master);
@@ -375,7 +400,6 @@ static int amd_spi_probe(struct platform_device *pdev)
 		dev_err(dev, "error %d registering SPI controller\n", err);
 		goto err_free_master;
 	}
-
 	return 0;
 
 err_free_master:
@@ -408,4 +432,5 @@ module_platform_driver(amd_spi_driver);
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Sanjay Mehta <sanju.mehta@amd.com>");
 MODULE_AUTHOR("Nehal Bakulchandra Shah <nehal-bakulchandra.shah@amd.com>");
+MODULE_AUTHOR("Lucas Tanure <tanureal@opensource.cirrus.com>");
 MODULE_DESCRIPTION("AMD SPI Master Controller Driver");
