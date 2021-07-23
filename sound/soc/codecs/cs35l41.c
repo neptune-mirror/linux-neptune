@@ -3679,7 +3679,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		}
 	} else {
 #ifdef CONFIG_ACPI
-
+	cs35l41->dsp.part = "cs35l41";
 #else
 		ret = -ENODEV;
 		goto err;
@@ -3757,7 +3757,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		dev_err(cs35l41->dev, "CS35L41 Device ID (%X). Expected ID %X\n",
 			regid, chipid_match);
 		ret = -ENODEV;
-		goto err_bus;
+		goto err;
 	}
 
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
@@ -3796,8 +3796,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	mutex_init(&cs35l41->force_int_lock);
 
-	if (!cs35l41->pdata.fwname_use_revid)
-		cs35l41->dsp.part = cs35l41->dt_name;
+	//if (!cs35l41->pdata.fwname_use_revid)
+	//	cs35l41->dsp.part = cs35l41->dt_name;
 
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
@@ -3862,13 +3862,13 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		cs35l41->reset_cache.fs_cfg = -1;
 		break;
 	}
-/*
+
 	ret = cs35l41_otp_unpack(cs35l41);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "OTP Unpack failed\n");
 		goto err_otp;
 	}
-*/
+
 	/* read all trim regs */
 	p_trim_data = cs35l41->trim_cache;
 	for (i = 0; i < CS35L41_TRIM_CACHE_REGIONS; i++) {
@@ -3885,8 +3885,6 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		goto err_otp;
 	}
 
-err_bus:
-	cs35l41->dsp.part = "cs35l41";
 	ret = cs35l41_dsp_init(cs35l41);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "%s: dsp_init failed\n",
