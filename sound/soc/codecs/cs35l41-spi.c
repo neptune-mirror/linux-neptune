@@ -82,14 +82,14 @@ static int cs35l41_spi_probe(struct spi_device *spi)
 	cs35l41->irq = spi->irq;
 	cs35l41->bus_spi = true;
 
-	return 0;
+	return cs35l41_probe(cs35l41, pdata);
 }
 
 static int cs35l41_spi_remove(struct spi_device *spi)
 {
 	struct cs35l41_private *cs35l41 = spi_get_drvdata(spi);
 
-	return 0;
+	return cs35l41_remove(cs35l41);
 }
 
 #ifdef CONFIG_OF
