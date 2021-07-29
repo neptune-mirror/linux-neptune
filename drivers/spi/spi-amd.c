@@ -20,6 +20,14 @@
 #define AMD_SPI_FIFO_CLEAR	BIT(20)
 #define AMD_SPI_BUSY		BIT(31)
 #define AMD_SPI_ENABLE_REG	0x20
+#define AMD_SPI_NRM_SPD_SHIFT		28
+#define AMD_SPI_NRM_SPD_MASK		GENMASK(31, AMD_SPI_NRM_SPD_SHIFT)
+#define AMD_SPI_FST_SPD_SHIFT		24
+#define AMD_SPI_FST_SPD_MASK		GENMASK(27, AMD_SPI_FST_SPD_SHIFT)
+#define AMD_SPI_ALT_SPD_SHIFT		20
+#define AMD_SPI_ALT_SPD_MASK		GENMASK(23, AMD_SPI_ALT_SPD_SHIFT)
+#define AMD_SPI_TMP_SPD_SHIFT		16
+#define AMD_SPI_TMP_SPD_MASK		GENMASK(19, AMD_SPI_TMP_SPD_SHIFT)
 
 #define AMD_SPI_DUMMY_CYCL_REG	0x32
 #define AMD_SPI_OPCODE_REG	0x45
@@ -34,6 +42,11 @@
 #define AMD_SPI_TX_COUNT_REG	0x48
 #define AMD_SPI_RX_COUNT_REG	0x4B
 #define AMD_SPI_STATUS_REG	0x4C
+#define AMD_SPI_SPEED_REG		0x6C
+#define AMD_SPI_SPD7_SHIFT		8
+#define AMD_SPI_SPD7_MASK		GENMASK(13, AMD_SPI_SPD7_SHIFT)
+#define AMD_SPI_SPD6_SHIFT		0
+#define AMD_SPI_SPD6_MASK		GENMASK(5, AMD_SPI_SPD6_SHIFT)
 
 #define AMD_SPI_FIFO_SIZE	72
 #define AMD_SPI_MEM_SIZE	200
@@ -41,6 +54,20 @@
 /* M_CMD OP codes for SPI */
 #define AMD_SPI_XFER_TX		1
 #define AMD_SPI_XFER_RX		2
+
+enum amd_spi_speed {
+	SPI_66_66MHz,
+	SPI_33_33MHz,
+	SPI_22_22MHz,
+	SPI_16_66MHz,
+	SPI_100MHz,
+	SPI_800KHz,
+	SPI_SPD6,
+	SPI_SPD7,
+	SPI_50MHz = 0x4,
+	SPI_4MHz = 0x32,
+	SPI_3_17MHz = 0x3F
+};
 
 struct amd_spi_devtype_data {
 	u32 spi_status;
@@ -344,6 +371,7 @@ static int amd_spi_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	struct amd_spi *amd_spi;
 	int err = 0;
+	u32 spi_reg;
 
 	/* Allocate storage for spi_master and driver private data */
 	master = spi_alloc_master(dev, sizeof(struct amd_spi));
@@ -375,6 +403,14 @@ static int amd_spi_probe(struct platform_device *pdev)
 	master->setup = amd_spi_master_setup;
 	master->max_transfer_size = amd_spi_max_transfer_size;
 	master->transfer_one_message = amd_spi_master_transfer;
+
+	spi_reg = amd_spi_readreg32(amd_spi, AMD_SPI_ENABLE_REG);
+	spi_reg = (spi_reg & ~AMD_SPI_ALT_SPD_MASK) | ((SPI_SPD7 << AMD_SPI_ALT_SPD_SHIFT) & AMD_SPI_ALT_SPD_MASK);
+	amd_spi_writereg32(amd_spi, AMD_SPI_ENABLE_REG, spi_reg);
+
+	spi_reg = amd_spi_readreg32(amd_spi, AMD_SPI_SPEED_REG);
+	spi_reg = (spi_reg & ~AMD_SPI_SPD7_MASK) | ((SPI_4MHz << AMD_SPI_SPD7_SHIFT) & AMD_SPI_SPD7_MASK);
+	amd_spi_writereg32(amd_spi, AMD_SPI_SPEED_REG, spi_reg);
 
 	/* Register the controller with SPI framework */
 	err = devm_spi_register_master(dev, master);
