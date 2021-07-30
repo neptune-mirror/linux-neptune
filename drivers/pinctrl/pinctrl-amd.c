@@ -31,7 +31,6 @@
 #include <linux/bitops.h>
 #include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinconf-generic.h>
-#include <linux/delay.h>
 
 #include "core.h"
 #include "pinctrl-utils.h"
@@ -460,7 +459,6 @@ static int amd_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	unsigned long flags;
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct amd_gpio *gpio_dev = gpiochip_get_data(gc);
-	int timeout = 100;
 
 	raw_spin_lock_irqsave(&gpio_dev->lock, flags);
 	pin_reg = readl(gpio_dev->base + (d->hwirq)*4);
@@ -530,17 +528,10 @@ static int amd_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	pin_reg_irq_en |= mask;
 	pin_reg_irq_en &= ~BIT(INTERRUPT_MASK_OFF);
 	writel(pin_reg_irq_en, gpio_dev->base + (d->hwirq)*4);
-	while (((readl(gpio_dev->base + (d->hwirq)*4) & mask) != mask) && timeout--)
-		udelay(100);
-
+	while ((readl(gpio_dev->base + (d->hwirq)*4) & mask) != mask)
+		continue;
 	writel(pin_reg, gpio_dev->base + (d->hwirq)*4);
 	raw_spin_unlock_irqrestore(&gpio_dev->lock, flags);
-
-	if (timeout <= 0) {
-		printk("%s: applying Cirrus quirk after timeout when setting irq pin\n",
-		       __func__);
-		return -EINVAL;
-	}
 
 	return ret;
 }
