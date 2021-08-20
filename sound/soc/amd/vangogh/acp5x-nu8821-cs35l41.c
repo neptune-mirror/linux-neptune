@@ -267,7 +267,7 @@ static int platform_clock_control(struct snd_soc_dapm_widget *w,
 
 	if (SND_SOC_DAPM_EVENT_OFF(event)) {
 		ret = snd_soc_dai_set_sysclk(codec_dai, NAU8821_CLK_INTERNAL,
-					     0, SND_SOC_CLOCK_IN);
+			0, SND_SOC_CLOCK_IN);
 		if (ret < 0) {
 			dev_err(card->dev, "set sysclk err = %d\n", ret);
 			return -EIO;
@@ -294,8 +294,9 @@ static const struct snd_soc_dapm_route acp5x_8821_audio_route[] = {
 	/* HP jack connectors - unknown if we have jack detection */
 	{ "Headphone", NULL, "HPOL" },
 	{ "Headphone", NULL, "HPOR" },
-	{ "Headset Mic", NULL, "MICL" },
-	{ "Int Mic", NULL, "DMIC" },
+	{ "MICL", NULL, "Headset Mic" },
+	{ "MICR", NULL, "Headset Mic" },
+	{ "DMIC", NULL, "Int Mic" },
 
 	{ "Headphone", NULL, "Platform Clock" },
 	{ "Headset Mic", NULL, "Platform Clock" },
