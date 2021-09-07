@@ -805,6 +805,15 @@ struct regmap *__regmap_init(struct device *dev,
 	if (bus) {
 		map->max_raw_read = bus->max_raw_read;
 		map->max_raw_write = bus->max_raw_write;
+		if (bus->addr_affects_max_raw_rw) {
+			if (map->max_raw_read  < map->format.buf_size ||
+			    map->max_raw_write < map->format.buf_size) {
+				ret = -EINVAL;
+				goto err_name;
+			}
+			map->max_raw_read -= (map->format.reg_bytes + map->format.pad_bytes);
+			map->max_raw_write -= (map->format.reg_bytes + map->format.pad_bytes);
+		}
 	}
 	map->dev = dev;
 	map->bus = bus;
@@ -1496,6 +1505,8 @@ void regmap_exit(struct regmap *map)
 		mutex_destroy(&map->mutex);
 	kfree_const(map->name);
 	kfree(map->patch);
+	if (map->bus && map->bus->free_on_exit)
+		kfree(map->bus);
 	kfree(map);
 }
 EXPORT_SYMBOL_GPL(regmap_exit);
