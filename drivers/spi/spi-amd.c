@@ -17,8 +17,11 @@
 #define AMD_SPI_EXEC_CMD	BIT(16)
 #define AMD_SPI_FIFO_CLEAR	BIT(20)
 #define AMD_SPI_BUSY		BIT(31)
-#define AMD_SPI_ENABLE_REG	0x20
-
+#define AMD_SPI_ENA_REG			0x20
+#define AMD_SPI_ALT_SPD_SHIFT		20
+#define AMD_SPI_ALT_SPD_MASK		GENMASK(23, AMD_SPI_ALT_SPD_SHIFT)
+#define AMD_SPI_SPI100_SHIFT		0
+#define AMD_SPI_SPI100_MASK		GENMASK(AMD_SPI_SPI100_SHIFT, AMD_SPI_SPI100_SHIFT)
 
 #define AMD_SPI_DUMMY_CYCL_REG		0x32
 #define AMD_SPI_OPCODE_REG		0x45
@@ -35,12 +38,46 @@
 #define AMD_SPI_RX_COUNT_REG	0x4B
 #define AMD_SPI_STATUS_REG	0x4C
 
+#define AMD_SPI_SPEED_REG		0x6C
+#define AMD_SPI_SPD7_SHIFT		8
+#define AMD_SPI_SPD7_MASK		GENMASK(13, AMD_SPI_SPD7_SHIFT)
+#define AMD_SPI_SPD6_SHIFT		0
+#define AMD_SPI_SPD6_MASK		GENMASK(5, AMD_SPI_SPD6_SHIFT)
+
 #define AMD_SPI_FIFO_SIZE	70
 #define AMD_SPI_MEM_SIZE	200
 
 /* M_CMD OP codes for SPI */
 #define AMD_SPI_XFER_TX		1
 #define AMD_SPI_XFER_RX		2
+
+#define AMD_SPI_MAX_HZ			100000000
+#define AMD_SPI_MIN_HZ			800000
+
+
+static bool speed_dev;
+module_param(speed_dev, bool, 0644);
+
+enum amd_spi_speed {
+	F_66_66MHz,
+	F_33_33MHz,
+	F_22_22MHz,
+	F_16_66MHz,
+	F_100MHz,
+	F_800KHz,
+	SPI_SPD6,
+	SPI_SPD7,
+	F_50MHz = 0x4,
+	F_4MHz = 0x32,
+	F_3_17MHz = 0x3F
+};
+
+struct amd_spi_freq {
+	u32 speed_hz;
+	u32 ena;
+	u32 spd7;
+	bool use_spi100_eng;
+};
 
 struct amd_spi {
 	void __iomem *io_remap_addr;
@@ -50,6 +87,7 @@ struct amd_spi {
 	const struct amd_spi_devtype_data *devtype_data;
 	struct spi_device *spi_dev;
 	struct spi_master *master;
+	u32 speed_hz;
 };
 
 struct amd_spi_devtype_data {
@@ -201,11 +239,75 @@ static void amd_spi_clear_list(struct amd_spi *amd_spi)
 	}
 }
 
+static const struct amd_spi_freq amd_spi_freq[] = {
+	{ AMD_SPI_MAX_HZ,   F_100MHz,         0,  true},
+	{       66660000, F_66_66MHz,         0, false},
+	{       50000000,   SPI_SPD7,   F_50MHz, false},
+	{       33330000, F_33_33MHz,         0, false},
+	{       22220000, F_22_22MHz,         0, false},
+	{       16660000, F_16_66MHz,         0, false},
+	{        4000000,   SPI_SPD7,    F_4MHz, false},
+	{        3170000,   SPI_SPD7, F_3_17MHz, false},
+	{ AMD_SPI_MIN_HZ,   F_800KHz,         0, false},
+};
+
+static int amd_set_spi_freq(struct amd_spi *amd_spi, u32 speed_hz)
+{
+	int i;
+	bool use_spi100_eng = false;
+	u32 spd7 = 0, ena;
+
+	if (speed_hz == amd_spi->speed_hz)
+		return 0;
+
+	if (speed_hz < AMD_SPI_MIN_HZ)
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(amd_spi_freq); i++) {
+		if (speed_hz >= amd_spi_freq[i].speed_hz) {
+			if (amd_spi->speed_hz == amd_spi_freq[i].speed_hz)
+				return 0;
+			amd_spi->speed_hz = amd_spi_freq[i].speed_hz;
+
+			use_spi100_eng = amd_spi_freq[i].use_spi100_eng;
+			spd7 = (amd_spi_freq[i].spd7 << AMD_SPI_SPD7_SHIFT) & AMD_SPI_SPD7_MASK;
+			ena = (amd_spi_freq[i].ena << AMD_SPI_ALT_SPD_SHIFT) & AMD_SPI_ALT_SPD_MASK;
+
+			amd_spi_setclear_reg32(amd_spi, AMD_SPI_ENA_REG, ena, AMD_SPI_ALT_SPD_MASK);
+			break;
+		}
+	}
+
+	if (spd7)
+		amd_spi_setclear_reg32(amd_spi, AMD_SPI_SPEED_REG, spd7, AMD_SPI_SPD7_MASK);
+
+	if (use_spi100_eng)
+		amd_spi_setclear_reg32(amd_spi, AMD_SPI_ENA_REG,
+				       AMD_SPI_SPI100_MASK < AMD_SPI_SPI100_SHIFT,
+				       AMD_SPI_SPI100_MASK);
+
+	return 0;
+}
+
 static int amd_spi_master_setup(struct spi_device *spi)
 {
 	struct amd_spi *amd_spi = spi_master_get_devdata(spi->master);
 
 	amd_spi_clear_fifo_ptr(amd_spi);
+
+	if (speed_dev)
+		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
+
+	return 0;
+}
+
+static int amd_spi_prepare_message(struct spi_controller *ctlr, struct spi_message *msg)
+{
+	struct amd_spi *amd_spi = spi_controller_get_devdata(ctlr);
+	struct spi_device *spi = msg->spi;
+
+	if (speed_dev)
+		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
 
 	return 0;
 }
@@ -378,6 +480,9 @@ static int amd_spi_probe(struct platform_device *pdev)
 	master->max_transfer_size = amd_spi_max_transfer_size;
 	master->max_message_size = amd_spi_max_transfer_size;
 	master->transfer_one_message = amd_spi_transfer_one_message;
+	master->max_speed_hz = AMD_SPI_MAX_HZ;
+	master->min_speed_hz = AMD_SPI_MIN_HZ;
+	master->prepare_message = amd_spi_prepare_message;
 
 	INIT_LIST_HEAD(&amd_spi->rbuf_head);
 
