@@ -1,0 +1,24 @@
+als:
+    ca1410d2eafbb0b7248ca5d854af0bf6a360eaeb ("iio: ltrf216a: Add ALS driver")
+amd-staging-drm-next:
+    3adba7127fa22bd2241ea74d2959c664895f7add ("drm/amd/amdgpu: Increase HWIP_MAX_INSTANCE to 10")
+audio:
+    79ddf2eb5789fc53470667dd77068b1e0b2d82df ("ASoC: nau8821: new driver")
+backlight-precision:
+    a18f6baa62a454a5c4a15d56022eb48f6611e120 ("drm/amd/display: change default backlight min value from 12 -> 1.")
+fan:
+    8dc99f539bc646f34222717cb95dac07bdc3773c ("drivers/platform/x86: Add Jupiter ACPI platform driver")
+futex2:
+    c9246bf8f31a873c578c82c82f4ba635e8d9916a ("futex2: Add sysfs entry for syscall numbers")
+futex-wait-multiple:
+    ec4cd0256fb4645db17ac3e25ec00b2b6e2c3d6b ("futex: Add Proton compatibility code")
+gfxoff:
+    205e296d13952bd27fe40b64c7506a16e098264c ("drm/amdgpu/vcn: drop gfxoff handling in VCN")
+mm-soft-dirty-file:
+    dade16308d7c66b639d77b0c3b93f711341d9f79 ("mm: Support soft dirty flag read with reset.")
+setup-gitlabci:
+    40e5486b4f92756df462e92afbc2c1bbc5439946 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
+simon:
+    a7d2c5a9327a3faa68cafb1d9628ff4be9e2b2f9 ("amd/display: re-introduce cursor plane rotation prop")
+spi-config-timeout-quirk:
+    33ddc83245e13398673e0d3e8457a9e96850e341 ("pinctrl-amd: Add quirk to timeout irq pin reconfiguration")
