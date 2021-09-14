@@ -364,10 +364,10 @@ void hubp3_dcc_control_sienna_cichlid(struct hubp *hubp,
 
 	REG_UPDATE_6(DCSURF_SURFACE_CONTROL,
 		PRIMARY_SURFACE_DCC_EN, dcc->enable,
-		PRIMARY_SURFACE_DCC_IND_BLK, dcc->dcc_ind_blk,
+		PRIMARY_SURFACE_DCC_IND_BLK, hubp_ind_block_128b,
 		PRIMARY_SURFACE_DCC_IND_BLK_C, dcc->dcc_ind_blk_c,
 		SECONDARY_SURFACE_DCC_EN, dcc->enable,
-		SECONDARY_SURFACE_DCC_IND_BLK, dcc->dcc_ind_blk,
+		SECONDARY_SURFACE_DCC_IND_BLK, hubp_ind_block_128b,
 		SECONDARY_SURFACE_DCC_IND_BLK_C, dcc->dcc_ind_blk_c);
 }
 
