@@ -2,9 +2,11 @@
 //
 // AMD SPI controller driver
 //
-// Copyright (c) 2020, Advanced Micro Devices, Inc.
+// Copyright (c) 2020-2021, Advanced Micro Devices, Inc.
 //
-// Author: Sanjay R Mehta <sanju.mehta@amd.com>
+// Authors: Sanjay R Mehta <sanju.mehta@amd.com>
+//          Nehal Bakulchandra Shah <nehal-bakulchandra.shah@amd.com>
+//          Lucas Tanure <tanureal@opensource.cirrus.com>
 
 #include <linux/acpi.h>
 #include <linux/init.h>
@@ -13,10 +15,10 @@
 #include <linux/delay.h>
 #include <linux/spi/spi.h>
 
-#define AMD_SPI_CTRL0_REG	0x00
-#define AMD_SPI_EXEC_CMD	BIT(16)
-#define AMD_SPI_FIFO_CLEAR	BIT(20)
-#define AMD_SPI_BUSY		BIT(31)
+#define AMD_SPI_CTRL0_REG		0x00
+#define AMD_SPI_EXEC_CMD		BIT(16)
+#define AMD_SPI_FIFO_CLEAR		BIT(20)
+#define AMD_SPI_BUSY			BIT(31)
 #define AMD_SPI_ENA_REG			0x20
 #define AMD_SPI_ALT_SPD_SHIFT		20
 #define AMD_SPI_ALT_SPD_MASK		GENMASK(23, AMD_SPI_ALT_SPD_SHIFT)
@@ -27,33 +29,30 @@
 #define AMD_SPI_OPCODE_REG		0x45
 #define AMD_SPI_CMD_TRIGGER_REG		0x47
 #define AMD_SPI_TRIGGER_CMD		BIT(7)
+#define AMD_SPI_OPCODE_MASK		0xFF
 
-#define AMD_SPI_OPCODE_MASK	0xFF
+#define AMD_SPI_ALT_CS_REG		0x1D
+#define AMD_SPI_ALT_CS_MASK		GENMASK(1, 0)
 
-#define AMD_SPI_ALT_CS_REG	0x1D
-#define AMD_SPI_ALT_CS_MASK	GENMASK(1, 0)
-
-#define AMD_SPI_FIFO_BASE	0x80
-#define AMD_SPI_TX_COUNT_REG	0x48
-#define AMD_SPI_RX_COUNT_REG	0x4B
-#define AMD_SPI_STATUS_REG	0x4C
-
+#define AMD_SPI_FIFO_BASE		0x80
+#define AMD_SPI_TX_COUNT_REG		0x48
+#define AMD_SPI_RX_COUNT_REG		0x4B
+#define AMD_SPI_STATUS_REG		0x4C
 #define AMD_SPI_SPEED_REG		0x6C
 #define AMD_SPI_SPD7_SHIFT		8
 #define AMD_SPI_SPD7_MASK		GENMASK(13, AMD_SPI_SPD7_SHIFT)
 #define AMD_SPI_SPD6_SHIFT		0
 #define AMD_SPI_SPD6_MASK		GENMASK(5, AMD_SPI_SPD6_SHIFT)
 
-#define AMD_SPI_FIFO_SIZE	70
-#define AMD_SPI_MEM_SIZE	200
+#define AMD_SPI_FIFO_SIZE		70
+#define AMD_SPI_MEM_SIZE		200
 
 /* M_CMD OP codes for SPI */
-#define AMD_SPI_XFER_TX		1
-#define AMD_SPI_XFER_RX		2
+#define AMD_SPI_XFER_TX			1
+#define AMD_SPI_XFER_RX			2
 
 #define AMD_SPI_MAX_HZ			100000000
 #define AMD_SPI_MIN_HZ			800000
-
 
 static bool speed_dev;
 module_param(speed_dev, bool, 0644);
@@ -139,14 +138,14 @@ static inline void amd_spi_setclear_reg32(struct amd_spi *amd_spi, int idx, u32 
 	amd_spi_writereg32(amd_spi, idx, tmp);
 }
 
-static inline void amd_spi_clear_chip(struct amd_spi *amd_spi, u8 chip_select)
-{
-	amd_spi_writereg8(amd_spi, AMD_SPI_ALT_CS_REG, chip_select & ~AMD_SPI_ALT_CS_MASK);
-}
-
 static void amd_spi_select_chip(struct amd_spi *amd_spi, u8 cs)
 {
 	amd_spi_setclear_reg8(amd_spi, AMD_SPI_ALT_CS_REG, cs, AMD_SPI_ALT_CS_MASK);
+}
+
+static inline void amd_spi_clear_chip(struct amd_spi *amd_spi, u8 chip_select)
+{
+	amd_spi_writereg8(amd_spi, AMD_SPI_ALT_CS_REG, chip_select & ~AMD_SPI_ALT_CS_MASK);
 }
 
 static void amd_spi_clear_fifo_ptr(struct amd_spi *amd_spi)
@@ -229,16 +228,6 @@ static int amd_spi_execute_opcode_v2(struct amd_spi *amd_spi)
 	return 0;
 }
 
-static void amd_spi_clear_list(struct amd_spi *amd_spi)
-{
-	struct amd_spi_read_buffer *rbuf, *tmp;
-
-	list_for_each_entry_safe(rbuf, tmp, &amd_spi->rbuf_head, node) {
-		list_del(&rbuf->node);
-		kfree(rbuf);
-	}
-}
-
 static const struct amd_spi_freq amd_spi_freq[] = {
 	{ AMD_SPI_MAX_HZ,   F_100MHz,         0,  true},
 	{       66660000, F_66_66MHz,         0, false},
@@ -294,55 +283,39 @@ static int amd_spi_master_setup(struct spi_device *spi)
 	struct amd_spi *amd_spi = spi_master_get_devdata(spi->master);
 
 	amd_spi_clear_fifo_ptr(amd_spi);
-
 	if (speed_dev)
 		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
 
 	return 0;
 }
 
-static int amd_spi_prepare_message(struct spi_controller *ctlr, struct spi_message *msg)
+static void amd_spi_clear_list(struct amd_spi *amd_spi)
 {
-	struct amd_spi *amd_spi = spi_controller_get_devdata(ctlr);
-	struct spi_device *spi = msg->spi;
+	struct amd_spi_read_buffer *rbuf, *tmp;
 
-	if (speed_dev)
-		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
-
-	return 0;
-}
-
-static inline void amd_spi_set_opcode(struct amd_spi *amd_spi, u8 opcode)
-{
-	amd_spi->devtype_data->set_op(amd_spi, opcode);
-}
-
-static inline int amd_spi_busy_wait(struct amd_spi *amd_spi)
-{
-	return amd_spi->devtype_data->busy_wait(amd_spi);
-}
-
-static inline int amd_spi_execute_opcode(struct amd_spi *amd_spi)
-{
-	return amd_spi->devtype_data->exec_op(amd_spi);
+	list_for_each_entry_safe(rbuf, tmp, &amd_spi->rbuf_head, node) {
+		list_del(&rbuf->node);
+		kfree(rbuf);
+	}
 }
 
 static int amd_spi_transfer(struct amd_spi *amd_spi, u8 opcode, u8 tx_len, u8 rx_len, u8 fifo_pos)
 {
+	const struct amd_spi_devtype_data *priv = amd_spi->devtype_data;
 	struct amd_spi_read_buffer *rbuf;
 	struct list_head *p;
 	int ret, i;
 
-	amd_spi_set_opcode(amd_spi, opcode);
+	priv->set_op(amd_spi, opcode);
 	amd_spi_set_tx_count(amd_spi, tx_len);
 	amd_spi_set_rx_count(amd_spi, rx_len);
 
-	ret = amd_spi_execute_opcode(amd_spi);
+	ret = priv->exec_op(amd_spi);
 	if (ret)
 		return ret;
 
 	if (!list_empty(&amd_spi->rbuf_head)) {
-		ret = amd_spi_busy_wait(amd_spi);
+		ret = priv->busy_wait(amd_spi);
 		if (ret)
 			return ret;
 		list_for_each(p, &amd_spi->rbuf_head) {
@@ -352,13 +325,14 @@ static int amd_spi_transfer(struct amd_spi *amd_spi, u8 opcode, u8 tx_len, u8 rx
 		}
 		amd_spi_clear_list(amd_spi);
 	}
-	return 0;
- }
 
-/* amd_spi_master_transfer expects a spi_message with no more than
- * AMD_SPI_FIFO_SIZE and no TX after a RX in the same CS The CS can not
- * be held between two amd_spi_execute_opcode so fill the FIFO with all
- * transfers until the first RX transfer
+	return 0;
+}
+
+/* amd_spi_master_transfer expects a spi_message with no more than AMD_SPI_FIFO_SIZE and no TX after
+ * a RX in the same CS
+ * The CS can not be held between two amd_spi_execute_opcode so fill the FIFO with all transfers
+ * until the first RX transfer
  */
 static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_message *msg)
 {
@@ -379,11 +353,11 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 				xfer->len--;
 				tx_buf++;
 			}
-
 			tx_len += xfer->len;
 			for (i = 0; i < xfer->len; i++)
 				amd_spi_writereg8(amd_spi, fifo_pos++, tx_buf[i]);
 		}
+
 		if (xfer->rx_buf) {
 			rx_len += xfer->len;
 			rbuf = kmalloc(sizeof(*rbuf), GFP_KERNEL);
@@ -391,6 +365,7 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 				ret = -ENOMEM;
 				goto complete;
 			}
+
 			rbuf->buf = (u8 *)xfer->rx_buf;
 			rbuf->len = xfer->len;
 			list_add(&rbuf->node, &amd_spi->rbuf_head);
@@ -429,12 +404,24 @@ complete:
 	/* complete the transaction */
 	msg->status = ret;
 
+
 	if (amd_spi->devtype_data->version)
 		amd_spi_clear_chip(amd_spi, msg->spi->chip_select);
 
 	spi_finalize_current_message(ctrl);
 
 	return ret;
+}
+
+static int amd_spi_prepare_message(struct spi_controller *ctlr, struct spi_message *msg)
+{
+	struct amd_spi *amd_spi = spi_controller_get_devdata(ctlr);
+	struct spi_device *spi = msg->spi;
+
+	if (speed_dev)
+		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
+
+	return 0;
 }
 
 static size_t amd_spi_max_transfer_size(struct spi_device *spi)
@@ -475,14 +462,14 @@ static int amd_spi_probe(struct platform_device *pdev)
 	master->bus_num = 0;
 	master->num_chipselect = 4;
 	master->mode_bits = 0;
-	master->flags = SPI_MASTER_HALF_DUPLEX | SPI_CONTROLLER_NO_TX_RX_CS;
+	master->max_speed_hz = AMD_SPI_MAX_HZ;
+	master->min_speed_hz = AMD_SPI_MIN_HZ;
+	master->flags = SPI_CONTROLLER_HALF_DUPLEX | SPI_CONTROLLER_NO_TX_RX_CS;
 	master->setup = amd_spi_master_setup;
 	master->max_transfer_size = amd_spi_max_transfer_size;
 	master->max_message_size = amd_spi_max_transfer_size;
-	master->transfer_one_message = amd_spi_transfer_one_message;
-	master->max_speed_hz = AMD_SPI_MAX_HZ;
-	master->min_speed_hz = AMD_SPI_MIN_HZ;
 	master->prepare_message = amd_spi_prepare_message;
+	master->transfer_one_message = amd_spi_transfer_one_message;
 
 	INIT_LIST_HEAD(&amd_spi->rbuf_head);
 
@@ -516,8 +503,10 @@ static const struct amd_spi_devtype_data spi_v2 = {
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id spi_acpi_match[] = {
-	{ "AMDI0061", .driver_data = (kernel_ulong_t) &spi_v1 },
-	{ "AMDI0062", .driver_data = (kernel_ulong_t) &spi_v2 },
+	{ "AMDI0061",
+	.driver_data = (kernel_ulong_t)&spi_v1 },
+	{ "AMDI0062",
+	.driver_data = (kernel_ulong_t)&spi_v2 },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, spi_acpi_match);
@@ -535,4 +524,5 @@ module_platform_driver(amd_spi_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Sanjay Mehta <sanju.mehta@amd.com>");
+MODULE_AUTHOR("Nehal Bakulchandra Shah <nehal-bakulchandra.shah@amd.com>");
 MODULE_DESCRIPTION("AMD SPI Master Controller Driver");
