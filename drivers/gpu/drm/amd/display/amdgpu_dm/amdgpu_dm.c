@@ -9933,6 +9933,10 @@ static int validate_overlay(struct drm_atomic_state *state)
 	struct drm_plane_state *old_plane_state, *new_plane_state;
 	struct drm_plane_state *primary_state, *cursor_state, *overlay_state = NULL;
 
+	/* This is a workaround for ChromeOS only */
+	if (strcmp(current->comm, "chrome") != 0)
+		return 0;
+
 	/* Check if primary plane is contained inside overlay */
 	for_each_oldnew_plane_in_state_reverse(state, plane, old_plane_state, new_plane_state, i) {
 		if (plane->type == DRM_PLANE_TYPE_OVERLAY) {
