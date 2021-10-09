@@ -408,10 +408,12 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 	}
 
 	mutex_lock(&offset_lock);
+	/*
 	if (time_ns->frozen_offsets) {
 		err = -EACCES;
 		goto out_unlock;
 	}
+	*/
 
 	err = 0;
 	/* Don't report errors after this line */
