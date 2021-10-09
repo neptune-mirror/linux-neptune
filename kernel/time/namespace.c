@@ -33,6 +33,9 @@ ktime_t do_timens_ktime_to_host(clockid_t clockid, ktime_t tim,
 	case CLOCK_BOOTTIME_ALARM:
 		offset = timespec64_to_ktime(ns_offsets->boottime);
 		break;
+	case CLOCK_REALTIME:
+		offset = timespec64_to_ktime(ns_offsets->realtime);
+		break;
 	default:
 		return tim;
 	}
@@ -182,6 +185,7 @@ static void timens_setup_vdso_data(struct vdso_data *vdata,
 	struct timens_offset *offset = vdata->offset;
 	struct timens_offset monotonic = offset_from_ts(ns->offsets.monotonic);
 	struct timens_offset boottime = offset_from_ts(ns->offsets.boottime);
+	struct timens_offset realtime = offset_from_ts(ns->offsets.realtime);
 
 	vdata->seq			= 1;
 	vdata->clock_mode		= VDSO_CLOCKMODE_TIMENS;
@@ -190,6 +194,7 @@ static void timens_setup_vdso_data(struct vdso_data *vdata,
 	offset[CLOCK_MONOTONIC_COARSE]	= monotonic;
 	offset[CLOCK_BOOTTIME]		= boottime;
 	offset[CLOCK_BOOTTIME_ALARM]	= boottime;
+	offset[CLOCK_REALTIME]		= realtime;
 }
 
 /*
@@ -337,6 +342,9 @@ static void show_offset(struct seq_file *m, int clockid, struct timespec64 *ts)
 	case CLOCK_MONOTONIC:
 		clock = "monotonic";
 		break;
+	case CLOCK_REALTIME:
+		clock = "realtime";
+		break;
 	default:
 		clock = "unknown";
 		break;
@@ -356,6 +364,7 @@ void proc_timens_show_offsets(struct task_struct *p, struct seq_file *m)
 
 	show_offset(m, CLOCK_MONOTONIC, &time_ns->offsets.monotonic);
 	show_offset(m, CLOCK_BOOTTIME, &time_ns->offsets.boottime);
+	show_offset(m, CLOCK_REALTIME, &time_ns->offsets.realtime);
 	put_time_ns(time_ns);
 }
 
@@ -386,6 +395,9 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 			break;
 		case CLOCK_BOOTTIME:
 			ktime_get_boottime_ts64(&tp);
+			break;
+		case CLOCK_REALTIME:
+			ktime_get_real_ts64(&tp);
 			break;
 		default:
 			err = -EINVAL;
@@ -427,6 +439,9 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 			break;
 		case CLOCK_BOOTTIME:
 			offset = &time_ns->offsets.boottime;
+			break;
+		case CLOCK_REALTIME:
+			offset = &time_ns->offsets.realtime;
 			break;
 		}
 

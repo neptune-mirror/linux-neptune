@@ -14,6 +14,7 @@ extern struct user_namespace init_user_ns;
 struct timens_offsets {
 	struct timespec64 monotonic;
 	struct timespec64 boottime;
+	struct timespec64 realtime;
 };
 
 struct time_namespace {

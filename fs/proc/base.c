@@ -1575,7 +1575,7 @@ static ssize_t timens_offsets_write(struct file *file, const char __user *buf,
 				    size_t count, loff_t *ppos)
 {
 	struct inode *inode = file_inode(file);
-	struct proc_timens_offset offsets[2];
+	struct proc_timens_offset offsets[3];
 	char *kbuf = NULL, *pos, *next_line;
 	struct task_struct *p;
 	int ret, noffsets;
@@ -1618,6 +1618,9 @@ static ssize_t timens_offsets_write(struct file *file, const char __user *buf,
 		else if (strcmp(clock, "boottime") == 0 ||
 			 strcmp(clock, __stringify(CLOCK_BOOTTIME)) == 0)
 			off->clockid = CLOCK_BOOTTIME;
+		else if (strcmp(clock, "realtime") == 0 ||
+			 strcmp(clock, __stringify(CLOCK_REALTIME)) == 0)
+			off->clockid = CLOCK_REALTIME;
 		else
 			goto out;
 
