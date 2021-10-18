@@ -3751,6 +3751,7 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 					    int bl_idx)
 {
+	printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps\n");
 #if defined(CONFIG_ACPI)
 	struct amdgpu_dm_backlight_caps caps;
 
@@ -3759,23 +3760,40 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 	if (dm->backlight_caps[bl_idx].caps_valid)
 		return;
 
+	printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
+
 	amdgpu_acpi_get_backlight_caps(&caps);
 	if (caps.caps_valid) {
 		dm->backlight_caps[bl_idx].caps_valid = true;
+		printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
+		if ( caps.min_input_signal != AMDGPU_DM_DEFAULT_MIN_BACKLIGHT || 
+			caps.max_input_signal != AMDGPU_DM_DEFAULT_MAX_BACKLIGHT )
+		{
+			printk(KERN_WARNING "VLV Successfully queried backlight range (ACPI), but provided range not match expected values.\n");
+			printk(KERN_WARNING "VLV Original: %d %d\n", (int) caps.min_input_signal, caps.max_input_signal );
+			caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
+			caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+			printk(KERN_WARNING "VLV Updated: %d %d\n", (int) caps.min_input_signal, caps.max_input_signal );
+		}
+
 		if (caps.aux_support)
 			return;
+		printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
 		dm->backlight_caps[bl_idx].min_input_signal = caps.min_input_signal;
 		dm->backlight_caps[bl_idx].max_input_signal = caps.max_input_signal;
 	} else {
+		printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
 		dm->backlight_caps[bl_idx].min_input_signal =
 				AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 		dm->backlight_caps[bl_idx].max_input_signal =
 				AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
 	}
+	printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
 #else
+	printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
 	if (dm->backlight_caps[bl_idx].aux_support)
 		return;
-
+	printk(KERN_WARNING "VLV amdgpu_dm_update_backlight_caps %d\n", (int) __LINE__ );
 	dm->backlight_caps[bl_idx].min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 	dm->backlight_caps[bl_idx].max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
 #endif
