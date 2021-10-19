@@ -2,7 +2,7 @@
 VERSION = 5
 PATCHLEVEL = 13
 SUBLEVEL = 0
-EXTRAVERSION =-valve6
+EXTRAVERSION =-valve6-johns-dmic-test
 NAME = Opossums on Parade
 
 # *DOCUMENTATION*

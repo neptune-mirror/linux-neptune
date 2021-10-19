@@ -1626,8 +1626,8 @@ static int nau8821_read_device_properties(struct device *dev,
 		nau8821->jack_eject_debounce = 0;
 	ret = device_property_read_u32(dev, "nuvoton,dmic-clk-threshold",
 		&nau8821->dmic_clk_threshold);
-	if (ret)
-		nau8821->dmic_clk_threshold = 3072000;
+
+	nau8821->dmic_clk_threshold = 3072000;
 
 	return 0;
 }
