@@ -6529,6 +6529,8 @@
 			This will be suppressed by an earlier tsc=nowatchdog and
 			can be overridden by a later tsc=nowatchdog.  A console
 			message will flag any such suppression or overriding.
+			[x86] directsync: attempt to sync the tsc via direct
+			writes if MSR_IA32_TSC_ADJUST isn't available
 
 	tsc_early_khz=  [X86] Skip early TSC calibration and use the given
 			value instead. Useful when the early TSC frequency discovery
