@@ -540,6 +540,7 @@ struct amdgpu_display_manager {
 	 * cached backlight values.
 	 */
 	u32 brightness[AMDGPU_DM_MAX_NUM_EDP];
+	bool brightness_set[AMDGPU_DM_MAX_NUM_EDP];
 };
 
 enum dsc_clock_force_state {
