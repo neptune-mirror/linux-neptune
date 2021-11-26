@@ -1124,7 +1124,6 @@ int ttm_bo_wait(struct ttm_buffer_object *bo,
 	if (timeout == 0)
 		return -EBUSY;
 
-	dma_resv_add_excl_fence(bo->base.resv, NULL);
 	return 0;
 }
 EXPORT_SYMBOL(ttm_bo_wait);
