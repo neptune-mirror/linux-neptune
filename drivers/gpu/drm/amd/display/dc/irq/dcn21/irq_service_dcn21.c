@@ -40,10 +40,9 @@
 
 #include "ivsrcid/dcn/irqsrcs_dcn_1_0.h"
 
-enum dc_irq_source to_dal_irq_source_dcn21(
-		struct irq_service *irq_service,
-		uint32_t src_id,
-		uint32_t ext_id)
+static enum dc_irq_source to_dal_irq_source_dcn21(struct irq_service *irq_service,
+						  uint32_t src_id,
+						  uint32_t ext_id)
 {
 	switch (src_id) {
 	case DCN_1_0__SRCID__DC_D1_OTG_VSTARTUP:
@@ -135,7 +134,7 @@ enum dc_irq_source to_dal_irq_source_dcn21(
 	return DC_IRQ_SOURCE_INVALID;
 }
 
-uint32_t dal_get_hpd_state_dcn21(struct irq_service *irq_service, enum dc_irq_source source)
+uint32_t dc_get_hpd_state_dcn21(struct irq_service *irq_service, enum dc_irq_source source)
 {
 	const struct irq_source_info *info;
 	uint32_t addr;

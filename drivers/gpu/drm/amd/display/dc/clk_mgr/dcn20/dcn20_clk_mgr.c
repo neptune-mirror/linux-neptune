@@ -243,7 +243,7 @@ void dcn2_update_clocks(struct clk_mgr *clk_mgr_base,
 		pp_smu = &dc->res_pool->pp_smu->nv_funcs;
 
 	for (irq_src = DC_IRQ_SOURCE_HPD1; irq_src <= DC_IRQ_SOURCE_HPD6; irq_src++) {
-		hpd_state = dal_get_hpd_state_dcn20(dc->res_pool->irqs, irq_src);
+		hpd_state = dc_get_hpd_state_dcn20(dc->res_pool->irqs, irq_src);
 		if (hpd_state)
 			break;
 	}
@@ -409,7 +409,7 @@ void dcn2_init_clocks(struct clk_mgr *clk_mgr)
 	clk_mgr->clks.prev_p_state_change_support = true;
 }
 
-void dcn2_enable_pme_wa(struct clk_mgr *clk_mgr_base)
+static void dcn2_enable_pme_wa(struct clk_mgr *clk_mgr_base)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
 	struct pp_smu_funcs_nv *pp_smu = NULL;

@@ -430,6 +430,7 @@ struct dc_dongle_caps {
 	uint32_t dp_hdmi_max_bpc;
 	uint32_t dp_hdmi_max_pixel_clk_in_khz;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
+	uint32_t dp_hdmi_frl_max_link_bw_in_kbps;
 	struct dc_dongle_dfp_cap_ext dfp_cap_ext;
 #endif
 };
@@ -653,6 +654,7 @@ enum dc_psr_state {
 	PSR_STATE1a,
 	PSR_STATE2,
 	PSR_STATE2a,
+	PSR_STATE2b,
 	PSR_STATE3,
 	PSR_STATE3Init,
 	PSR_STATE4,
@@ -955,6 +957,7 @@ enum dc_psr_version {
 /* Possible values of display_endpoint_id.endpoint */
 enum display_endpoint_type {
 	DISPLAY_ENDPOINT_PHY = 0, /* Physical connector. */
+	DISPLAY_ENDPOINT_USB4_DPIA, /* USB4 DisplayPort tunnel. */
 	DISPLAY_ENDPOINT_UNKNOWN = -1
 };
 
