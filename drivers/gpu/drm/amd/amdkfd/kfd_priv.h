@@ -183,8 +183,7 @@ enum cache_policy {
 	cache_policy_noncoherent
 };
 
-#define KFD_GC_VERSION(dev) ((dev)->adev->ip_versions[GC_HWIP][0])
-#define KFD_IS_SOC15(dev)   ((KFD_GC_VERSION(dev)) >= (IP_VERSION(9, 0, 1)))
+#define KFD_IS_SOC15(chip) ((chip) >= CHIP_VEGA10)
 
 struct kfd_event_interrupt_class {
 	bool (*interrupt_isr)(struct kfd_dev *dev,
@@ -195,6 +194,7 @@ struct kfd_event_interrupt_class {
 };
 
 struct kfd_device_info {
+	enum amd_asic_type asic_family;
 	const char *asic_name;
 	uint32_t gfx_target_version;
 	const struct kfd_event_interrupt_class *event_interrupt_class;
@@ -766,10 +766,8 @@ struct svm_range_list {
 	struct list_head		deferred_range_list;
 	spinlock_t			deferred_list_lock;
 	atomic_t			evicted_ranges;
-	bool				drain_pagefaults;
 	struct delayed_work		restore_work;
 	DECLARE_BITMAP(bitmap_supported, MAX_GPU_INSTANCE);
-	struct task_struct 		*faulting_task;
 };
 
 /* Process data */

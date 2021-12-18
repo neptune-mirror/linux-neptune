@@ -94,17 +94,17 @@ static enum link_training_result dpia_configure_link(struct dc_link *link,
 		lt_settings);
 
 	status = dpcd_configure_channel_coding(link, lt_settings);
-	if (status != DC_OK && link->is_hpd_pending)
+	if (status != DC_OK && !link->hpd_status)
 		return LINK_TRAINING_ABORT;
 
 	/* Configure lttpr mode */
 	status = dpcd_configure_lttpr_mode(link, lt_settings);
-	if (status != DC_OK && link->is_hpd_pending)
+	if (status != DC_OK && !link->hpd_status)
 		return LINK_TRAINING_ABORT;
 
 	/* Set link rate, lane count and spread. */
 	status = dpcd_set_link_settings(link, lt_settings);
-	if (status != DC_OK && link->is_hpd_pending)
+	if (status != DC_OK && !link->hpd_status)
 		return LINK_TRAINING_ABORT;
 
 	if (link->preferred_training_settings.fec_enable)
@@ -112,7 +112,7 @@ static enum link_training_result dpia_configure_link(struct dc_link *link,
 	else
 		fec_enable = true;
 	status = dp_set_fec_ready(link, fec_enable);
-	if (status != DC_OK && link->is_hpd_pending)
+	if (status != DC_OK && !link->hpd_status)
 		return LINK_TRAINING_ABORT;
 
 	return LINK_TRAINING_SUCCESS;
@@ -388,7 +388,7 @@ static enum link_training_result dpia_training_cr_non_transparent(struct dc_link
 	}
 
 	/* Abort link training if clock recovery failed due to HPD unplug. */
-	if (link->is_hpd_pending)
+	if (!link->hpd_status)
 		result = LINK_TRAINING_ABORT;
 
 	DC_LOG_HW_LINK_TRAINING("%s\n DPIA(%d) clock recovery\n"
@@ -490,7 +490,7 @@ static enum link_training_result dpia_training_cr_transparent(struct dc_link *li
 	}
 
 	/* Abort link training if clock recovery failed due to HPD unplug. */
-	if (link->is_hpd_pending)
+	if (!link->hpd_status)
 		result = LINK_TRAINING_ABORT;
 
 	DC_LOG_HW_LINK_TRAINING("%s\n DPIA(%d) clock recovery\n"
@@ -675,7 +675,7 @@ static enum link_training_result dpia_training_eq_non_transparent(struct dc_link
 	}
 
 	/* Abort link training if equalization failed due to HPD unplug. */
-	if (link->is_hpd_pending)
+	if (!link->hpd_status)
 		result = LINK_TRAINING_ABORT;
 
 	DC_LOG_HW_LINK_TRAINING("%s\n DPIA(%d) equalization\n"
@@ -758,7 +758,7 @@ static enum link_training_result dpia_training_eq_transparent(struct dc_link *li
 	}
 
 	/* Abort link training if equalization failed due to HPD unplug. */
-	if (link->is_hpd_pending)
+	if (!link->hpd_status)
 		result = LINK_TRAINING_ABORT;
 
 	DC_LOG_HW_LINK_TRAINING("%s\n DPIA(%d) equalization\n"
@@ -892,10 +892,10 @@ static void dpia_training_abort(struct dc_link *link, uint32_t hop)
 				__func__,
 				link->link_id.enum_id - ENUM_ID_1,
 				link->lttpr_mode,
-				link->is_hpd_pending);
+				link->hpd_status);
 
 	/* Abandon clean-up if sink unplugged. */
-	if (link->is_hpd_pending)
+	if (!link->hpd_status)
 		return;
 
 	if (hop != DPRX)

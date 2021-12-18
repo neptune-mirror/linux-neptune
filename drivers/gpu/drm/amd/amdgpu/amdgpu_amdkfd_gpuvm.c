@@ -120,19 +120,8 @@ static size_t amdgpu_amdkfd_acc_size(uint64_t size)
 		PAGE_ALIGN(size);
 }
 
-/**
- * @amdgpu_amdkfd_reserve_mem_limit() - Decrease available memory by size
- * of buffer including any reserved for control structures
- *
- * @adev: Device to which allocated BO belongs to
- * @size: Size of buffer, in bytes, encapsulated by B0. This should be
- * equivalent to amdgpu_bo_size(BO)
- * @alloc_flag: Flag used in allocating a BO as noted above
- *
- * Return: returns -ENOMEM in case of error, ZERO otherwise
- */
 static int amdgpu_amdkfd_reserve_mem_limit(struct amdgpu_device *adev,
-		uint64_t size, u32 alloc_flag)
+		uint64_t size, u32 domain, bool sg)
 {
 	uint64_t reserved_for_pt =
 		ESTIMATE_PT_SIZE(amdgpu_amdkfd_total_mem_size);
@@ -142,24 +131,20 @@ static int amdgpu_amdkfd_reserve_mem_limit(struct amdgpu_device *adev,
 	acc_size = amdgpu_amdkfd_acc_size(size);
 
 	vram_needed = 0;
-	if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_GTT) {
+	if (domain == AMDGPU_GEM_DOMAIN_GTT) {
+		/* TTM GTT memory */
 		system_mem_needed = acc_size + size;
 		ttm_mem_needed = acc_size + size;
-	} else if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_VRAM) {
-		system_mem_needed = acc_size;
-		ttm_mem_needed = acc_size;
-		vram_needed = size;
-	} else if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_USERPTR) {
+	} else if (domain == AMDGPU_GEM_DOMAIN_CPU && !sg) {
+		/* Userptr */
 		system_mem_needed = acc_size + size;
 		ttm_mem_needed = acc_size;
-	} else if (alloc_flag &
-		   (KFD_IOC_ALLOC_MEM_FLAGS_DOORBELL |
-		    KFD_IOC_ALLOC_MEM_FLAGS_MMIO_REMAP)) {
+	} else {
+		/* VRAM and SG */
 		system_mem_needed = acc_size;
 		ttm_mem_needed = acc_size;
-	} else {
-		pr_err("%s: Invalid BO type %#x\n", __func__, alloc_flag);
-		return -ENOMEM;
+		if (domain == AMDGPU_GEM_DOMAIN_VRAM)
+			vram_needed = size;
 	}
 
 	spin_lock(&kfd_mem_limit.mem_limit_lock);
@@ -175,71 +160,61 @@ static int amdgpu_amdkfd_reserve_mem_limit(struct amdgpu_device *adev,
 	    (adev->kfd.vram_used + vram_needed >
 	     adev->gmc.real_vram_size - reserved_for_pt)) {
 		ret = -ENOMEM;
-		goto release;
+	} else {
+		kfd_mem_limit.system_mem_used += system_mem_needed;
+		kfd_mem_limit.ttm_mem_used += ttm_mem_needed;
+		adev->kfd.vram_used += vram_needed;
 	}
 
-	/* Update memory accounting by decreasing available system
-	 * memory, TTM memory and GPU memory as computed above
-	 */
-	adev->kfd.vram_used += vram_needed;
-	kfd_mem_limit.system_mem_used += system_mem_needed;
-	kfd_mem_limit.ttm_mem_used += ttm_mem_needed;
-
-release:
 	spin_unlock(&kfd_mem_limit.mem_limit_lock);
 	return ret;
 }
 
 static void unreserve_mem_limit(struct amdgpu_device *adev,
-		uint64_t size, u32 alloc_flag)
+		uint64_t size, u32 domain, bool sg)
 {
 	size_t acc_size;
 
 	acc_size = amdgpu_amdkfd_acc_size(size);
 
 	spin_lock(&kfd_mem_limit.mem_limit_lock);
-
-	if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_GTT) {
+	if (domain == AMDGPU_GEM_DOMAIN_GTT) {
 		kfd_mem_limit.system_mem_used -= (acc_size + size);
 		kfd_mem_limit.ttm_mem_used -= (acc_size + size);
-	} else if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_VRAM) {
-		kfd_mem_limit.system_mem_used -= acc_size;
-		kfd_mem_limit.ttm_mem_used -= acc_size;
-		adev->kfd.vram_used -= size;
-	} else if (alloc_flag & KFD_IOC_ALLOC_MEM_FLAGS_USERPTR) {
+	} else if (domain == AMDGPU_GEM_DOMAIN_CPU && !sg) {
 		kfd_mem_limit.system_mem_used -= (acc_size + size);
 		kfd_mem_limit.ttm_mem_used -= acc_size;
-	} else if (alloc_flag &
-		   (KFD_IOC_ALLOC_MEM_FLAGS_DOORBELL |
-		    KFD_IOC_ALLOC_MEM_FLAGS_MMIO_REMAP)) {
+	} else {
 		kfd_mem_limit.system_mem_used -= acc_size;
 		kfd_mem_limit.ttm_mem_used -= acc_size;
-	} else {
-		pr_err("%s: Invalid BO type %#x\n", __func__, alloc_flag);
-		goto release;
+		if (domain == AMDGPU_GEM_DOMAIN_VRAM) {
+			adev->kfd.vram_used -= size;
+			WARN_ONCE(adev->kfd.vram_used < 0,
+				  "kfd VRAM memory accounting unbalanced");
+		}
 	}
-
-	WARN_ONCE(adev->kfd.vram_used < 0,
-		  "KFD VRAM memory accounting unbalanced");
-	WARN_ONCE(kfd_mem_limit.ttm_mem_used < 0,
-		  "KFD TTM memory accounting unbalanced");
 	WARN_ONCE(kfd_mem_limit.system_mem_used < 0,
-		  "KFD system memory accounting unbalanced");
+		  "kfd system memory accounting unbalanced");
+	WARN_ONCE(kfd_mem_limit.ttm_mem_used < 0,
+		  "kfd TTM memory accounting unbalanced");
 
-release:
 	spin_unlock(&kfd_mem_limit.mem_limit_lock);
 }
 
-void amdgpu_amdkfd_release_notify(struct amdgpu_bo *bo)
+void amdgpu_amdkfd_unreserve_memory_limit(struct amdgpu_bo *bo)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
-	u32 alloc_flags = bo->kfd_bo->alloc_flags;
-	u64 size = amdgpu_bo_size(bo);
+	u32 domain = bo->preferred_domains;
+	bool sg = (bo->preferred_domains == AMDGPU_GEM_DOMAIN_CPU);
 
-	unreserve_mem_limit(adev, size, alloc_flags);
+	if (bo->flags & AMDGPU_AMDKFD_CREATE_USERPTR_BO) {
+		domain = AMDGPU_GEM_DOMAIN_CPU;
+		sg = false;
+	}
 
-	kfree(bo->kfd_bo);
+	unreserve_mem_limit(adev, amdgpu_bo_size(bo), domain, sg);
 }
+
 
 /* amdgpu_amdkfd_remove_eviction_fence - Removes eviction fence from BO's
  *  reservation object.
@@ -753,19 +728,14 @@ static int kfd_mem_attach(struct amdgpu_device *adev, struct kgd_mem *mem,
 		}
 
 		/* Add BO to VM internal data structures */
-		ret = amdgpu_bo_reserve(bo[i], false);
-		if (ret) {
-			pr_debug("Unable to reserve BO during memory attach");
-			goto unwind;
-		}
 		attachment[i]->bo_va = amdgpu_vm_bo_add(adev, vm, bo[i]);
-		amdgpu_bo_unreserve(bo[i]);
 		if (unlikely(!attachment[i]->bo_va)) {
 			ret = -ENOMEM;
 			pr_err("Failed to add BO object to VM. ret == %d\n",
 			       ret);
 			goto unwind;
 		}
+
 		attachment[i]->va = va;
 		attachment[i]->pte_flags = get_pte_flags(adev, mem);
 		attachment[i]->adev = adev;
@@ -781,9 +751,7 @@ unwind:
 		if (!attachment[i])
 			continue;
 		if (attachment[i]->bo_va) {
-			amdgpu_bo_reserve(bo[i], true);
 			amdgpu_vm_bo_rmv(adev, attachment[i]->bo_va);
-			amdgpu_bo_unreserve(bo[i]);
 			list_del(&attachment[i]->list);
 		}
 		if (bo[i])
@@ -1295,55 +1263,6 @@ create_evict_fence_fail:
 	return ret;
 }
 
-/**
- * amdgpu_amdkfd_gpuvm_pin_bo() - Pins a BO using following criteria
- * @bo: Handle of buffer object being pinned
- * @domain: Domain into which BO should be pinned
- *
- *   - USERPTR BOs are UNPINNABLE and will return error
- *   - All other BO types (GTT, VRAM, MMIO and DOORBELL) will have their
- *     PIN count incremented. It is valid to PIN a BO multiple times
- *
- * Return: ZERO if successful in pinning, Non-Zero in case of error.
- */
-static int amdgpu_amdkfd_gpuvm_pin_bo(struct amdgpu_bo *bo, u32 domain)
-{
-	int ret = 0;
-
-	ret = amdgpu_bo_reserve(bo, false);
-	if (unlikely(ret))
-		return ret;
-
-	ret = amdgpu_bo_pin_restricted(bo, domain, 0, 0);
-	if (ret)
-		pr_err("Error in Pinning BO to domain: %d\n", domain);
-
-	amdgpu_bo_sync_wait(bo, AMDGPU_FENCE_OWNER_KFD, false);
-	amdgpu_bo_unreserve(bo);
-
-	return ret;
-}
-
-/**
- * amdgpu_amdkfd_gpuvm_unpin_bo() - Unpins BO using following criteria
- * @bo: Handle of buffer object being unpinned
- *
- *   - Is a illegal request for USERPTR BOs and is ignored
- *   - All other BO types (GTT, VRAM, MMIO and DOORBELL) will have their
- *     PIN count decremented. Calls to UNPIN must balance calls to PIN
- */
-void amdgpu_amdkfd_gpuvm_unpin_bo(struct amdgpu_bo *bo)
-{
-	int ret = 0;
-
-	ret = amdgpu_bo_reserve(bo, false);
-	if (unlikely(ret))
-		return;
-
-	amdgpu_bo_unpin(bo);
-	amdgpu_bo_unreserve(bo);
-}
-
 int amdgpu_amdkfd_gpuvm_acquire_process_vm(struct amdgpu_device *adev,
 					   struct file *filp, u32 pasid,
 					   void **process_info,
@@ -1524,7 +1443,7 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 
 	amdgpu_sync_create(&(*mem)->sync);
 
-	ret = amdgpu_amdkfd_reserve_mem_limit(adev, size, flags);
+	ret = amdgpu_amdkfd_reserve_mem_limit(adev, size, alloc_domain, !!sg);
 	if (ret) {
 		pr_debug("Insufficient memory\n");
 		goto err_reserve_limit;
@@ -1570,29 +1489,17 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 	if (offset)
 		*offset = amdgpu_bo_mmap_offset(bo);
 
-	if (flags & (KFD_IOC_ALLOC_MEM_FLAGS_DOORBELL |
-			KFD_IOC_ALLOC_MEM_FLAGS_MMIO_REMAP)) {
-		ret = amdgpu_amdkfd_gpuvm_pin_bo(bo, AMDGPU_GEM_DOMAIN_GTT);
-		if (ret) {
-			pr_err("Pinning MMIO/DOORBELL BO during ALLOC FAILED\n");
-			goto err_pin_bo;
-		}
-		bo->allowed_domains = AMDGPU_GEM_DOMAIN_GTT;
-		bo->preferred_domains = AMDGPU_GEM_DOMAIN_GTT;
-	}
-
 	return 0;
 
 allocate_init_user_pages_failed:
 	remove_kgd_mem_from_kfd_bo_list(*mem, avm->process_info);
-err_pin_bo:
 	drm_vma_node_revoke(&gobj->vma_node, drm_priv);
 err_node_allow:
 	drm_gem_object_put(gobj);
 	/* Don't unreserve system mem limit twice */
 	goto err_reserve_limit;
 err_bo_create:
-	unreserve_mem_limit(adev, size, flags);
+	unreserve_mem_limit(adev, size, alloc_domain, !!sg);
 err_reserve_limit:
 	mutex_destroy(&(*mem)->lock);
 	kfree(*mem);
@@ -1618,14 +1525,6 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 	bool is_imported = false;
 
 	mutex_lock(&mem->lock);
-
-	/* Unpin MMIO/DOORBELL BO's that were pinnned during allocation */
-	if (mem->alloc_flags &
-	    (KFD_IOC_ALLOC_MEM_FLAGS_DOORBELL |
-	     KFD_IOC_ALLOC_MEM_FLAGS_MMIO_REMAP)) {
-		amdgpu_amdkfd_gpuvm_unpin_bo(mem->bo);
-	}
-
 	mapped_to_gpu_memory = mem->mapped_to_gpu_memory;
 	is_imported = mem->is_imported;
 	mutex_unlock(&mem->lock);
@@ -1661,11 +1560,11 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 	pr_debug("Release VA 0x%llx - 0x%llx\n", mem->va,
 		mem->va + bo_size * (1 + mem->aql_queue));
 
+	ret = unreserve_bo_and_vms(&ctx, false, false);
+
 	/* Remove from VM internal data structures */
 	list_for_each_entry_safe(entry, tmp, &mem->attachments, list)
 		kfd_mem_detach(entry);
-
-	ret = unreserve_bo_and_vms(&ctx, false, false);
 
 	/* Free the sync object */
 	amdgpu_sync_free(&mem->sync);
@@ -1693,13 +1592,9 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 	drm_vma_node_revoke(&mem->bo->tbo.base.vma_node, drm_priv);
 	if (mem->dmabuf)
 		dma_buf_put(mem->dmabuf);
-	mutex_destroy(&mem->lock);
-
-	/* If this releases the last reference, it will end up calling
-	 * amdgpu_amdkfd_release_notify and kfree the mem struct. That's why
-	 * this needs to be the last call here.
-	 */
 	drm_gem_object_put(&mem->bo->tbo.base);
+	mutex_destroy(&mem->lock);
+	kfree(mem);
 
 	return ret;
 }

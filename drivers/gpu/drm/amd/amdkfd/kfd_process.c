@@ -1317,13 +1317,14 @@ bool kfd_process_xnack_mode(struct kfd_process *p, bool supported)
 		 * support the SVM APIs and don't need to be considered
 		 * for the XNACK mode selection.
 		 */
-		if (!KFD_IS_SOC15(dev))
+		if (dev->device_info->asic_family < CHIP_VEGA10)
 			continue;
 		/* Aldebaran can always support XNACK because it can support
 		 * per-process XNACK mode selection. But let the dev->noretry
 		 * setting still influence the default XNACK mode.
 		 */
-		if (supported && KFD_GC_VERSION(dev) == IP_VERSION(9, 4, 2))
+		if (supported &&
+		    dev->device_info->asic_family == CHIP_ALDEBARAN)
 			continue;
 
 		/* GFXv10 and later GPUs do not support shader preemption
@@ -1331,7 +1332,7 @@ bool kfd_process_xnack_mode(struct kfd_process *p, bool supported)
 		 * management and memory-manager-related preemptions or
 		 * even deadlocks.
 		 */
-		if (KFD_GC_VERSION(dev) >= IP_VERSION(10, 1, 1))
+		if (dev->device_info->asic_family >= CHIP_NAVI10)
 			return false;
 
 		if (dev->noretry)
@@ -1430,7 +1431,7 @@ static int init_doorbell_bitmap(struct qcm_process_device *qpd,
 	int range_start = dev->shared_resources.non_cp_doorbells_start;
 	int range_end = dev->shared_resources.non_cp_doorbells_end;
 
-	if (!KFD_IS_SOC15(dev))
+	if (!KFD_IS_SOC15(dev->device_info->asic_family))
 		return 0;
 
 	qpd->doorbell_bitmap =
@@ -1714,11 +1715,7 @@ int kfd_process_evict_queues(struct kfd_process *p)
 
 		r = pdd->dev->dqm->ops.evict_process_queues(pdd->dev->dqm,
 							    &pdd->qpd);
-		/* evict return -EIO if HWS is hang or asic is resetting, in this case
-		 * we would like to set all the queues to be in evicted state to prevent
-		 * them been add back since they actually not be saved right now.
-		 */
-		if (r && r != -EIO) {
+		if (r) {
 			pr_err("Failed to evict process queues\n");
 			goto fail;
 		}

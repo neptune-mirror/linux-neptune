@@ -270,10 +270,10 @@ bool dc_link_detect_sink(struct dc_link *link, enum dc_connection_type *type)
 
 	/* Link may not have physical HPD pin. */
 	if (link->ep_type != DISPLAY_ENDPOINT_PHY) {
-		if (link->is_hpd_pending || !link->hpd_status)
-			*type = dc_connection_none;
-		else
+		if (link->hpd_status)
 			*type = dc_connection_single;
+		else
+			*type = dc_connection_none;
 
 		return true;
 	}
@@ -1999,57 +1999,6 @@ static enum dc_status enable_link_dp_mst(
 	return enable_link_dp(state, pipe_ctx);
 }
 
-void dc_link_blank_all_dp_displays(struct dc *dc)
-{
-	unsigned int i;
-	uint8_t dpcd_power_state = '\0';
-	enum dc_status status = DC_ERROR_UNEXPECTED;
-
-	for (i = 0; i < dc->link_count; i++) {
-		if ((dc->links[i]->connector_signal != SIGNAL_TYPE_DISPLAY_PORT) ||
-			(dc->links[i]->priv == NULL) || (dc->links[i]->local_sink == NULL))
-			continue;
-
-		/* DP 2.0 spec requires that we read LTTPR caps first */
-		dp_retrieve_lttpr_cap(dc->links[i]);
-		/* if any of the displays are lit up turn them off */
-		status = core_link_read_dpcd(dc->links[i], DP_SET_POWER,
-							&dpcd_power_state, sizeof(dpcd_power_state));
-
-		if (status == DC_OK && dpcd_power_state == DP_POWER_STATE_D0)
-			dc_link_blank_dp_stream(dc->links[i], true);
-	}
-
-}
-
-void dc_link_blank_dp_stream(struct dc_link *link, bool hw_init)
-{
-	unsigned int j;
-	struct dc  *dc = link->ctx->dc;
-	enum signal_type signal = link->connector_signal;
-
-	if ((signal == SIGNAL_TYPE_EDP) ||
-		(signal == SIGNAL_TYPE_DISPLAY_PORT)) {
-		if (link->ep_type == DISPLAY_ENDPOINT_PHY &&
-			link->link_enc->funcs->get_dig_frontend &&
-			link->link_enc->funcs->is_dig_enabled(link->link_enc)) {
-			unsigned int fe = link->link_enc->funcs->get_dig_frontend(link->link_enc);
-
-			if (fe != ENGINE_ID_UNKNOWN)
-				for (j = 0; j < dc->res_pool->stream_enc_count; j++) {
-					if (fe == dc->res_pool->stream_enc[j]->id) {
-						dc->res_pool->stream_enc[j]->funcs->dp_blank(link,
-									dc->res_pool->stream_enc[j]);
-						break;
-					}
-				}
-		}
-
-		if ((!link->wa_flags.dp_keep_receiver_powered) || hw_init)
-			dp_receiver_power_ctrl(link, false);
-	}
-}
-
 static bool get_ext_hdmi_settings(struct pipe_ctx *pipe_ctx,
 		enum engine_id eng_id,
 		struct ext_hdmi_settings *settings)
@@ -2997,7 +2946,7 @@ bool dc_link_set_psr_allow_active(struct dc_link *link, const bool *allow_active
 		link->psr_settings.psr_power_opt = *power_opts;
 
 		if (psr != NULL && link->psr_settings.psr_feature_enabled && psr->funcs->psr_set_power_opt)
-			psr->funcs->psr_set_power_opt(psr, link->psr_settings.psr_power_opt, panel_inst);
+			psr->funcs->psr_set_power_opt(psr, link->psr_settings.psr_power_opt);
 	}
 
 	/* Enable or Disable PSR */
@@ -3964,6 +3913,9 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 	struct cp_psp *cp_psp = &pipe_ctx->stream->ctx->cp_psp;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	struct link_encoder *link_enc = NULL;
+	struct dc_state *state = pipe_ctx->stream->ctx->dc->current_state;
+	struct link_enc_assignment link_enc_assign;
+	int i;
 #endif
 
 	if (cp_psp && cp_psp->funcs.update_stream_config) {
@@ -3991,15 +3943,18 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 							pipe_ctx->stream->ctx->dc,
 							pipe_ctx->stream);
 			}
-			ASSERT(link_enc);
-
 			// Initialize PHY ID with ABCDE - 01234 mapping except when it is B0
 			config.phy_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
 
+			//look up the link_enc_assignment for the current pipe_ctx
+			for (i = 0; i < state->stream_count; i++) {
+				if (pipe_ctx->stream == state->streams[i]) {
+					link_enc_assign = state->res_ctx.link_enc_cfg_ctx.link_enc_assignments[i];
+				}
+			}
 			// Add flag to guard new A0 DIG mapping
-			if (pipe_ctx->stream->ctx->dc->enable_c20_dtm_b0 == true &&
-					pipe_ctx->stream->link->dc->ctx->dce_version == DCN_VERSION_3_1) {
-				config.dig_be = link_enc->preferred_engine;
+			if (pipe_ctx->stream->ctx->dc->enable_c20_dtm_b0 == true) {
+				config.dig_be = link_enc_assign.eng_id;
 				config.dio_output_type = pipe_ctx->stream->link->ep_type;
 				config.dio_output_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
 			} else {
@@ -4011,8 +3966,10 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 			if (pipe_ctx->stream->ctx->dc->enable_c20_dtm_b0 == true &&
 					link_enc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0) {
 				if (pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA) {
+					link_enc = link_enc_assign.stream->link_enc;
+
 					// enum ID 1-4 maps to DPIA PHY ID 0-3
-					config.phy_idx = pipe_ctx->stream->link->link_id.enum_id - ENUM_ID_1;
+					config.phy_idx = link_enc_assign.ep_id.link_id.enum_id - ENUM_ID_1;
 				} else {  // for non DPIA mode over B0, ABCDE maps to 01564
 
 					switch (link_enc->transmitter) {
@@ -4792,8 +4749,6 @@ bool dc_link_should_enable_fec(const struct dc_link *link)
 			link->local_sink &&
 			link->local_sink->edid_caps.panel_patch.disable_fec) ||
 			(link->connector_signal == SIGNAL_TYPE_EDP
-				// enable FEC for EDP if DSC is supported
-				&& link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT == false
 				))
 		is_fec_disable = true;
 
@@ -4815,7 +4770,7 @@ uint32_t dc_bandwidth_in_kbps_from_timing(
 				timing->dsc_cfg.bits_per_pixel,
 				timing->dsc_cfg.num_slices_h,
 				timing->dsc_cfg.is_dp);
-#endif /* CONFIG_DRM_AMD_DC_DCN */
+#endif
 
 	switch (timing->display_color_depth) {
 	case COLOR_DEPTH_666:

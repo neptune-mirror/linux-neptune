@@ -515,7 +515,7 @@ static ssize_t node_show(struct kobject *kobj, struct attribute *attr,
 				HSA_CAP_WATCH_POINTS_TOTALBITS_MASK);
 		}
 
-		if (dev->gpu->adev->asic_type == CHIP_TONGA)
+		if (dev->gpu->device_info->asic_family == CHIP_TONGA)
 			dev->node_props.capability |=
 					HSA_CAP_AQL_QUEUE_DOUBLE_MAP;
 
@@ -531,7 +531,7 @@ static ssize_t node_show(struct kobject *kobj, struct attribute *attr,
 		sysfs_show_32bit_prop(buffer, offs, "sdma_fw_version",
 				      dev->gpu->sdma_fw_version);
 		sysfs_show_64bit_prop(buffer, offs, "unique_id",
-				      dev->gpu->adev->unique_id);
+				      amdgpu_amdkfd_get_unique_id(dev->gpu->adev));
 
 	}
 
@@ -1217,7 +1217,8 @@ static void kfd_set_iolink_no_atomics(struct kfd_topology_device *dev,
 	/* set gpu (dev) flags. */
 	} else {
 		if (!dev->gpu->pci_atomic_requested ||
-				dev->gpu->adev->asic_type == CHIP_HAWAII)
+				dev->gpu->device_info->asic_family ==
+							CHIP_HAWAII)
 			link->flags |= CRAT_IOLINK_FLAGS_NO_ATOMICS_32_BIT |
 				CRAT_IOLINK_FLAGS_NO_ATOMICS_64_BIT;
 	}
@@ -1238,7 +1239,7 @@ static void kfd_set_iolink_non_coherent(struct kfd_topology_device *to_dev,
 		 */
 		if (inbound_link->iolink_type == CRAT_IOLINK_TYPE_PCIEXPRESS ||
 		    (inbound_link->iolink_type == CRAT_IOLINK_TYPE_XGMI &&
-		    KFD_GC_VERSION(to_dev->gpu) == IP_VERSION(9, 4, 0))) {
+		    to_dev->gpu->device_info->asic_family == CHIP_VEGA20)) {
 			outbound_link->flags |= CRAT_IOLINK_FLAGS_NON_COHERENT;
 			inbound_link->flags |= CRAT_IOLINK_FLAGS_NON_COHERENT;
 		}
@@ -1380,7 +1381,8 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 	dev->node_props.vendor_id = gpu->pdev->vendor;
 	dev->node_props.device_id = gpu->pdev->device;
 	dev->node_props.capability |=
-		((dev->gpu->adev->rev_id << HSA_CAP_ASIC_REVISION_SHIFT) &
+		((amdgpu_amdkfd_get_asic_rev_id(dev->gpu->adev) <<
+			HSA_CAP_ASIC_REVISION_SHIFT) &
 			HSA_CAP_ASIC_REVISION_MASK);
 	dev->node_props.location_id = pci_dev_id(gpu->pdev);
 	dev->node_props.domain = pci_domain_nr(gpu->pdev->bus);
@@ -1399,13 +1401,13 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 				gpu->device_info->num_sdma_queues_per_engine;
 	dev->node_props.num_gws = (dev->gpu->gws &&
 		dev->gpu->dqm->sched_policy != KFD_SCHED_POLICY_NO_HWS) ?
-		dev->gpu->adev->gds.gws_size : 0;
+		amdgpu_amdkfd_get_num_gws(dev->gpu->adev) : 0;
 	dev->node_props.num_cp_queues = get_cp_queues_num(dev->gpu->dqm);
 
 	kfd_fill_mem_clk_max_info(dev);
 	kfd_fill_iolink_non_crat_info(dev);
 
-	switch (dev->gpu->adev->asic_type) {
+	switch (dev->gpu->device_info->asic_family) {
 	case CHIP_KAVERI:
 	case CHIP_HAWAII:
 	case CHIP_TONGA:
@@ -1424,14 +1426,30 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 			HSA_CAP_DOORBELL_TYPE_TOTALBITS_SHIFT) &
 			HSA_CAP_DOORBELL_TYPE_TOTALBITS_MASK);
 		break;
+	case CHIP_VEGA10:
+	case CHIP_VEGA12:
+	case CHIP_VEGA20:
+	case CHIP_RAVEN:
+	case CHIP_RENOIR:
+	case CHIP_ARCTURUS:
+	case CHIP_ALDEBARAN:
+	case CHIP_NAVI10:
+	case CHIP_NAVI12:
+	case CHIP_NAVI14:
+	case CHIP_SIENNA_CICHLID:
+	case CHIP_NAVY_FLOUNDER:
+	case CHIP_VANGOGH:
+	case CHIP_DIMGREY_CAVEFISH:
+	case CHIP_BEIGE_GOBY:
+	case CHIP_YELLOW_CARP:
+	case CHIP_CYAN_SKILLFISH:
+		dev->node_props.capability |= ((HSA_CAP_DOORBELL_TYPE_2_0 <<
+			HSA_CAP_DOORBELL_TYPE_TOTALBITS_SHIFT) &
+			HSA_CAP_DOORBELL_TYPE_TOTALBITS_MASK);
+		break;
 	default:
-		if (KFD_GC_VERSION(dev->gpu) >= IP_VERSION(9, 0, 1))
-			dev->node_props.capability |= ((HSA_CAP_DOORBELL_TYPE_2_0 <<
-				HSA_CAP_DOORBELL_TYPE_TOTALBITS_SHIFT) &
-				HSA_CAP_DOORBELL_TYPE_TOTALBITS_MASK);
-		else
-			WARN(1, "Unexpected ASIC family %u",
-			     dev->gpu->adev->asic_type);
+		WARN(1, "Unexpected ASIC family %u",
+		     dev->gpu->device_info->asic_family);
 	}
 
 	/*
@@ -1448,7 +1466,7 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 	 *		because it doesn't consider masked out CUs
 	 * max_waves_per_simd: Carrizo reports wrong max_waves_per_simd
 	 */
-	if (dev->gpu->adev->asic_type == CHIP_CARRIZO) {
+	if (dev->gpu->device_info->asic_family == CHIP_CARRIZO) {
 		dev->node_props.simd_count =
 			cu_info.simd_per_cu * cu_info.cu_active_number;
 		dev->node_props.max_waves_per_simd = 10;
@@ -1462,7 +1480,7 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 		((dev->gpu->adev->ras_enabled & BIT(AMDGPU_RAS_BLOCK__UMC)) != 0) ?
 		HSA_CAP_MEM_EDCSUPPORTED : 0;
 
-	if (KFD_GC_VERSION(dev->gpu) != IP_VERSION(9, 0, 1))
+	if (dev->gpu->adev->asic_type != CHIP_VEGA10)
 		dev->node_props.capability |= (dev->gpu->adev->ras_enabled != 0) ?
 			HSA_CAP_RASEVENTNOTIFY : 0;
 

@@ -78,10 +78,12 @@ static int parse_write_buffer_into_params(char *wr_buf, uint32_t wr_buf_size,
 
 	wr_buf_ptr = wr_buf;
 
-	/* r is bytes not be copied */
-	if (copy_from_user(wr_buf_ptr, buf, wr_buf_size)) {
-		DRM_DEBUG_DRIVER("user data could not be read successfully\n");
-		return -EFAULT;
+	r = copy_from_user(wr_buf_ptr, buf, wr_buf_size);
+
+		/* r is bytes not be copied */
+	if (r >= wr_buf_size) {
+		DRM_DEBUG_DRIVER("user data not be read\n");
+		return -EINVAL;
 	}
 
 	/* check number of parameters. isspace could not differ space and \n */

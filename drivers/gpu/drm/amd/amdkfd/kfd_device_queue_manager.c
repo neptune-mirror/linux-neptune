@@ -157,7 +157,7 @@ static int allocate_doorbell(struct qcm_process_device *qpd, struct queue *q)
 {
 	struct kfd_dev *dev = qpd->dqm->dev;
 
-	if (!KFD_IS_SOC15(dev)) {
+	if (!KFD_IS_SOC15(dev->device_info->asic_family)) {
 		/* On pre-SOC15 chips we need to use the queue ID to
 		 * preserve the user mode ABI.
 		 */
@@ -202,7 +202,7 @@ static void deallocate_doorbell(struct qcm_process_device *qpd,
 	unsigned int old;
 	struct kfd_dev *dev = qpd->dqm->dev;
 
-	if (!KFD_IS_SOC15(dev) ||
+	if (!KFD_IS_SOC15(dev->device_info->asic_family) ||
 	    q->properties.type == KFD_QUEUE_TYPE_SDMA ||
 	    q->properties.type == KFD_QUEUE_TYPE_SDMA_XGMI)
 		return;
@@ -250,7 +250,8 @@ static int allocate_vmid(struct device_queue_manager *dqm,
 
 	program_sh_mem_settings(dqm, qpd);
 
-	if (KFD_IS_SOC15(dqm->dev) && dqm->dev->cwsr_enabled)
+	if (dqm->dev->device_info->asic_family >= CHIP_VEGA10 &&
+	    dqm->dev->cwsr_enabled)
 		program_trap_handler_settings(dqm, qpd);
 
 	/* qpd->page_table_base is set earlier when register_process()
@@ -292,7 +293,7 @@ static void deallocate_vmid(struct device_queue_manager *dqm,
 				struct queue *q)
 {
 	/* On GFX v7, CP doesn't flush TC at dequeue */
-	if (q->device->adev->asic_type == CHIP_HAWAII)
+	if (q->device->device_info->asic_family == CHIP_HAWAII)
 		if (flush_texture_cache_nocpsch(q->device, qpd))
 			pr_err("Failed to flush TC\n");
 
@@ -1016,7 +1017,7 @@ static int start_nocpsch(struct device_queue_manager *dqm)
 	pr_info("SW scheduler is used");
 	init_interrupts(dqm);
 	
-	if (dqm->dev->adev->asic_type == CHIP_HAWAII)
+	if (dqm->dev->device_info->asic_family == CHIP_HAWAII)
 		return pm_init(&dqm->packet_mgr, dqm);
 	dqm->sched_running = true;
 
@@ -1025,7 +1026,7 @@ static int start_nocpsch(struct device_queue_manager *dqm)
 
 static int stop_nocpsch(struct device_queue_manager *dqm)
 {
-	if (dqm->dev->adev->asic_type == CHIP_HAWAII)
+	if (dqm->dev->device_info->asic_family == CHIP_HAWAII)
 		pm_uninit(&dqm->packet_mgr, false);
 	dqm->sched_running = false;
 
@@ -1225,11 +1226,6 @@ static int stop_cpsch(struct device_queue_manager *dqm)
 	bool hanging;
 
 	dqm_lock(dqm);
-	if (!dqm->sched_running) {
-		dqm_unlock(dqm);
-		return 0;
-	}
-
 	if (!dqm->is_hws_hang)
 		unmap_queues_cpsch(dqm, KFD_UNMAP_QUEUES_FILTER_ALL_QUEUES, 0);
 	hanging = dqm->is_hws_hang || dqm->is_resetting;
@@ -1434,7 +1430,7 @@ static int unmap_queues_cpsch(struct device_queue_manager *dqm,
 
 	if (!dqm->sched_running)
 		return 0;
-	if (dqm->is_hws_hang || dqm->is_resetting)
+	if (dqm->is_hws_hang)
 		return -EIO;
 	if (!dqm->active_runlist)
 		return retval;
@@ -1866,7 +1862,7 @@ struct device_queue_manager *device_queue_manager_init(struct kfd_dev *dev)
 	if (!dqm)
 		return NULL;
 
-	switch (dev->adev->asic_type) {
+	switch (dev->device_info->asic_family) {
 	/* HWS is not available on Hawaii. */
 	case CHIP_HAWAII:
 	/* HWS depends on CWSR for timely dequeue. CWSR is not
@@ -1929,7 +1925,7 @@ struct device_queue_manager *device_queue_manager_init(struct kfd_dev *dev)
 		goto out_free;
 	}
 
-	switch (dev->adev->asic_type) {
+	switch (dev->device_info->asic_family) {
 	case CHIP_CARRIZO:
 		device_queue_manager_init_vi(&dqm->asic_ops);
 		break;
@@ -1951,16 +1947,31 @@ struct device_queue_manager *device_queue_manager_init(struct kfd_dev *dev)
 		device_queue_manager_init_vi_tonga(&dqm->asic_ops);
 		break;
 
+	case CHIP_VEGA10:
+	case CHIP_VEGA12:
+	case CHIP_VEGA20:
+	case CHIP_RAVEN:
+	case CHIP_RENOIR:
+	case CHIP_ARCTURUS:
+	case CHIP_ALDEBARAN:
+		device_queue_manager_init_v9(&dqm->asic_ops);
+		break;
+	case CHIP_NAVI10:
+	case CHIP_NAVI12:
+	case CHIP_NAVI14:
+	case CHIP_SIENNA_CICHLID:
+	case CHIP_NAVY_FLOUNDER:
+	case CHIP_VANGOGH:
+	case CHIP_DIMGREY_CAVEFISH:
+	case CHIP_BEIGE_GOBY:
+	case CHIP_YELLOW_CARP:
+	case CHIP_CYAN_SKILLFISH:
+		device_queue_manager_init_v10_navi10(&dqm->asic_ops);
+		break;
 	default:
-		if (KFD_GC_VERSION(dev) >= IP_VERSION(10, 1, 1))
-			device_queue_manager_init_v10_navi10(&dqm->asic_ops);
-		else if (KFD_GC_VERSION(dev) >= IP_VERSION(9, 0, 1))
-			device_queue_manager_init_v9(&dqm->asic_ops);
-		else {
-			WARN(1, "Unexpected ASIC family %u",
-			     dev->adev->asic_type);
-			goto out_free;
-		}
+		WARN(1, "Unexpected ASIC family %u",
+		     dev->device_info->asic_family);
+		goto out_free;
 	}
 
 	if (init_mqd_managers(dqm))

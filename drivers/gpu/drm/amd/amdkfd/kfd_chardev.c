@@ -321,7 +321,7 @@ static int kfd_ioctl_create_queue(struct file *filep, struct kfd_process *p,
 	/* Return gpu_id as doorbell offset for mmap usage */
 	args->doorbell_offset = KFD_MMAP_TYPE_DOORBELL;
 	args->doorbell_offset |= KFD_MMAP_GPU_ID(args->gpu_id);
-	if (KFD_IS_SOC15(dev))
+	if (KFD_IS_SOC15(dev->device_info->asic_family))
 		/* On SOC15 ASICs, include the doorbell offset within the
 		 * process doorbell frame, which is 2 pages.
 		 */
@@ -580,7 +580,7 @@ static int kfd_ioctl_dbg_register(struct file *filep,
 	if (!dev)
 		return -EINVAL;
 
-	if (dev->adev->asic_type == CHIP_CARRIZO) {
+	if (dev->device_info->asic_family == CHIP_CARRIZO) {
 		pr_debug("kfd_ioctl_dbg_register not supported on CZ\n");
 		return -EINVAL;
 	}
@@ -631,7 +631,7 @@ static int kfd_ioctl_dbg_unregister(struct file *filep,
 	if (!dev || !dev->dbgmgr)
 		return -EINVAL;
 
-	if (dev->adev->asic_type == CHIP_CARRIZO) {
+	if (dev->device_info->asic_family == CHIP_CARRIZO) {
 		pr_debug("kfd_ioctl_dbg_unregister not supported on CZ\n");
 		return -EINVAL;
 	}
@@ -676,7 +676,7 @@ static int kfd_ioctl_dbg_address_watch(struct file *filep,
 	if (!dev)
 		return -EINVAL;
 
-	if (dev->adev->asic_type == CHIP_CARRIZO) {
+	if (dev->device_info->asic_family == CHIP_CARRIZO) {
 		pr_debug("kfd_ioctl_dbg_wave_control not supported on CZ\n");
 		return -EINVAL;
 	}
@@ -784,7 +784,7 @@ static int kfd_ioctl_dbg_wave_control(struct file *filep,
 	if (!dev)
 		return -EINVAL;
 
-	if (dev->adev->asic_type == CHIP_CARRIZO) {
+	if (dev->device_info->asic_family == CHIP_CARRIZO) {
 		pr_debug("kfd_ioctl_dbg_wave_control not supported on CZ\n");
 		return -EINVAL;
 	}
@@ -1313,7 +1313,7 @@ static int kfd_ioctl_alloc_memory_of_gpu(struct file *filep,
 			err = -EINVAL;
 			goto err_unlock;
 		}
-		offset = dev->adev->rmmio_remap.bus_addr;
+		offset = amdgpu_amdkfd_get_mmio_remap_phys_addr(dev->adev);
 		if (!offset) {
 			err = -ENOMEM;
 			goto err_unlock;
@@ -1603,7 +1603,7 @@ static int kfd_ioctl_unmap_memory_from_gpu(struct file *filep,
 	}
 	mutex_unlock(&p->mutex);
 
-	if (KFD_GC_VERSION(dev) == IP_VERSION(9, 4, 2)) {
+	if (dev->device_info->asic_family == CHIP_ALDEBARAN) {
 		err = amdgpu_amdkfd_gpuvm_sync_memory(dev->adev,
 				(struct kgd_mem *) mem, true);
 		if (err) {
@@ -2066,7 +2066,7 @@ static int kfd_mmio_mmap(struct kfd_dev *dev, struct kfd_process *process,
 	if (vma->vm_end - vma->vm_start != PAGE_SIZE)
 		return -EINVAL;
 
-	address = dev->adev->rmmio_remap.bus_addr;
+	address = amdgpu_amdkfd_get_mmio_remap_phys_addr(dev->adev);
 
 	vma->vm_flags |= VM_IO | VM_DONTCOPY | VM_DONTEXPAND | VM_NORESERVE |
 				VM_DONTDUMP | VM_PFNMAP;

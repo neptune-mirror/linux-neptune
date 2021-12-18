@@ -1051,8 +1051,8 @@ svm_range_get_pte_flags(struct amdgpu_device *adev, struct svm_range *prange,
 	if (domain == SVM_RANGE_VRAM_DOMAIN)
 		bo_adev = amdgpu_ttm_adev(prange->svm_bo->bo->tbo.bdev);
 
-	switch (KFD_GC_VERSION(adev->kfd.dev)) {
-	case IP_VERSION(9, 4, 1):
+	switch (adev->asic_type) {
+	case CHIP_ARCTURUS:
 		if (domain == SVM_RANGE_VRAM_DOMAIN) {
 			if (bo_adev == adev) {
 				mapping_flags |= coherent ?
@@ -1068,7 +1068,7 @@ svm_range_get_pte_flags(struct amdgpu_device *adev, struct svm_range *prange,
 				AMDGPU_VM_MTYPE_UC : AMDGPU_VM_MTYPE_NC;
 		}
 		break;
-	case IP_VERSION(9, 4, 2):
+	case CHIP_ALDEBARAN:
 		if (domain == SVM_RANGE_VRAM_DOMAIN) {
 			if (bo_adev == adev) {
 				mapping_flags |= coherent ?
@@ -1486,11 +1486,9 @@ static int svm_range_validate_and_map(struct mm_struct *mm,
 
 		next = min(vma->vm_end, end);
 		npages = (next - addr) >> PAGE_SHIFT;
-		WRITE_ONCE(p->svms.faulting_task, current);
 		r = amdgpu_hmm_range_get_pages(&prange->notifier, mm, NULL,
 					       addr, npages, &hmm_range,
 					       readonly, true, owner);
-		WRITE_ONCE(p->svms.faulting_task, NULL);
 		if (r) {
 			pr_debug("failed %d to get svm range pages\n", r);
 			goto unreserve_out;
@@ -1991,28 +1989,20 @@ static void svm_range_deferred_list_work(struct work_struct *work)
 		pr_debug("prange 0x%p [0x%lx 0x%lx] op %d\n", prange,
 			 prange->start, prange->last, prange->work_item.op);
 
+		/* Make sure no stale retry fault coming after range is freed */
+		if (prange->work_item.op == SVM_OP_UNMAP_RANGE)
+			svm_range_drain_retry_fault(prange->svms);
+
 		mm = prange->work_item.mm;
-retry:
 		mmap_write_lock(mm);
 		mutex_lock(&svms->lock);
 
-		/* Checking for the need to drain retry faults must be in
-		 * mmap write lock to serialize with munmap notifiers.
-		 *
-		 * Remove from deferred_list must be inside mmap write lock,
+		/* Remove from deferred_list must be inside mmap write lock,
 		 * otherwise, svm_range_list_lock_and_flush_work may hold mmap
 		 * write lock, and continue because deferred_list is empty, then
 		 * deferred_list handle is blocked by mmap write lock.
 		 */
 		spin_lock(&svms->deferred_list_lock);
-		if (unlikely(svms->drain_pagefaults)) {
-			svms->drain_pagefaults = false;
-			spin_unlock(&svms->deferred_list_lock);
-			mutex_unlock(&svms->lock);
-			mmap_write_unlock(mm);
-			svm_range_drain_retry_fault(svms);
-			goto retry;
-		}
 		list_del_init(&prange->deferred_list);
 		spin_unlock(&svms->deferred_list_lock);
 
@@ -2045,12 +2035,6 @@ svm_range_add_list_work(struct svm_range_list *svms, struct svm_range *prange,
 			struct mm_struct *mm, enum svm_work_list_ops op)
 {
 	spin_lock(&svms->deferred_list_lock);
-	/* Make sure pending page faults are drained in the deferred worker
-	 * before the range is freed to avoid straggler interrupts on
-	 * unmapped memory causing "phantom faults".
-	 */
-	if (op == SVM_OP_UNMAP_RANGE)
-		svms->drain_pagefaults = true;
 	/* if prange is on the deferred list */
 	if (!list_empty(&prange->deferred_list)) {
 		pr_debug("update exist prange 0x%p work op %d\n", prange, op);
@@ -2266,7 +2250,7 @@ svm_range_from_addr(struct svm_range_list *svms, unsigned long addr,
  * migration if actual loc is not best location, then update GPU page table
  * mapping to the best location.
  *
- * If the preferred loc is accessible by faulting GPU, use preferred loc.
+ * If vm fault gpu is range preferred loc, the best_loc is preferred loc.
  * If vm fault gpu idx is on range ACCESSIBLE bitmap, best_loc is vm fault gpu
  * If vm fault gpu idx is on range ACCESSIBLE_IN_PLACE bitmap, then
  *    if range actual loc is cpu, best_loc is cpu
@@ -2283,7 +2267,7 @@ svm_range_best_restore_location(struct svm_range *prange,
 				struct amdgpu_device *adev,
 				int32_t *gpuidx)
 {
-	struct amdgpu_device *bo_adev, *preferred_adev;
+	struct amdgpu_device *bo_adev;
 	struct kfd_process *p;
 	uint32_t gpuid;
 	int r;
@@ -2296,16 +2280,8 @@ svm_range_best_restore_location(struct svm_range *prange,
 		return -1;
 	}
 
-	if (prange->preferred_loc == gpuid ||
-	    prange->preferred_loc == KFD_IOCTL_SVM_LOCATION_SYSMEM) {
+	if (prange->preferred_loc == gpuid)
 		return prange->preferred_loc;
-	} else if (prange->preferred_loc != KFD_IOCTL_SVM_LOCATION_UNDEFINED) {
-		preferred_adev = svm_range_get_adev_by_id(prange,
-							prange->preferred_loc);
-		if (amdgpu_xgmi_same_hive(adev, preferred_adev))
-			return prange->preferred_loc;
-		/* fall through */
-	}
 
 	if (test_bit(*gpuidx, prange->bitmap_access))
 		return gpuid;
@@ -2326,8 +2302,7 @@ svm_range_best_restore_location(struct svm_range *prange,
 
 static int
 svm_range_get_range_boundaries(struct kfd_process *p, int64_t addr,
-			       unsigned long *start, unsigned long *last,
-			       bool *is_heap_stack)
+				unsigned long *start, unsigned long *last)
 {
 	struct vm_area_struct *vma;
 	struct interval_tree_node *node;
@@ -2338,12 +2313,6 @@ svm_range_get_range_boundaries(struct kfd_process *p, int64_t addr,
 		pr_debug("VMA does not exist in address [0x%llx]\n", addr);
 		return -EFAULT;
 	}
-
-	*is_heap_stack = (vma->vm_start <= vma->vm_mm->brk &&
-			  vma->vm_end >= vma->vm_mm->start_brk) ||
-			 (vma->vm_start <= vma->vm_mm->start_stack &&
-			  vma->vm_end >= vma->vm_mm->start_stack);
-
 	start_limit = max(vma->vm_start >> PAGE_SHIFT,
 		      (unsigned long)ALIGN_DOWN(addr, 2UL << 8));
 	end_limit = min(vma->vm_end >> PAGE_SHIFT,
@@ -2373,9 +2342,9 @@ svm_range_get_range_boundaries(struct kfd_process *p, int64_t addr,
 	*start = start_limit;
 	*last = end_limit - 1;
 
-	pr_debug("vma [0x%lx 0x%lx] range [0x%lx 0x%lx] is_heap_stack %d\n",
-		 vma->vm_start >> PAGE_SHIFT, vma->vm_end >> PAGE_SHIFT,
-		 *start, *last, *is_heap_stack);
+	pr_debug("vma start: 0x%lx start: 0x%lx vma end: 0x%lx last: 0x%lx\n",
+		  vma->vm_start >> PAGE_SHIFT, *start,
+		  vma->vm_end >> PAGE_SHIFT, *last);
 
 	return 0;
 }
@@ -2440,13 +2409,11 @@ svm_range *svm_range_create_unregistered_range(struct amdgpu_device *adev,
 	struct svm_range *prange = NULL;
 	unsigned long start, last;
 	uint32_t gpuid, gpuidx;
-	bool is_heap_stack;
 	uint64_t bo_s = 0;
 	uint64_t bo_l = 0;
 	int r;
 
-	if (svm_range_get_range_boundaries(p, addr, &start, &last,
-					   &is_heap_stack))
+	if (svm_range_get_range_boundaries(p, addr, &start, &last))
 		return NULL;
 
 	r = svm_range_check_vm(p, start, last, &bo_s, &bo_l);
@@ -2472,9 +2439,6 @@ svm_range *svm_range_create_unregistered_range(struct amdgpu_device *adev,
 		svm_range_free(prange);
 		return NULL;
 	}
-
-	if (is_heap_stack)
-		prange->preferred_loc = KFD_IOCTL_SVM_LOCATION_SYSMEM;
 
 	svm_range_add_to_svms(prange);
 	svm_range_add_notifier_locked(mm, prange);
@@ -3099,8 +3063,6 @@ static void svm_range_evict_svm_bo_worker(struct work_struct *work)
 		struct svm_range *prange =
 				list_first_entry(&svm_bo->range_list,
 						struct svm_range, svm_bo_list);
-		int retries = 3;
-
 		list_del_init(&prange->svm_bo_list);
 		spin_unlock(&svm_bo->list_lock);
 
@@ -3108,11 +3070,7 @@ static void svm_range_evict_svm_bo_worker(struct work_struct *work)
 			 prange->start, prange->last);
 
 		mutex_lock(&prange->migrate_mutex);
-		do {
-			svm_migrate_vram_to_ram(prange,
-						svm_bo->eviction_fence->mm);
-		} while (prange->actual_loc && --retries);
-		WARN(prange->actual_loc, "Migration failed during eviction");
+		svm_migrate_vram_to_ram(prange, svm_bo->eviction_fence->mm);
 
 		mutex_lock(&prange->lock);
 		prange->svm_bo = NULL;

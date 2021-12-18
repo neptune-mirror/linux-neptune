@@ -36,7 +36,7 @@
  * Initialise link encoder resource tracking.
  */
 void link_enc_cfg_init(
-		const struct dc *dc,
+		struct dc *dc,
 		struct dc_state *state);
 
 /*
