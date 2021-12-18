@@ -3892,11 +3892,15 @@ static double TruncToValidBPP(
 		MinDSCBPP = 8;
 		MaxDSCBPP = 3 * DSCInputBitPerComponent - 1.0 / 16;
 	} else {
-
-		NonDSCBPP0 = 16;
-		NonDSCBPP1 = 20;
-		NonDSCBPP2 = 24;
-
+		if (Output == dm_hdmi) {
+			NonDSCBPP0 = 24;
+			NonDSCBPP1 = 24;
+			NonDSCBPP2 = 24;
+		} else {
+			NonDSCBPP0 = 16;
+			NonDSCBPP1 = 20;
+			NonDSCBPP2 = 24;
+		}
 		if (Format == dm_n422) {
 			MinDSCBPP = 7;
 			MaxDSCBPP = 2 * DSCInputBitPerComponent - 1.0 / 16.0;

@@ -47,7 +47,7 @@ struct aux_payload;
 struct set_config_cmd_payload;
 struct dmub_notification;
 
-#define DC_VER "3.2.160"
+#define DC_VER "3.2.159"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -675,7 +675,6 @@ struct dc_debug_options {
 #endif
 	union mem_low_power_enable_options enable_mem_low_power;
 	union root_clock_optimization_options root_clock_optimization;
-	bool hpo_optimization;
 	bool force_vblank_alignment;
 
 	/* Enable dmub aux for legacy ddc */
@@ -1429,12 +1428,6 @@ bool dc_process_dmub_set_config_async(struct dc *dc,
 				uint32_t link_index,
 				struct set_config_cmd_payload *payload,
 				struct dmub_notification *notify);
-
-enum dc_status dc_process_dmub_set_mst_slots(const struct dc *dc,
-				uint32_t link_index,
-				uint8_t mst_alloc_slots,
-				uint8_t *mst_slots_in_use);
-
 /*******************************************************************************
  * DSC Interfaces
  ******************************************************************************/

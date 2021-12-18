@@ -97,7 +97,6 @@ enum dmub_asic {
 	DMUB_ASIC_DCN302,
 	DMUB_ASIC_DCN303,
 	DMUB_ASIC_DCN31,
-	DMUB_ASIC_DCN31B,
 	DMUB_ASIC_MAX,
 };
 
@@ -238,8 +237,6 @@ struct dmub_srv_hw_params {
 	bool load_inst_const;
 	bool skip_panel_power_sequence;
 	bool disable_z10;
-	bool power_optimization;
-	bool dpia_supported;
 	bool disable_dpia;
 };
 

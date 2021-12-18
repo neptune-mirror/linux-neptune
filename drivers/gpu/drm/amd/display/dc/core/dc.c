@@ -1085,8 +1085,6 @@ static void disable_dangling_plane(struct dc *dc, struct dc_state *context)
 		struct dc_stream_state *old_stream =
 				dc->current_state->res_ctx.pipe_ctx[i].stream;
 		bool should_disable = true;
-		bool pipe_split_change =
-			context->res_ctx.pipe_ctx[i].top_pipe != dc->current_state->res_ctx.pipe_ctx[i].top_pipe;
 
 		for (j = 0; j < context->stream_count; j++) {
 			if (old_stream == context->streams[j]) {
@@ -1094,9 +1092,6 @@ static void disable_dangling_plane(struct dc *dc, struct dc_state *context)
 				break;
 			}
 		}
-		if (!should_disable && pipe_split_change)
-			should_disable = true;
-
 		if (should_disable && old_stream) {
 			dc_rem_all_planes_for_stream(dc, old_stream, dangling_context);
 			disable_all_writeback_pipes_for_stream(dc, old_stream, dangling_context);
@@ -3608,8 +3603,7 @@ bool dc_enable_dmub_notifications(struct dc *dc)
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	/* YELLOW_CARP B0 USB4 DPIA needs dmub notifications for interrupts */
 	if (dc->ctx->asic_id.chip_family == FAMILY_YELLOW_CARP &&
-	    dc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0 &&
-	    !dc->debug.dpia_debug.bits.disable_dpia)
+	    dc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0)
 		return true;
 #endif
 	/* dmub aux needs dmub notifications to be enabled */
@@ -3754,60 +3748,6 @@ bool dc_process_dmub_set_config_async(struct dc *dc,
 		is_cmd_complete = false;
 
 	return is_cmd_complete;
-}
-
-/**
- *****************************************************************************
- *  Function: dc_process_dmub_set_mst_slots
- *
- *  @brief
- *		Submits mst slot allocation command to dmub via inbox message
- *
- *  @param
- *		[in] dc: dc structure
- *		[in] link_index: link index
- *		[in] mst_alloc_slots: mst slots to be allotted
- *		[out] mst_slots_in_use: mst slots in use returned in failure case
- *
- *	@return
- *		DC_OK if successful, DC_ERROR if failure
- *****************************************************************************
- */
-enum dc_status dc_process_dmub_set_mst_slots(const struct dc *dc,
-				uint32_t link_index,
-				uint8_t mst_alloc_slots,
-				uint8_t *mst_slots_in_use)
-{
-	union dmub_rb_cmd cmd = {0};
-	struct dc_dmub_srv *dmub_srv = dc->ctx->dmub_srv;
-
-	/* prepare MST_ALLOC_SLOTS command */
-	cmd.set_mst_alloc_slots.header.type = DMUB_CMD__DPIA;
-	cmd.set_mst_alloc_slots.header.sub_type = DMUB_CMD__DPIA_MST_ALLOC_SLOTS;
-
-	cmd.set_mst_alloc_slots.mst_slots_control.instance = dc->links[link_index]->ddc_hw_inst;
-	cmd.set_mst_alloc_slots.mst_slots_control.mst_alloc_slots = mst_alloc_slots;
-
-	if (!dc_dmub_srv_cmd_with_reply_data(dmub_srv, &cmd))
-		/* command is not processed by dmub */
-		return DC_ERROR_UNEXPECTED;
-
-	/* command processed by dmub, if ret_status is 1 */
-	if (cmd.set_config_access.header.ret_status != 1)
-		/* command processing error */
-		return DC_ERROR_UNEXPECTED;
-
-	/* command processed and we have a status of 2, mst not enabled in dpia */
-	if (cmd.set_mst_alloc_slots.mst_slots_control.immed_status == 2)
-		return DC_FAIL_UNSUPPORTED_1;
-
-	/* previously configured mst alloc and used slots did not match */
-	if (cmd.set_mst_alloc_slots.mst_slots_control.immed_status == 3) {
-		*mst_slots_in_use = cmd.set_mst_alloc_slots.mst_slots_control.mst_slots_in_use;
-		return DC_NOT_SUPPORTED;
-	}
-
-	return DC_OK;
 }
 
 /**

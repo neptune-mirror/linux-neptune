@@ -263,10 +263,10 @@ static enum link_training_result dpia_training_cr_non_transparent(struct dc_link
 	uint32_t retry_count = 0;
 	/* From DP spec, CR read interval is always 100us. */
 	uint32_t wait_time_microsec = TRAINING_AUX_RD_INTERVAL;
+	struct link_training_settings req_settings;
 	enum dc_lane_count lane_count = lt_settings->link_settings.lane_count;
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = { { {0} } };
 	union lane_align_status_updated dpcd_lane_status_updated = { {0} };
-	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = { { {0} } };
 	uint8_t set_cfg_data;
 	enum dpia_set_config_ts ts;
 
@@ -345,12 +345,11 @@ static enum link_training_result dpia_training_cr_non_transparent(struct dc_link
 		dp_wait_for_training_aux_rd_interval(link, wait_time_microsec);
 
 		/* Read status and adjustment requests from DPCD. */
-		status = dp_get_lane_status_and_lane_adjust(
-				link,
+		status = dp_get_lane_status_and_drive_settings(link,
 				lt_settings,
 				dpcd_lane_status,
 				&dpcd_lane_status_updated,
-				dpcd_lane_adjust,
+				&req_settings,
 				hop);
 		if (status != DC_OK) {
 			result = LINK_TRAINING_ABORT;
@@ -372,18 +371,16 @@ static enum link_training_result dpia_training_cr_non_transparent(struct dc_link
 		 * Note: settings are the same for all lanes,
 		 * so comparing first lane is sufficient.
 		 */
-		if ((lt_settings->dpcd_lane_settings[0].bits.VOLTAGE_SWING_SET ==
-				dpcd_lane_adjust[0].bits.VOLTAGE_SWING_LANE)
-				&& (lt_settings->dpcd_lane_settings[0].bits.PRE_EMPHASIS_SET ==
-						dpcd_lane_adjust[0].bits.PRE_EMPHASIS_LANE))
+		if (lt_settings->lane_settings[0].VOLTAGE_SWING ==
+			req_settings.lane_settings[0].VOLTAGE_SWING &&
+			lt_settings->lane_settings[0].PRE_EMPHASIS ==
+			req_settings.lane_settings[0].PRE_EMPHASIS)
 			retries_cr++;
 		else
 			retries_cr = 0;
 
 		/* Update VS/PE. */
-		dp_decide_lane_settings(lt_settings, dpcd_lane_adjust,
-				lt_settings->lane_settings,
-				lt_settings->dpcd_lane_settings);
+		dp_update_drive_settings(lt_settings, req_settings);
 		retry_count++;
 	}
 
@@ -419,10 +416,10 @@ static enum link_training_result dpia_training_cr_transparent(struct dc_link *li
 	uint32_t retries_cr = 0; /* Number of consecutive attempts with same VS or PE. */
 	uint32_t retry_count = 0;
 	uint32_t wait_time_microsec = lt_settings->cr_pattern_time;
+	struct link_training_settings req_settings;
 	enum dc_lane_count lane_count = lt_settings->link_settings.lane_count;
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = { { {0} } };
 	union lane_align_status_updated dpcd_lane_status_updated = { {0} };
-	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = { { {0} } };
 
 	/* Cap of LINK_TRAINING_MAX_CR_RETRY attempts at clock recovery.
 	 * Fix inherited from perform_clock_recovery_sequence() -
@@ -448,12 +445,11 @@ static enum link_training_result dpia_training_cr_transparent(struct dc_link *li
 		dp_wait_for_training_aux_rd_interval(link, wait_time_microsec);
 
 		/* Read status and adjustment requests from DPCD. */
-		status = dp_get_lane_status_and_lane_adjust(
-				link,
+		status = dp_get_lane_status_and_drive_settings(link,
 				lt_settings,
 				dpcd_lane_status,
 				&dpcd_lane_status_updated,
-				dpcd_lane_adjust,
+				&req_settings,
 				DPRX);
 		if (status != DC_OK) {
 			result = LINK_TRAINING_ABORT;
@@ -475,17 +471,16 @@ static enum link_training_result dpia_training_cr_transparent(struct dc_link *li
 		 * Note: settings are the same for all lanes,
 		 * so comparing first lane is sufficient.
 		 */
-		if ((lt_settings->dpcd_lane_settings[0].bits.VOLTAGE_SWING_SET ==
-				dpcd_lane_adjust[0].bits.VOLTAGE_SWING_LANE)
-				&& (lt_settings->dpcd_lane_settings[0].bits.PRE_EMPHASIS_SET ==
-						dpcd_lane_adjust[0].bits.PRE_EMPHASIS_LANE))
+		if (lt_settings->lane_settings[0].VOLTAGE_SWING ==
+			req_settings.lane_settings[0].VOLTAGE_SWING &&
+			lt_settings->lane_settings[0].PRE_EMPHASIS ==
+			req_settings.lane_settings[0].PRE_EMPHASIS)
 			retries_cr++;
 		else
 			retries_cr = 0;
 
 		/* Update VS/PE. */
-		dp_decide_lane_settings(lt_settings, dpcd_lane_adjust,
-				lt_settings->hw_lane_settings, lt_settings->dpcd_lane_settings);
+		dp_update_drive_settings(lt_settings, req_settings);
 		retry_count++;
 	}
 
@@ -571,10 +566,10 @@ static enum link_training_result dpia_training_eq_non_transparent(struct dc_link
 	enum dc_status status;
 	enum dc_dp_training_pattern tr_pattern;
 	uint32_t wait_time_microsec;
+	struct link_training_settings req_settings;
 	enum dc_lane_count lane_count = lt_settings->link_settings.lane_count;
 	union lane_align_status_updated dpcd_lane_status_updated = { {0} };
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = { { {0} } };
-	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = { { {0} } };
 	uint8_t set_cfg_data;
 	enum dpia_set_config_ts ts;
 
@@ -644,12 +639,11 @@ static enum link_training_result dpia_training_eq_non_transparent(struct dc_link
 		dp_wait_for_training_aux_rd_interval(link, wait_time_microsec);
 
 		/* Read status and adjustment requests from DPCD. */
-		status = dp_get_lane_status_and_lane_adjust(
-				link,
+		status = dp_get_lane_status_and_drive_settings(link,
 				lt_settings,
 				dpcd_lane_status,
 				&dpcd_lane_status_updated,
-				dpcd_lane_adjust,
+				&req_settings,
 				hop);
 		if (status != DC_OK) {
 			result = LINK_TRAINING_ABORT;
@@ -670,8 +664,7 @@ static enum link_training_result dpia_training_eq_non_transparent(struct dc_link
 		}
 
 		/* Update VS/PE. */
-		dp_decide_lane_settings(lt_settings, dpcd_lane_adjust,
-				lt_settings->hw_lane_settings, lt_settings->dpcd_lane_settings);
+		dp_update_drive_settings(lt_settings, req_settings);
 	}
 
 	/* Abort link training if equalization failed due to HPD unplug. */
@@ -708,10 +701,10 @@ static enum link_training_result dpia_training_eq_transparent(struct dc_link *li
 	enum dc_status status;
 	enum dc_dp_training_pattern tr_pattern = lt_settings->pattern_for_eq;
 	uint32_t wait_time_microsec;
+	struct link_training_settings req_settings;
 	enum dc_lane_count lane_count = lt_settings->link_settings.lane_count;
 	union lane_align_status_updated dpcd_lane_status_updated = { {0} };
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = { { {0} } };
-	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = { { {0} } };
 
 	wait_time_microsec = dpia_get_eq_aux_rd_interval(link, lt_settings, DPRX);
 
@@ -727,12 +720,11 @@ static enum link_training_result dpia_training_eq_transparent(struct dc_link *li
 		dp_wait_for_training_aux_rd_interval(link, wait_time_microsec);
 
 		/* Read status and adjustment requests from DPCD. */
-		status = dp_get_lane_status_and_lane_adjust(
-				link,
+		status = dp_get_lane_status_and_drive_settings(link,
 				lt_settings,
 				dpcd_lane_status,
 				&dpcd_lane_status_updated,
-				dpcd_lane_adjust,
+				&req_settings,
 				DPRX);
 		if (status != DC_OK) {
 			result = LINK_TRAINING_ABORT;
@@ -753,8 +745,7 @@ static enum link_training_result dpia_training_eq_transparent(struct dc_link *li
 		}
 
 		/* Update VS/PE. */
-		dp_decide_lane_settings(lt_settings, dpcd_lane_adjust,
-				lt_settings->hw_lane_settings, lt_settings->dpcd_lane_settings);
+		dp_update_drive_settings(lt_settings, req_settings);
 	}
 
 	/* Abort link training if equalization failed due to HPD unplug. */
