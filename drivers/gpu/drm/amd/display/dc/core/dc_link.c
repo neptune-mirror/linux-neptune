@@ -2916,8 +2916,8 @@ bool dc_link_set_backlight_level(const struct dc_link *link,
 	return true;
 }
 
-bool dc_link_set_psr_allow_active(struct dc_link *link, const bool *allow_active,
-		bool wait, bool force_static, const unsigned int *power_opts)
+bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active,
+		bool wait, bool force_static)
 {
 	struct dc  *dc = link->ctx->dc;
 	struct dmcu *dmcu = dc->res_pool->dmcu;
@@ -2930,33 +2930,20 @@ bool dc_link_set_psr_allow_active(struct dc_link *link, const bool *allow_active
 	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
 		return false;
 
-	/* Set power optimization flag */
-	if (power_opts && link->psr_settings.psr_power_opt != *power_opts) {
-		link->psr_settings.psr_power_opt = *power_opts;
-
-		if (psr != NULL && link->psr_settings.psr_feature_enabled && psr->funcs->psr_set_power_opt)
-			psr->funcs->psr_set_power_opt(psr, link->psr_settings.psr_power_opt);
-	}
-
-	/* Enable or Disable PSR */
-	if (allow_active && link->psr_settings.psr_allow_active != *allow_active) {
-		link->psr_settings.psr_allow_active = *allow_active;
-
+	link->psr_settings.psr_allow_active = allow_active;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-		if (!link->psr_settings.psr_allow_active)
-			dc_z10_restore(dc);
+	if (!allow_active)
+		dc_z10_restore(dc);
 #endif
 
-		if (psr != NULL && link->psr_settings.psr_feature_enabled) {
-			if (force_static && psr->funcs->psr_force_static)
-				psr->funcs->psr_force_static(psr, panel_inst);
-			psr->funcs->psr_enable(psr, link->psr_settings.psr_allow_active, wait, panel_inst);
-		} else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) &&
-			link->psr_settings.psr_feature_enabled)
-			dmcu->funcs->set_psr_enable(dmcu, link->psr_settings.psr_allow_active, wait);
-		else
-			return false;
-	}
+	if (psr != NULL && link->psr_settings.psr_feature_enabled) {
+		if (force_static && psr->funcs->psr_force_static)
+			psr->funcs->psr_force_static(psr, panel_inst);
+		psr->funcs->psr_enable(psr, allow_active, wait, panel_inst);
+	} else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_settings.psr_feature_enabled)
+		dmcu->funcs->set_psr_enable(dmcu, allow_active, wait);
+	else
+		return false;
 
 	return true;
 }
@@ -3245,9 +3232,6 @@ static struct fixed31_32 get_pbn_from_timing(struct pipe_ctx *pipe_ctx)
 static void update_mst_stream_alloc_table(
 	struct dc_link *link,
 	struct stream_encoder *stream_enc,
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	struct hpo_dp_stream_encoder *hpo_dp_stream_enc, // TODO: Rename stream_enc to dio_stream_enc?
-#endif
 	const struct dp_mst_stream_allocation_table *proposed_table)
 {
 	struct link_mst_stream_allocation work_table[MAX_CONTROLLER_NUM] = { 0 };
@@ -3283,9 +3267,6 @@ static void update_mst_stream_alloc_table(
 			work_table[i].slot_count =
 				proposed_table->stream_allocations[i].slot_count;
 			work_table[i].stream_enc = stream_enc;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-			work_table[i].hpo_dp_stream_enc = hpo_dp_stream_enc;
-#endif
 		}
 	}
 
@@ -3408,10 +3389,6 @@ enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 	struct dc_link *link = stream->link;
 	struct link_encoder *link_encoder = NULL;
 	struct stream_encoder *stream_encoder = pipe_ctx->stream_res.stream_enc;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	struct hpo_dp_link_encoder *hpo_dp_link_encoder = link->hpo_dp_link_enc;
-	struct hpo_dp_stream_encoder *hpo_dp_stream_encoder = pipe_ctx->stream_res.hpo_dp_stream_enc;
-#endif
 	struct dp_mst_stream_allocation_table proposed_table = {0};
 	struct fixed31_32 avg_time_slots_per_mtp;
 	struct fixed31_32 pbn;
@@ -3439,14 +3416,7 @@ enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		&proposed_table,
 		true)) {
 		update_mst_stream_alloc_table(
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-					link,
-					pipe_ctx->stream_res.stream_enc,
-					pipe_ctx->stream_res.hpo_dp_stream_enc,
-					&proposed_table);
-#else
 					link, pipe_ctx->stream_res.stream_enc, &proposed_table);
-#endif
 	}
 	else
 		DC_LOG_WARNING("Failed to update"
@@ -3460,20 +3430,6 @@ enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-		DC_LOG_MST("stream_enc[%d]: %p      "
-		"stream[%d].hpo_dp_stream_enc: %p      "
-		"stream[%d].vcp_id: %d      "
-		"stream[%d].slot_count: %d\n",
-		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
-		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
-		i,
-		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
-		i,
-		link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-#else
 		DC_LOG_MST("stream_enc[%d]: %p      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
@@ -3483,33 +3439,14 @@ enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-#endif
 	}
 
 	ASSERT(proposed_table.stream_count > 0);
 
 	/* program DP source TX for payload */
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	switch (dp_get_link_encoding_format(&link->cur_link_settings)) {
-	case DP_8b_10b_ENCODING:
-		link_encoder->funcs->update_mst_stream_allocation_table(
-			link_encoder,
-			&link->mst_stream_alloc_table);
-		break;
-	case DP_128b_132b_ENCODING:
-		hpo_dp_link_encoder->funcs->update_stream_allocation_table(
-				hpo_dp_link_encoder,
-				&link->mst_stream_alloc_table);
-		break;
-	case DP_UNKNOWN_ENCODING:
-		DC_LOG_ERROR("Failure: unknown encoding format\n");
-		return DC_ERROR_UNEXPECTED;
-	}
-#else
 	link_encoder->funcs->update_mst_stream_allocation_table(
 		link_encoder,
 		&link->mst_stream_alloc_table);
-#endif
 
 	/* send down message */
 	ret = dm_helpers_dp_mst_poll_for_allocation_change_trigger(
@@ -3532,191 +3469,13 @@ enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 	pbn = get_pbn_from_timing(pipe_ctx);
 	avg_time_slots_per_mtp = dc_fixpt_div(pbn, pbn_per_slot);
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	switch (dp_get_link_encoding_format(&link->cur_link_settings)) {
-	case DP_8b_10b_ENCODING:
-		stream_encoder->funcs->set_throttled_vcp_size(
-			stream_encoder,
-			avg_time_slots_per_mtp);
-		break;
-	case DP_128b_132b_ENCODING:
-		hpo_dp_link_encoder->funcs->set_throttled_vcp_size(
-				hpo_dp_link_encoder,
-				hpo_dp_stream_encoder->inst,
-				avg_time_slots_per_mtp);
-		break;
-	case DP_UNKNOWN_ENCODING:
-		DC_LOG_ERROR("Failure: unknown encoding format\n");
-		return DC_ERROR_UNEXPECTED;
-	}
-#else
 	stream_encoder->funcs->set_throttled_vcp_size(
 		stream_encoder,
 		avg_time_slots_per_mtp);
-#endif
 
 	return DC_OK;
 
 }
-
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-enum dc_status dc_link_reduce_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t bw_in_kbps)
-{
-	struct dc_stream_state *stream = pipe_ctx->stream;
-	struct dc_link *link = stream->link;
-	struct fixed31_32 avg_time_slots_per_mtp;
-	struct fixed31_32 pbn;
-	struct fixed31_32 pbn_per_slot;
-	struct link_encoder *link_encoder = link->link_enc;
-	struct stream_encoder *stream_encoder = pipe_ctx->stream_res.stream_enc;
-	struct dp_mst_stream_allocation_table proposed_table = {0};
-	uint8_t i;
-	enum act_return_status ret;
-	DC_LOGGER_INIT(link->ctx->logger);
-
-	/* decrease throttled vcp size */
-	pbn_per_slot = get_pbn_per_slot(stream);
-	pbn = get_pbn_from_bw_in_kbps(bw_in_kbps);
-	avg_time_slots_per_mtp = dc_fixpt_div(pbn, pbn_per_slot);
-
-	stream_encoder->funcs->set_throttled_vcp_size(
-				stream_encoder,
-				avg_time_slots_per_mtp);
-
-	/* send ALLOCATE_PAYLOAD sideband message with updated pbn */
-	dm_helpers_dp_mst_send_payload_allocation(
-			stream->ctx,
-			stream,
-			true);
-
-	/* notify immediate branch device table update */
-	if (dm_helpers_dp_mst_write_payload_allocation_table(
-			stream->ctx,
-			stream,
-			&proposed_table,
-			true)) {
-		/* update mst stream allocation table software state */
-		update_mst_stream_alloc_table(
-				link,
-				pipe_ctx->stream_res.stream_enc,
-				pipe_ctx->stream_res.hpo_dp_stream_enc,
-				&proposed_table);
-	} else {
-		DC_LOG_WARNING("Failed to update"
-				"MST allocation table for"
-				"pipe idx:%d\n",
-				pipe_ctx->pipe_idx);
-	}
-
-	DC_LOG_MST("%s  "
-			"stream_count: %d: \n ",
-			__func__,
-			link->mst_stream_alloc_table.stream_count);
-
-	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		DC_LOG_MST("stream_enc[%d]: %p      "
-				"stream[%d].vcp_id: %d      "
-				"stream[%d].slot_count: %d\n",
-				i,
-				(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
-				i,
-				link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
-				i,
-				link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-	}
-
-	ASSERT(proposed_table.stream_count > 0);
-
-	/* update mst stream allocation table hardware state */
-	link_encoder->funcs->update_mst_stream_allocation_table(
-			link_encoder,
-			&link->mst_stream_alloc_table);
-
-	/* poll for immediate branch device ACT handled */
-	ret = dm_helpers_dp_mst_poll_for_allocation_change_trigger(
-			stream->ctx,
-			stream);
-
-	return DC_OK;
-}
-
-enum dc_status dc_link_increase_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t bw_in_kbps)
-{
-	struct dc_stream_state *stream = pipe_ctx->stream;
-	struct dc_link *link = stream->link;
-	struct fixed31_32 avg_time_slots_per_mtp;
-	struct fixed31_32 pbn;
-	struct fixed31_32 pbn_per_slot;
-	struct link_encoder *link_encoder = link->link_enc;
-	struct stream_encoder *stream_encoder = pipe_ctx->stream_res.stream_enc;
-	struct dp_mst_stream_allocation_table proposed_table = {0};
-	uint8_t i;
-	enum act_return_status ret;
-	DC_LOGGER_INIT(link->ctx->logger);
-
-	/* notify immediate branch device table update */
-	if (dm_helpers_dp_mst_write_payload_allocation_table(
-				stream->ctx,
-				stream,
-				&proposed_table,
-				true)) {
-		/* update mst stream allocation table software state */
-		update_mst_stream_alloc_table(
-				link,
-				pipe_ctx->stream_res.stream_enc,
-				pipe_ctx->stream_res.hpo_dp_stream_enc,
-				&proposed_table);
-	}
-
-	DC_LOG_MST("%s  "
-			"stream_count: %d: \n ",
-			__func__,
-			link->mst_stream_alloc_table.stream_count);
-
-	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		DC_LOG_MST("stream_enc[%d]: %p      "
-				"stream[%d].vcp_id: %d      "
-				"stream[%d].slot_count: %d\n",
-				i,
-				(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
-				i,
-				link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
-				i,
-				link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-	}
-
-	ASSERT(proposed_table.stream_count > 0);
-
-	/* update mst stream allocation table hardware state */
-	link_encoder->funcs->update_mst_stream_allocation_table(
-			link_encoder,
-			&link->mst_stream_alloc_table);
-
-	/* poll for immediate branch device ACT handled */
-	ret = dm_helpers_dp_mst_poll_for_allocation_change_trigger(
-			stream->ctx,
-			stream);
-
-	if (ret != ACT_LINK_LOST) {
-		/* send ALLOCATE_PAYLOAD sideband message with updated pbn */
-		dm_helpers_dp_mst_send_payload_allocation(
-				stream->ctx,
-				stream,
-				true);
-	}
-
-	/* increase throttled vcp size */
-	pbn = get_pbn_from_bw_in_kbps(bw_in_kbps);
-	pbn_per_slot = get_pbn_per_slot(stream);
-	avg_time_slots_per_mtp = dc_fixpt_div(pbn, pbn_per_slot);
-
-	stream_encoder->funcs->set_throttled_vcp_size(
-				stream_encoder,
-				avg_time_slots_per_mtp);
-
-	return DC_OK;
-}
-#endif
 
 static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 {
@@ -3724,10 +3483,6 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 	struct dc_link *link = stream->link;
 	struct link_encoder *link_encoder = NULL;
 	struct stream_encoder *stream_encoder = pipe_ctx->stream_res.stream_enc;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	struct hpo_dp_link_encoder *hpo_dp_link_encoder = link->hpo_dp_link_enc;
-	struct hpo_dp_stream_encoder *hpo_dp_stream_encoder = pipe_ctx->stream_res.hpo_dp_stream_enc;
-#endif
 	struct dp_mst_stream_allocation_table proposed_table = {0};
 	struct fixed31_32 avg_time_slots_per_mtp = dc_fixpt_from_int(0);
 	int i;
@@ -3749,28 +3504,9 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 	 */
 
 	/* slot X.Y */
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	switch (dp_get_link_encoding_format(&link->cur_link_settings)) {
-	case DP_8b_10b_ENCODING:
-		stream_encoder->funcs->set_throttled_vcp_size(
-			stream_encoder,
-			avg_time_slots_per_mtp);
-		break;
-	case DP_128b_132b_ENCODING:
-		hpo_dp_link_encoder->funcs->set_throttled_vcp_size(
-				hpo_dp_link_encoder,
-				hpo_dp_stream_encoder->inst,
-				avg_time_slots_per_mtp);
-		break;
-	case DP_UNKNOWN_ENCODING:
-		DC_LOG_ERROR("Failure: unknown encoding format\n");
-		return DC_ERROR_UNEXPECTED;
-	}
-#else
 	stream_encoder->funcs->set_throttled_vcp_size(
 		stream_encoder,
 		avg_time_slots_per_mtp);
-#endif
 
 	/* TODO: which component is responsible for remove payload table? */
 	if (mst_mode) {
@@ -3780,16 +3516,8 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 				&proposed_table,
 				false)) {
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-			update_mst_stream_alloc_table(
-						link,
-						pipe_ctx->stream_res.stream_enc,
-						pipe_ctx->stream_res.hpo_dp_stream_enc,
-						&proposed_table);
-#else
 			update_mst_stream_alloc_table(
 				link, pipe_ctx->stream_res.stream_enc, &proposed_table);
-#endif
 		}
 		else {
 				DC_LOG_WARNING("Failed to update"
@@ -3805,20 +3533,6 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-		DC_LOG_MST("stream_enc[%d]: %p      "
-		"stream[%d].hpo_dp_stream_enc: %p      "
-		"stream[%d].vcp_id: %d      "
-		"stream[%d].slot_count: %d\n",
-		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
-		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
-		i,
-		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
-		i,
-		link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-#else
 		DC_LOG_MST("stream_enc[%d]: %p      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
@@ -3828,30 +3542,11 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].slot_count);
-#endif
 	}
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	switch (dp_get_link_encoding_format(&link->cur_link_settings)) {
-	case DP_8b_10b_ENCODING:
-		link_encoder->funcs->update_mst_stream_allocation_table(
-			link_encoder,
-			&link->mst_stream_alloc_table);
-		break;
-	case DP_128b_132b_ENCODING:
-		hpo_dp_link_encoder->funcs->update_stream_allocation_table(
-				hpo_dp_link_encoder,
-				&link->mst_stream_alloc_table);
-		break;
-	case DP_UNKNOWN_ENCODING:
-		DC_LOG_ERROR("Failure: unknown encoding format\n");
-		return DC_ERROR_UNEXPECTED;
-	}
-#else
 	link_encoder->funcs->update_mst_stream_allocation_table(
 		link_encoder,
 		&link->mst_stream_alloc_table);
-#endif
 
 	if (mst_mode) {
 		dm_helpers_dp_mst_poll_for_allocation_change_trigger(
@@ -3874,9 +3569,6 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 	struct cp_psp *cp_psp = &pipe_ctx->stream->ctx->cp_psp;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	struct link_encoder *link_enc = NULL;
-	struct dc_state *state = pipe_ctx->stream->ctx->dc->current_state;
-	struct link_enc_assignment link_enc_assign;
-	int i;
 #endif
 
 	if (cp_psp && cp_psp->funcs.update_stream_config) {
@@ -3890,57 +3582,9 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 		config.dig_be = pipe_ctx->stream->link->link_enc_hw_inst;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 		config.stream_enc_idx = pipe_ctx->stream_res.stream_enc->id - ENGINE_ID_DIGA;
-		
-		if (pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_PHY ||
-				pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA) {
+		if (pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_PHY) {
 			link_enc = pipe_ctx->stream->link->link_enc;
-			config.dio_output_type = pipe_ctx->stream->link->ep_type;
-			config.dio_output_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
-			// Initialize PHY ID with ABCDE - 01234 mapping except when it is B0
 			config.phy_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
-
-			//look up the link_enc_assignment for the current pipe_ctx
-			for (i = 0; i < state->stream_count; i++) {
-				if (pipe_ctx->stream == state->streams[i]) {
-					link_enc_assign = state->res_ctx.link_enc_cfg_ctx.link_enc_assignments[i];
-				}
-			}
-
-			if (pipe_ctx->stream->ctx->dc->enable_c20_dtm_b0)
-				config.dig_be = link_enc_assign.eng_id;
-
-			// Add RegKey to guard B0 implementation
-			if (pipe_ctx->stream->ctx->dc->enable_c20_dtm_b0 && link_enc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0) {
-				if (pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA) {
-					link_enc = pipe_ctx->stream->link->link_enc;
-
-					// enum ID 1-4 maps to DPIA PHY ID 0-3
-					config.phy_idx = link_enc_assign.ep_id.link_id.enum_id - ENUM_ID_1;
-				} else {  // for non DPIA mode over B0, ABCDE maps to 01564
-
-					switch (link_enc->transmitter) {
-					case TRANSMITTER_UNIPHY_A:
-						config.phy_idx = 0;
-						break;
-					case TRANSMITTER_UNIPHY_B:
-						config.phy_idx = 1;
-						break;
-					case TRANSMITTER_UNIPHY_C:
-						config.phy_idx = 5;
-						break;
-					case TRANSMITTER_UNIPHY_D:
-						config.phy_idx = 6;
-						break;
-					case TRANSMITTER_UNIPHY_E:
-						config.phy_idx = 4;
-						break;
-					default:
-						config.phy_idx = 0;
-						break;
-					}
-
-				}
-			}
 		} else if (pipe_ctx->stream->link->dc->res_pool->funcs->link_encs_assign) {
 			link_enc = link_enc_cfg_get_link_enc_used_by_stream(
 					pipe_ctx->stream->ctx->dc,

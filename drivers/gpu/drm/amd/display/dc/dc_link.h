@@ -85,7 +85,6 @@ struct psr_settings {
 	 */
 	bool psr_frame_capture_indication_req;
 	unsigned int psr_sdp_transmit_line_num_deadline;
-	unsigned int psr_power_opt;
 };
 
 /*
@@ -268,8 +267,8 @@ int dc_link_get_backlight_level(const struct dc_link *dc_link);
 
 int dc_link_get_target_backlight_pwm(const struct dc_link *link);
 
-bool dc_link_set_psr_allow_active(struct dc_link *dc_link, const bool *enable,
-		bool wait, bool force_static, const unsigned int *power_opts);
+bool dc_link_set_psr_allow_active(struct dc_link *dc_link, bool enable,
+		bool wait, bool force_static);
 
 bool dc_link_get_psr_state(const struct dc_link *dc_link, enum dc_psr_state *state);
 
@@ -296,10 +295,6 @@ enum dc_detect_reason {
 bool dc_link_detect(struct dc_link *dc_link, enum dc_detect_reason reason);
 bool dc_link_get_hpd_state(struct dc_link *dc_link);
 enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx);
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-enum dc_status dc_link_reduce_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t req_pbn);
-enum dc_status dc_link_increase_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t req_pbn);
-#endif
 
 /* Notify DC about DP RX Interrupt (aka Short Pulse Interrupt).
  * Return:
@@ -429,7 +424,4 @@ uint32_t dc_bandwidth_in_kbps_from_timing(
 bool dc_link_is_fec_supported(const struct dc_link *link);
 bool dc_link_should_enable_fec(const struct dc_link *link);
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-enum dp_link_encoding dc_link_dp_mst_decide_link_encoding_format(const struct dc_link *link);
-#endif
 #endif /* DC_LINK_H_ */

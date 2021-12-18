@@ -211,12 +211,12 @@ struct dc_dcc_setting {
 	unsigned int max_uncompressed_blk_size;
 	bool independent_64b_blks;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-	//These bitfields to be used starting with DCN
+	//These bitfields to be used starting with DCN 3.0
 	struct {
-		uint32_t dcc_256_64_64 : 1;//available in ASICs before DCN (the worst compression case)
-		uint32_t dcc_128_128_uncontrained : 1;  //available in ASICs before DCN
-		uint32_t dcc_256_128_128 : 1;		//available starting with DCN
-		uint32_t dcc_256_256_unconstrained : 1;  //available in ASICs before DCN (the best compression case)
+		uint32_t dcc_256_64_64 : 1;//available in ASICs before DCN 3.0 (the worst compression case)
+		uint32_t dcc_128_128_uncontrained : 1;  //available in ASICs before DCN 3.0
+		uint32_t dcc_256_128_128 : 1;		//available starting with DCN 3.0
+		uint32_t dcc_256_256_unconstrained : 1;  //available in ASICs before DCN 3.0 (the best compression case)
 	} dcc_controls;
 #endif
 };
@@ -340,12 +340,6 @@ enum visual_confirm {
 	VISUAL_CONFIRM_MPCTREE = 4,
 	VISUAL_CONFIRM_PSR = 5,
 	VISUAL_CONFIRM_SWIZZLE = 9,
-};
-
-enum dc_psr_power_opts {
-	psr_power_opt_invalid = 0x0,
-	psr_power_opt_smu_opt_static_screen = 0x1,
-	psr_power_opt_z10_static_screen = 0x10,
 };
 
 enum dcc_option {
@@ -730,9 +724,6 @@ struct dc {
 	bool wm_optimized_required;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	bool idle_optimizations_allowed;
-#endif
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	bool enable_c20_dtm_b0;
 #endif
 
 	/* Require to maintain clocks and bandwidth for UEFI enabled HW */

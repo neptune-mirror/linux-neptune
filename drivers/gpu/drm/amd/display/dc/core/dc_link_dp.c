@@ -3523,8 +3523,6 @@ static bool handle_hpd_irq_psr_sink(struct dc_link *link)
 		if (psr_error_status.bits.LINK_CRC_ERROR ||
 				psr_error_status.bits.RFB_STORAGE_ERROR ||
 				psr_error_status.bits.VSC_SDP_ERROR) {
-			bool allow_active;
-
 			/* Acknowledge and clear error bits */
 			dm_helpers_dp_write_dpcd(
 				link->ctx,
@@ -3534,10 +3532,8 @@ static bool handle_hpd_irq_psr_sink(struct dc_link *link)
 				sizeof(psr_error_status.raw));
 
 			/* PSR error, disable and re-enable PSR */
-			allow_active = false;
-			dc_link_set_psr_allow_active(link, &allow_active, true, false, NULL);
-			allow_active = true;
-			dc_link_set_psr_allow_active(link, &allow_active, true, false, NULL);
+			dc_link_set_psr_allow_active(link, false, true, false);
+			dc_link_set_psr_allow_active(link, true, true, false);
 
 			return true;
 		} else if (psr_sink_psr_status.bits.SINK_SELF_REFRESH_STATUS ==
@@ -5997,25 +5993,6 @@ enum dp_link_encoding dp_get_link_encoding_format(const struct dc_link_settings 
 }
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-enum dp_link_encoding dc_link_dp_mst_decide_link_encoding_format(const struct dc_link *link)
-{
-	struct dc_link_settings link_settings = {0};
-
-	if (!dc_is_dp_signal(link->connector_signal))
-		return DP_UNKNOWN_ENCODING;
-
-	if (link->preferred_link_setting.lane_count !=
-			LANE_COUNT_UNKNOWN &&
-			link->preferred_link_setting.link_rate !=
-					LINK_RATE_UNKNOWN) {
-		link_settings = link->preferred_link_setting;
-	} else {
-		decide_mst_link_settings(link, &link_settings);
-	}
-
-	return dp_get_link_encoding_format(&link_settings);
-}
-
 // TODO - DP2.0 Link: Fix get_lane_status to handle LTTPR offset (SST and MST)
 static void get_lane_status(
 	struct dc_link *link,

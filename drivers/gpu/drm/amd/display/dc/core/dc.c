@@ -2354,11 +2354,6 @@ static enum surface_update_type check_update_surfaces_for_stream(
 		if (stream_update->dsc_config)
 			su_flags->bits.dsc_changed = 1;
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-		if (stream_update->mst_bw_update)
-			su_flags->bits.mst_bw = 1;
-#endif
-
 		if (su_flags->raw != 0)
 			overall_type = UPDATE_TYPE_FULL;
 
@@ -2735,15 +2730,6 @@ static void commit_planes_do_stream_update(struct dc *dc,
 
 			if (stream_update->dsc_config)
 				dp_update_dsc_config(pipe_ctx);
-
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-			if (stream_update->mst_bw_update) {
-				if (stream_update->mst_bw_update->is_increase)
-					dc_link_increase_mst_payload(pipe_ctx, stream_update->mst_bw_update->mst_stream_bw);
-				else
-					dc_link_reduce_mst_payload(pipe_ctx, stream_update->mst_bw_update->mst_stream_bw);
-			}
-#endif
 
 			if (stream_update->pending_test_pattern) {
 				dc_link_dp_set_test_pattern(stream->link,
@@ -3493,7 +3479,6 @@ void dc_get_clock(struct dc *dc, enum dc_clock_type clock_type, struct dc_clock_
 bool dc_set_psr_allow_active(struct dc *dc, bool enable)
 {
 	int i;
-	bool allow_active;
 
 	for (i = 0; i < dc->current_state->stream_count ; i++) {
 		struct dc_link *link;
@@ -3505,12 +3490,10 @@ bool dc_set_psr_allow_active(struct dc *dc, bool enable)
 
 		if (link->psr_settings.psr_feature_enabled) {
 			if (enable && !link->psr_settings.psr_allow_active) {
-				allow_active = true;
-				if (!dc_link_set_psr_allow_active(link, &allow_active, false, false, NULL))
+				if (!dc_link_set_psr_allow_active(link, true, false, false))
 					return false;
 			} else if (!enable && link->psr_settings.psr_allow_active) {
-				allow_active = false;
-				if (!dc_link_set_psr_allow_active(link, &allow_active, true, false, NULL))
+				if (!dc_link_set_psr_allow_active(link, false, true, false))
 					return false;
 			}
 		}
