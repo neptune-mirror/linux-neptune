@@ -77,9 +77,9 @@
 #define PGFSM_POWER_ON 0
 #define PGFSM_POWER_OFF 2
 
-static void print_microsec(struct dc_context *dc_ctx,
-			   struct dc_log_buffer_ctx *log_ctx,
-			   uint32_t ref_cycle)
+void print_microsec(struct dc_context *dc_ctx,
+	struct dc_log_buffer_ctx *log_ctx,
+	uint32_t ref_cycle)
 {
 	const uint32_t ref_clk_mhz = dc_ctx->dc->res_pool->ref_clocks.dchub_ref_clock_inKhz / 1000;
 	static const unsigned int frac = 1000;
@@ -132,8 +132,7 @@ static void log_mpc_crc(struct dc *dc,
 		REG_READ(DPP_TOP0_DPP_CRC_VAL_B_A), REG_READ(DPP_TOP0_DPP_CRC_VAL_R_G));
 }
 
-static void dcn10_log_hubbub_state(struct dc *dc,
-				   struct dc_log_buffer_ctx *log_ctx)
+void dcn10_log_hubbub_state(struct dc *dc, struct dc_log_buffer_ctx *log_ctx)
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	struct dcn_hubbub_wm wm;
@@ -1640,7 +1639,7 @@ void dcn10_reset_hw_ctx_wrap(
 
 			dcn10_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
 			if (hws->funcs.enable_stream_gating)
-				hws->funcs.enable_stream_gating(dc, pipe_ctx_old);
+				hws->funcs.enable_stream_gating(dc, pipe_ctx);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
@@ -1973,9 +1972,10 @@ static bool wait_for_reset_trigger_to_occur(
 	return rc;
 }
 
-static uint64_t reduceSizeAndFraction(uint64_t *numerator,
-				      uint64_t *denominator,
-				      bool checkUint32Bounary)
+uint64_t reduceSizeAndFraction(
+	uint64_t *numerator,
+	uint64_t *denominator,
+	bool checkUint32Bounary)
 {
 	int i;
 	bool ret = checkUint32Bounary == false;
@@ -2023,7 +2023,7 @@ static uint64_t reduceSizeAndFraction(uint64_t *numerator,
 	return ret;
 }
 
-static bool is_low_refresh_rate(struct pipe_ctx *pipe)
+bool is_low_refresh_rate(struct pipe_ctx *pipe)
 {
 	uint32_t master_pipe_refresh_rate =
 		pipe->stream->timing.pix_clk_100hz * 100 /
@@ -2032,8 +2032,7 @@ static bool is_low_refresh_rate(struct pipe_ctx *pipe)
 	return master_pipe_refresh_rate <= 30;
 }
 
-static uint8_t get_clock_divider(struct pipe_ctx *pipe,
-				 bool account_low_refresh_rate)
+uint8_t get_clock_divider(struct pipe_ctx *pipe, bool account_low_refresh_rate)
 {
 	uint32_t clock_divider = 1;
 	uint32_t numpipes = 1;
@@ -2053,8 +2052,10 @@ static uint8_t get_clock_divider(struct pipe_ctx *pipe,
 	return clock_divider;
 }
 
-static int dcn10_align_pixel_clocks(struct dc *dc, int group_size,
-				    struct pipe_ctx *grouped_pipes[])
+int dcn10_align_pixel_clocks(
+	struct dc *dc,
+	int group_size,
+	struct pipe_ctx *grouped_pipes[])
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	int i, master = -1, embedded = -1;
@@ -2343,7 +2344,7 @@ static void mmhub_read_vm_context0_settings(struct dcn10_hubp *hubp1,
 }
 
 
-static void dcn10_program_pte_vm(struct dce_hwseq *hws, struct hubp *hubp)
+void dcn10_program_pte_vm(struct dce_hwseq *hws, struct hubp *hubp)
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
 	struct vm_system_aperture_param apt = {0};
@@ -2625,7 +2626,7 @@ static void dcn10_update_dchubp_dpp(
 		/* new calculated dispclk, dppclk are stored in
 		 * context->bw_ctx.bw.dcn.clk.dispclk_khz / dppclk_khz. current
 		 * dispclk, dppclk are from dc->clk_mgr->clks.dispclk_khz.
-		 * dcn10_validate_bandwidth compute new dispclk, dppclk.
+		 * dcn_validate_bandwidth compute new dispclk, dppclk.
 		 * dispclk will put in use after optimize_bandwidth when
 		 * ramp_up_dispclk_with_dpp is called.
 		 * there are two places for dppclk be put in use. One location
@@ -2639,7 +2640,7 @@ static void dcn10_update_dchubp_dpp(
 		 * for example, eDP + external dp,  change resolution of DP from
 		 * 1920x1080x144hz to 1280x960x60hz.
 		 * before change: dispclk = 337889 dppclk = 337889
-		 * change mode, dcn10_validate_bandwidth calculate
+		 * change mode, dcn_validate_bandwidth calculate
 		 *                dispclk = 143122 dppclk = 143122
 		 * update_dchubp_dpp be executed before dispclk be updated,
 		 * dispclk = 337889, but dppclk use new value dispclk /2 =

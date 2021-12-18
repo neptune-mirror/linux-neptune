@@ -186,18 +186,12 @@ struct dc_link {
 	/* Drive settings read from integrated info table */
 	struct dc_lane_settings bios_forced_drive_settings;
 
-	/* Vendor specific LTTPR workaround variables */
-	uint8_t vendor_specific_lttpr_link_rate_wa;
-	bool apply_vendor_specific_lttpr_link_rate_wa;
-
 	/* MST record stream using this link */
 	struct link_flags {
 		bool dp_keep_receiver_powered;
 		bool dp_skip_DID2;
 		bool dp_skip_reset_segment;
 		bool dp_mot_reset_segment;
-		/* Some USB4 docks do not handle turning off MST DSC once it has been enabled. */
-		bool dpia_mst_dsc_always_on;
 	} wa_flags;
 	struct link_mst_stream_allocation_table mst_stream_alloc_table;
 
@@ -231,8 +225,6 @@ static inline void get_edp_links(const struct dc *dc,
 	*edp_num = 0;
 	for (i = 0; i < dc->link_count; i++) {
 		// report any eDP links, even unconnected DDI's
-		if (!dc->links[i])
-			continue;
 		if (dc->links[i]->connector_signal == SIGNAL_TYPE_EDP) {
 			edp_links[*edp_num] = dc->links[i];
 			if (++(*edp_num) == MAX_NUM_EDP)
@@ -451,7 +443,6 @@ bool dc_link_is_fec_supported(const struct dc_link *link);
 bool dc_link_should_enable_fec(const struct dc_link *link);
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-uint32_t dc_link_bw_kbps_from_raw_frl_link_rate_data(uint8_t bw);
 enum dp_link_encoding dc_link_dp_mst_decide_link_encoding_format(const struct dc_link *link);
 #endif
 #endif /* DC_LINK_H_ */

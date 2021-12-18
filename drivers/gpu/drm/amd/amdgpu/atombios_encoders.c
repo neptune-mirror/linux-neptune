@@ -37,10 +37,6 @@
 #include <linux/backlight.h>
 #include "bif/bif_4_1_d.h"
 
-
-/* Maximum backlight level. */
-#define AMDGPU_ATOM_MAX_BL_LEVEL 0xFF
-
 u8
 amdgpu_atombios_encoder_get_backlight_level_from_reg(struct amdgpu_device *adev)
 {
@@ -131,8 +127,8 @@ static u8 amdgpu_atombios_encoder_backlight_level(struct backlight_device *bd)
 	/* Convert brightness to hardware level */
 	if (bd->props.brightness < 0)
 		level = 0;
-	else if (bd->props.brightness > AMDGPU_ATOM_MAX_BL_LEVEL)
-		level = AMDGPU_ATOM_MAX_BL_LEVEL;
+	else if (bd->props.brightness > AMDGPU_MAX_BL_LEVEL)
+		level = AMDGPU_MAX_BL_LEVEL;
 	else
 		level = bd->props.brightness;
 
@@ -197,7 +193,7 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 	}
 
 	memset(&props, 0, sizeof(props));
-	props.max_brightness = AMDGPU_ATOM_MAX_BL_LEVEL;
+	props.max_brightness = AMDGPU_MAX_BL_LEVEL;
 	props.type = BACKLIGHT_RAW;
 	snprintf(bl_name, sizeof(bl_name),
 		 "amdgpu_bl%d", dev->primary->index);
@@ -473,7 +469,7 @@ int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
 			if (amdgpu_connector->use_digital &&
 			    (amdgpu_connector->audio == AMDGPU_AUDIO_ENABLE))
 				return ATOM_ENCODER_MODE_HDMI;
-			else if (connector->display_info.is_hdmi &&
+			else if (drm_detect_hdmi_monitor(amdgpu_connector_edid(connector)) &&
 				 (amdgpu_connector->audio == AMDGPU_AUDIO_AUTO))
 				return ATOM_ENCODER_MODE_HDMI;
 			else if (amdgpu_connector->use_digital)
@@ -492,7 +488,7 @@ int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
 		if (amdgpu_audio != 0) {
 			if (amdgpu_connector->audio == AMDGPU_AUDIO_ENABLE)
 				return ATOM_ENCODER_MODE_HDMI;
-			else if (connector->display_info.is_hdmi &&
+			else if (drm_detect_hdmi_monitor(amdgpu_connector_edid(connector)) &&
 				 (amdgpu_connector->audio == AMDGPU_AUDIO_AUTO))
 				return ATOM_ENCODER_MODE_HDMI;
 			else
@@ -510,7 +506,7 @@ int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
 		} else if (amdgpu_audio != 0) {
 			if (amdgpu_connector->audio == AMDGPU_AUDIO_ENABLE)
 				return ATOM_ENCODER_MODE_HDMI;
-			else if (connector->display_info.is_hdmi &&
+			else if (drm_detect_hdmi_monitor(amdgpu_connector_edid(connector)) &&
 				 (amdgpu_connector->audio == AMDGPU_AUDIO_AUTO))
 				return ATOM_ENCODER_MODE_HDMI;
 			else

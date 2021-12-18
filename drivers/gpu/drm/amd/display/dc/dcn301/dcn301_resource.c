@@ -656,7 +656,7 @@ static const struct dc_plane_cap plane_cap = {
 			.argb8888 = true,
 			.nv12 = true,
 			.fp16 = true,
-			.p010 = true,
+			.p010 = false,
 			.ayuv = false,
 	},
 
@@ -686,7 +686,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 	.disable_clock_gate = true,
 	.disable_pplib_clock_request = true,
 	.disable_pplib_wm_range = true,
-	.pipe_split_policy = MPC_SPLIT_AVOID,
+	.pipe_split_policy = MPC_SPLIT_AVOID_MULT_DISP,
 	.force_single_disp_pipe_split = false,
 	.disable_dcc = DCC_ENABLE,
 	.vsr_support = true,
@@ -717,13 +717,15 @@ static const struct dc_debug_options debug_defaults_diags = {
 	.use_max_lb = false,
 };
 
-static void dcn301_dpp_destroy(struct dpp **dpp)
+void dcn301_dpp_destroy(struct dpp **dpp)
 {
 	kfree(TO_DCN20_DPP(*dpp));
 	*dpp = NULL;
 }
 
-static struct dpp *dcn301_dpp_create(struct dc_context *ctx, uint32_t inst)
+struct dpp *dcn301_dpp_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct dcn3_dpp *dpp =
 		kzalloc(sizeof(struct dcn3_dpp), GFP_KERNEL);
@@ -739,8 +741,8 @@ static struct dpp *dcn301_dpp_create(struct dc_context *ctx, uint32_t inst)
 	kfree(dpp);
 	return NULL;
 }
-static struct output_pixel_processor *dcn301_opp_create(struct dc_context *ctx,
-							uint32_t inst)
+struct output_pixel_processor *dcn301_opp_create(
+	struct dc_context *ctx, uint32_t inst)
 {
 	struct dcn20_opp *opp =
 		kzalloc(sizeof(struct dcn20_opp), GFP_KERNEL);
@@ -755,7 +757,9 @@ static struct output_pixel_processor *dcn301_opp_create(struct dc_context *ctx,
 	return &opp->base;
 }
 
-static struct dce_aux *dcn301_aux_engine_create(struct dc_context *ctx, uint32_t inst)
+struct dce_aux *dcn301_aux_engine_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct aux_engine_dce110 *aux_engine =
 		kzalloc(sizeof(struct aux_engine_dce110), GFP_KERNEL);
@@ -789,7 +793,9 @@ static const struct dce_i2c_mask i2c_masks = {
 		I2C_COMMON_MASK_SH_LIST_DCN2(_MASK)
 };
 
-static struct dce_i2c_hw *dcn301_i2c_hw_create(struct dc_context *ctx, uint32_t inst)
+struct dce_i2c_hw *dcn301_i2c_hw_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct dce_i2c_hw *dce_i2c_hw =
 		kzalloc(sizeof(struct dce_i2c_hw), GFP_KERNEL);
@@ -823,7 +829,7 @@ static struct mpc *dcn301_mpc_create(
 	return &mpc30->base;
 }
 
-static struct hubbub *dcn301_hubbub_create(struct dc_context *ctx)
+struct hubbub *dcn301_hubbub_create(struct dc_context *ctx)
 {
 	int i;
 
@@ -854,8 +860,9 @@ static struct hubbub *dcn301_hubbub_create(struct dc_context *ctx)
 	return &hubbub3->base;
 }
 
-static struct timing_generator *dcn301_timing_generator_create(
-	struct dc_context *ctx, uint32_t instance)
+struct timing_generator *dcn301_timing_generator_create(
+		struct dc_context *ctx,
+		uint32_t instance)
 {
 	struct optc *tgn10 =
 		kzalloc(sizeof(struct optc), GFP_KERNEL);
@@ -887,7 +894,7 @@ static const struct encoder_feature_support link_enc_feature = {
 		.flags.bits.IS_TPS4_CAPABLE = true
 };
 
-static struct link_encoder *dcn301_link_encoder_create(
+struct link_encoder *dcn301_link_encoder_create(
 	const struct encoder_init_data *enc_init_data)
 {
 	struct dcn20_link_encoder *enc20 =
@@ -908,7 +915,7 @@ static struct link_encoder *dcn301_link_encoder_create(
 	return &enc20->enc10.base;
 }
 
-static struct panel_cntl *dcn301_panel_cntl_create(const struct panel_cntl_init_data *init_data)
+struct panel_cntl *dcn301_panel_cntl_create(const struct panel_cntl_init_data *init_data)
 {
 	struct dcn301_panel_cntl *panel_cntl =
 		kzalloc(sizeof(struct dcn301_panel_cntl), GFP_KERNEL);
@@ -990,8 +997,9 @@ static struct afmt *dcn301_afmt_create(
 	return &afmt3->base;
 }
 
-static struct stream_encoder *dcn301_stream_encoder_create(enum engine_id eng_id,
-							   struct dc_context *ctx)
+struct stream_encoder *dcn301_stream_encoder_create(
+	enum engine_id eng_id,
+	struct dc_context *ctx)
 {
 	struct dcn10_stream_encoder *enc1;
 	struct vpg *vpg;
@@ -1025,7 +1033,8 @@ static struct stream_encoder *dcn301_stream_encoder_create(enum engine_id eng_id
 	return &enc1->base;
 }
 
-static struct dce_hwseq *dcn301_hwseq_create(struct dc_context *ctx)
+struct dce_hwseq *dcn301_hwseq_create(
+	struct dc_context *ctx)
 {
 	struct dce_hwseq *hws = kzalloc(sizeof(struct dce_hwseq), GFP_KERNEL);
 
@@ -1173,7 +1182,9 @@ static void dcn301_destruct(struct dcn301_resource_pool *pool)
 		dcn_dccg_destroy(&pool->base.dccg);
 }
 
-static struct hubp *dcn301_hubp_create(struct dc_context *ctx, uint32_t inst)
+struct hubp *dcn301_hubp_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct dcn20_hubp *hubp2 =
 		kzalloc(sizeof(struct dcn20_hubp), GFP_KERNEL);
@@ -1190,7 +1201,7 @@ static struct hubp *dcn301_hubp_create(struct dc_context *ctx, uint32_t inst)
 	return NULL;
 }
 
-static bool dcn301_dwbc_create(struct dc_context *ctx, struct resource_pool *pool)
+bool dcn301_dwbc_create(struct dc_context *ctx, struct resource_pool *pool)
 {
 	int i;
 	uint32_t pipe_count = pool->res_cap->num_dwb;
@@ -1215,7 +1226,7 @@ static bool dcn301_dwbc_create(struct dc_context *ctx, struct resource_pool *poo
 	return true;
 }
 
-static bool dcn301_mmhubbub_create(struct dc_context *ctx, struct resource_pool *pool)
+bool dcn301_mmhubbub_create(struct dc_context *ctx, struct resource_pool *pool)
 {
 	int i;
 	uint32_t pipe_count = pool->res_cap->num_dwb;

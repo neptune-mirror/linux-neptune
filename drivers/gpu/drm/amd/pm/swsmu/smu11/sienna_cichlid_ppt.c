@@ -80,9 +80,6 @@
 		(*member) = (smu->smu_table.driver_pptable + offsetof(PPTable_t, field));\
 } while(0)
 
-/* STB FIFO depth is in 64bit units */
-#define SIENNA_CICHLID_STB_DEPTH_UNIT_BYTES 8
-
 static int get_table_size(struct smu_context *smu)
 {
 	if (smu->adev->ip_versions[MP1_HWIP][0] == IP_VERSION(11, 0, 13))
@@ -653,8 +650,6 @@ static int sienna_cichlid_allocate_dpm_context(struct smu_context *smu)
 	return 0;
 }
 
-static void sienna_cichlid_stb_init(struct smu_context *smu);
-
 static int sienna_cichlid_init_smc_tables(struct smu_context *smu)
 {
 	int ret = 0;
@@ -666,8 +661,6 @@ static int sienna_cichlid_init_smc_tables(struct smu_context *smu)
 	ret = sienna_cichlid_allocate_dpm_context(smu);
 	if (ret)
 		return ret;
-
-	sienna_cichlid_stb_init(smu);
 
 	return smu_v11_0_init_smc_tables(smu);
 }
@@ -1349,6 +1342,14 @@ static int sienna_cichlid_get_power_profile_mode(struct smu_context *smu, char *
 		&(activity_monitor_external.DpmActivityMonitorCoeffInt);
 	uint32_t i, size = 0;
 	int16_t workload_type = 0;
+	static const char *profile_name[] = {
+					"BOOTUP_DEFAULT",
+					"3D_FULL_SCREEN",
+					"POWER_SAVING",
+					"VIDEO",
+					"VR",
+					"COMPUTE",
+					"CUSTOM"};
 	static const char *title[] = {
 			"PROFILE_INDEX(NAME)",
 			"CLOCK_TYPE(NAME)",
@@ -1387,7 +1388,7 @@ static int sienna_cichlid_get_power_profile_mode(struct smu_context *smu, char *
 		}
 
 		size += sysfs_emit_at(buf, size, "%2d %14s%s:\n",
-			i, amdgpu_pp_profile_name[i], (i == smu->power_profile_mode) ? "*" : " ");
+			i, profile_name[i], (i == smu->power_profile_mode) ? "*" : " ");
 
 		size += sysfs_emit_at(buf, size, "%19s %d(%13s) %7d %7d %7d %7d %7d %7d %7d %7d %7d\n",
 			" ",
@@ -2134,13 +2135,7 @@ static int sienna_cichlid_od_edit_dpm_table(struct smu_context *smu,
 
 static int sienna_cichlid_run_btc(struct smu_context *smu)
 {
-	int res;
-
-	res = smu_cmn_send_smc_msg(smu, SMU_MSG_RunDcBtc, NULL);
-	if (res)
-		dev_err(smu->adev->dev, "RunDcBtc failed!\n");
-
-	return res;
+	return smu_cmn_send_smc_msg(smu, SMU_MSG_RunDcBtc, NULL);
 }
 
 static int sienna_cichlid_baco_enter(struct smu_context *smu)
@@ -3624,16 +3619,6 @@ static ssize_t sienna_cichlid_get_gpu_metrics(struct smu_context *smu,
 	gpu_metrics->energy_accumulator =
 		use_metrics_v2 ? metrics_v2->EnergyAccumulator : metrics->EnergyAccumulator;
 
-	if (metrics->CurrGfxVoltageOffset)
-		gpu_metrics->voltage_gfx =
-			(155000 - 625 * metrics->CurrGfxVoltageOffset) / 100;
-	if (metrics->CurrMemVidOffset)
-		gpu_metrics->voltage_mem =
-			(155000 - 625 * metrics->CurrMemVidOffset) / 100;
-	if (metrics->CurrSocVoltageOffset)
-		gpu_metrics->voltage_soc =
-			(155000 - 625 * metrics->CurrSocVoltageOffset) / 100;
-
 	average_gfx_activity = use_metrics_v2 ? metrics_v2->AverageGfxActivity : metrics->AverageGfxActivity;
 	if (average_gfx_activity <= SMU_11_0_7_GFX_BUSY_THRESHOLD)
 		gpu_metrics->average_gfxclk_frequency =
@@ -3808,53 +3793,6 @@ static int sienna_cichlid_set_mp1_state(struct smu_context *smu,
 	return ret;
 }
 
-static void sienna_cichlid_stb_init(struct smu_context *smu)
-{
-	struct amdgpu_device *adev = smu->adev;
-	uint32_t reg;
-
-	reg = RREG32_PCIE(MP1_Public | smnMP1_PMI_3_START);
-	smu->stb_context.enabled = REG_GET_FIELD(reg, MP1_PMI_3_START, ENABLE);
-
-	/* STB is disabled */
-	if (!smu->stb_context.enabled)
-		return;
-
-	spin_lock_init(&smu->stb_context.lock);
-
-	/* STB buffer size in bytes as function of FIFO depth */
-	reg = RREG32_PCIE(MP1_Public | smnMP1_PMI_3_FIFO);
-	smu->stb_context.stb_buf_size = 1 << REG_GET_FIELD(reg, MP1_PMI_3_FIFO, DEPTH);
-	smu->stb_context.stb_buf_size *=  SIENNA_CICHLID_STB_DEPTH_UNIT_BYTES;
-
-	dev_info(smu->adev->dev, "STB initialized to %d entries",
-		 smu->stb_context.stb_buf_size / SIENNA_CICHLID_STB_DEPTH_UNIT_BYTES);
-
-}
-
-int sienna_cichlid_stb_get_data_direct(struct smu_context *smu,
-				       void *buf,
-				       uint32_t size)
-{
-	uint32_t *p = buf;
-	struct amdgpu_device *adev = smu->adev;
-
-	/* No need to disable interrupts for now as we don't lock it yet from ISR */
-	spin_lock(&smu->stb_context.lock);
-
-	/*
-	 * Read the STB FIFO in units of 32bit since this is the accessor window
-	 * (register width) we have.
-	 */
-	buf = ((char *) buf) + size;
-	while ((void *)p < buf)
-		*p++ = cpu_to_le32(RREG32_PCIE(MP1_Public | smnMP1_PMI_3));
-
-	spin_unlock(&smu->stb_context.lock);
-
-	return 0;
-}
-
 static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.get_allowed_feature_mask = sienna_cichlid_get_allowed_feature_mask,
 	.set_default_dpm_table = sienna_cichlid_set_default_dpm_table,
@@ -3944,7 +3882,6 @@ static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.interrupt_work = smu_v11_0_interrupt_work,
 	.gpo_control = sienna_cichlid_gpo_control,
 	.set_mp1_state = sienna_cichlid_set_mp1_state,
-	.stb_collect_info = sienna_cichlid_stb_get_data_direct,
 };
 
 void sienna_cichlid_set_ppt_funcs(struct smu_context *smu)

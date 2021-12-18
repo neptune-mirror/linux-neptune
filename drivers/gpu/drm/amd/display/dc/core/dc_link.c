@@ -758,18 +758,6 @@ static bool detect_dp(struct dc_link *link,
 			dal_ddc_service_set_transaction_type(link->ddc,
 							     sink_caps->transaction_type);
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-			/* Apply work around for tunneled MST on certain USB4 docks. Always use DSC if dock
-			 * reports DSC support.
-			 */
-			if (link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA &&
-					link->type == dc_connection_mst_branch &&
-					link->dpcd_caps.branch_dev_id == DP_BRANCH_DEVICE_ID_90CC24 &&
-					link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT &&
-					!link->dc->debug.dpia_debug.bits.disable_mst_dsc_work_around)
-				link->wa_flags.dpia_mst_dsc_always_on = true;
-#endif
-
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
 			/* In case of fallback to SST when topology discovery below fails
 			 * HDCP caps will be querried again later by the upper layer (caller
@@ -1214,10 +1202,6 @@ static bool dc_link_detect_helper(struct dc_link *link,
 		if (link->type == dc_connection_mst_branch) {
 			LINK_INFO("link=%d, mst branch is now Disconnected\n",
 				  link->link_index);
-
-			/* Disable work around which keeps DSC on for tunneled MST on certain USB4 docks. */
-			if (link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA)
-				link->wa_flags.dpia_mst_dsc_always_on = false;
 
 			dm_helpers_dp_mst_stop_top_mgr(link->ctx, link);
 
@@ -2766,23 +2750,8 @@ static bool dp_active_dongle_validate_timing(
 		return false;
 	}
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-	if (dongle_caps->dp_hdmi_frl_max_link_bw_in_kbps > 0) { // DP to HDMI FRL converter
-		struct dc_crtc_timing outputTiming = *timing;
-
-		if (timing->flags.DSC && !timing->dsc_cfg.is_frl)
-			/* DP input has DSC, HDMI FRL output doesn't have DSC, remove DSC from output timing */
-			outputTiming.flags.DSC = 0;
-		if (dc_bandwidth_in_kbps_from_timing(&outputTiming) > dongle_caps->dp_hdmi_frl_max_link_bw_in_kbps)
-			return false;
-	} else { // DP to HDMI TMDS converter
-		if (get_timing_pixel_clock_100hz(timing) > (dongle_caps->dp_hdmi_max_pixel_clk_in_khz * 10))
-			return false;
-	}
-#else
 	if (get_timing_pixel_clock_100hz(timing) > (dongle_caps->dp_hdmi_max_pixel_clk_in_khz * 10))
 		return false;
-#endif
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	}
@@ -3416,8 +3385,7 @@ static void dc_log_vcp_x_y(const struct dc_link *link, struct fixed31_32 avg_tim
 /*
  * Payload allocation/deallocation for SST introduced in DP2.0
  */
-static enum dc_status dc_link_update_sst_payload(struct pipe_ctx *pipe_ctx,
-						 bool allocate)
+enum dc_status dc_link_update_sst_payload(struct pipe_ctx *pipe_ctx, bool allocate)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->link;
@@ -4317,8 +4285,7 @@ void core_link_enable_stream(
 		/* eDP lit up by bios already, no need to enable again. */
 		if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP &&
 					apply_edp_fast_boot_optimization &&
-					!pipe_ctx->stream->timing.flags.DSC &&
-					!pipe_ctx->next_odm_pipe) {
+					!pipe_ctx->stream->timing.flags.DSC) {
 			pipe_ctx->stream->dpms_off = false;
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
 			update_psp_stream_config(pipe_ctx, false);

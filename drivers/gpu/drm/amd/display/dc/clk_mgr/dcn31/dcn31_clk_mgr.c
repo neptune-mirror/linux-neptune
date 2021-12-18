@@ -540,9 +540,10 @@ static unsigned int find_clk_for_voltage(
 	return clock;
 }
 
-static void dcn31_clk_mgr_helper_populate_bw_params(struct clk_mgr_internal *clk_mgr,
-						    struct integrated_info *bios_info,
-						    const DpmClocks_t *clock_table)
+void dcn31_clk_mgr_helper_populate_bw_params(
+		struct clk_mgr_internal *clk_mgr,
+		struct integrated_info *bios_info,
+		const DpmClocks_t *clock_table)
 {
 	int i, j;
 	struct clk_bw_params *bw_params = clk_mgr->base.bw_params;
