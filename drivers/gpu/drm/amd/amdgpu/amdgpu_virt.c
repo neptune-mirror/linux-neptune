@@ -283,15 +283,17 @@ static int amdgpu_virt_init_ras_err_handler_data(struct amdgpu_device *adev)
 
 	*data = kmalloc(sizeof(struct amdgpu_virt_ras_err_handler_data), GFP_KERNEL);
 	if (!*data)
-		goto data_failure;
+		return -ENOMEM;
 
 	bps = kmalloc_array(align_space, sizeof((*data)->bps), GFP_KERNEL);
-	if (!bps)
-		goto bps_failure;
-
 	bps_bo = kmalloc_array(align_space, sizeof((*data)->bps_bo), GFP_KERNEL);
-	if (!bps_bo)
-		goto bps_bo_failure;
+
+	if (!bps || !bps_bo) {
+		kfree(bps);
+		kfree(bps_bo);
+		kfree(*data);
+		return -ENOMEM;
+	}
 
 	(*data)->bps = bps;
 	(*data)->bps_bo = bps_bo;
@@ -301,13 +303,6 @@ static int amdgpu_virt_init_ras_err_handler_data(struct amdgpu_device *adev)
 	virt->ras_init_done = true;
 
 	return 0;
-
-bps_bo_failure:
-	kfree(bps);
-bps_failure:
-	kfree(*data);
-data_failure:
-	return -ENOMEM;
 }
 
 static void amdgpu_virt_ras_release_bp(struct amdgpu_device *adev)
