@@ -55,7 +55,7 @@ static void hubp201_program_surface_config(
 	hubp1_program_pixel_format(hubp, format);
 }
 
-static void hubp201_program_deadline(
+void hubp201_program_deadline(
 		struct hubp *hubp,
 		struct _vcs_dpi_display_dlg_regs_st *dlg_attr,
 		struct _vcs_dpi_display_ttu_regs_st *ttu_attr)
@@ -63,8 +63,9 @@ static void hubp201_program_deadline(
 	hubp1_program_deadline(hubp, dlg_attr, ttu_attr);
 }
 
-static void hubp201_program_requestor(struct hubp *hubp,
-				      struct _vcs_dpi_display_rq_regs_st *rq_regs)
+void hubp201_program_requestor(
+		struct hubp *hubp,
+		struct _vcs_dpi_display_rq_regs_st *rq_regs)
 {
 	struct dcn201_hubp *hubp201 = TO_DCN201_HUBP(hubp);
 

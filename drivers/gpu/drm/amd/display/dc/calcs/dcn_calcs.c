@@ -739,9 +739,7 @@ static void hack_bounding_box(struct dcn_bw_internal_vars *v,
 		hack_force_pipe_split(v, context->streams[0]->timing.pix_clk_100hz);
 }
 
-static unsigned int get_highest_allowed_voltage_level(uint32_t chip_family,
-						      uint32_t hw_internal_rev,
-						      uint32_t pci_revision_id)
+unsigned int get_highest_allowed_voltage_level(uint32_t chip_family, uint32_t hw_internal_rev, uint32_t pci_revision_id)
 {
 	/* for low power RV2 variants, the highest voltage level we want is 0 */
 	if ((chip_family == FAMILY_RV) &&
@@ -765,7 +763,7 @@ static unsigned int get_highest_allowed_voltage_level(uint32_t chip_family,
 	return 4;
 }
 
-bool dcn10_validate_bandwidth(
+bool dcn_validate_bandwidth(
 		struct dc *dc,
 		struct dc_state *context,
 		bool fast_validate)

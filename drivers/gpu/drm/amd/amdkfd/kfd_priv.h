@@ -195,6 +195,7 @@ struct kfd_event_interrupt_class {
 };
 
 struct kfd_device_info {
+	const char *asic_name;
 	uint32_t gfx_target_version;
 	const struct kfd_event_interrupt_class *event_interrupt_class;
 	unsigned int max_pasid_bits;
@@ -207,11 +208,10 @@ struct kfd_device_info {
 	bool needs_iommu_device;
 	bool needs_pci_atomics;
 	uint32_t no_atomic_fw_version;
+	unsigned int num_sdma_engines;
+	unsigned int num_xgmi_sdma_engines;
 	unsigned int num_sdma_queues_per_engine;
 };
-
-unsigned int kfd_get_num_sdma_engines(struct kfd_dev *kdev);
-unsigned int kfd_get_num_xgmi_sdma_engines(struct kfd_dev *kdev);
 
 struct kfd_mem_obj {
 	uint32_t range_start;
@@ -230,7 +230,7 @@ struct kfd_vmid_info {
 struct kfd_dev {
 	struct amdgpu_device *adev;
 
-	struct kfd_device_info device_info;
+	const struct kfd_device_info *device_info;
 	struct pci_dev *pdev;
 	struct drm_device *ddev;
 
@@ -766,7 +766,7 @@ struct svm_range_list {
 	struct list_head		deferred_range_list;
 	spinlock_t			deferred_list_lock;
 	atomic_t			evicted_ranges;
-	atomic_t			drain_pagefaults;
+	bool				drain_pagefaults;
 	struct delayed_work		restore_work;
 	DECLARE_BITMAP(bitmap_supported, MAX_GPU_INSTANCE);
 	struct task_struct 		*faulting_task;

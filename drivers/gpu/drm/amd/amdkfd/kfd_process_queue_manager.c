@@ -135,8 +135,9 @@ void kfd_process_dequeue_from_all_devices(struct kfd_process *p)
 int pqm_init(struct process_queue_manager *pqm, struct kfd_process *p)
 {
 	INIT_LIST_HEAD(&pqm->queues);
-	pqm->queue_slot_bitmap = bitmap_zalloc(KFD_MAX_NUM_OF_QUEUES_PER_PROCESS,
-					       GFP_KERNEL);
+	pqm->queue_slot_bitmap =
+			kzalloc(DIV_ROUND_UP(KFD_MAX_NUM_OF_QUEUES_PER_PROCESS,
+					BITS_PER_BYTE), GFP_KERNEL);
 	if (!pqm->queue_slot_bitmap)
 		return -ENOMEM;
 	pqm->process = p;
@@ -158,7 +159,7 @@ void pqm_uninit(struct process_queue_manager *pqm)
 		kfree(pqn);
 	}
 
-	bitmap_free(pqm->queue_slot_bitmap);
+	kfree(pqm->queue_slot_bitmap);
 	pqm->queue_slot_bitmap = NULL;
 }
 
@@ -219,7 +220,7 @@ int pqm_create_queue(struct process_queue_manager *pqm,
 	 * Hence we also check the type as well
 	 */
 	if ((pdd->qpd.is_debug) || (type == KFD_QUEUE_TYPE_DIQ))
-		max_queues = dev->device_info.max_no_of_hqd/2;
+		max_queues = dev->device_info->max_no_of_hqd/2;
 
 	if (pdd->qpd.queue_count >= max_queues)
 		return -ENOSPC;

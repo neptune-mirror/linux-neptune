@@ -82,16 +82,6 @@ static const struct hwmon_temp_label {
 	{PP_TEMP_MEM, "mem"},
 };
 
-const char * const amdgpu_pp_profile_name[] = {
-	"BOOTUP_DEFAULT",
-	"3D_FULL_SCREEN",
-	"POWER_SAVING",
-	"VIDEO",
-	"VR",
-	"COMPUTE",
-	"CUSTOM"
-};
-
 /**
  * DOC: power_dpm_state
  *
@@ -3769,7 +3759,5 @@ void amdgpu_debugfs_pm_init(struct amdgpu_device *adev)
 					 adev,
 					 &amdgpu_debugfs_pm_prv_buffer_fops,
 					 adev->pm.smu_prv_buffer_size);
-
-	amdgpu_smu_stb_debug_fs_init(adev);
 #endif
 }
