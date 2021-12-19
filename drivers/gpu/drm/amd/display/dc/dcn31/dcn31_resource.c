@@ -101,6 +101,8 @@
 #include "link_enc_cfg.h"
 
 #define DC_LOGGER_INIT(logger)
+#define fixed16_to_double(x) (((double) x) / ((double) (1 << 16)))
+#define fixed16_to_double_to_cpu(x) fixed16_to_double(le32_to_cpu(x))
 
 #define DCN3_1_DEFAULT_DET_SIZE 384
 
@@ -485,8 +487,7 @@ static const struct dcn31_apg_mask apg_mask = {
 	SE_DCN3_REG_LIST(id)\
 }
 
-/* Some encoders won't be initialized here - but they're logical, not physical. */
-static const struct dcn10_stream_enc_registers stream_enc_regs[ENGINE_ID_COUNT] = {
+static const struct dcn10_stream_enc_registers stream_enc_regs[] = {
 	stream_enc_regs(0),
 	stream_enc_regs(1),
 	stream_enc_regs(2),
@@ -861,8 +862,7 @@ static const struct dccg_mask dccg_mask = {
 	SR(D6VGA_CONTROL), \
 	SR(DC_IP_REQUEST_CNTL), \
 	SR(AZALIA_AUDIO_DTO), \
-	SR(AZALIA_CONTROLLER_CLOCK_GATING), \
-	SR(HPO_TOP_HW_CONTROL)
+	SR(AZALIA_CONTROLLER_CLOCK_GATING)
 
 static const struct dce_hwseq_registers hwseq_reg = {
 		HWSEQ_DCN31_REG_LIST()
@@ -899,9 +899,7 @@ static const struct dce_hwseq_registers hwseq_reg = {
 	HWS_SF(, DMU_MEM_PWR_CNTL, DMCU_ERAM_MEM_PWR_FORCE, mask_sh), \
 	HWS_SF(, ODM_MEM_PWR_CTRL3, ODM_MEM_UNASSIGNED_PWR_MODE, mask_sh), \
 	HWS_SF(, ODM_MEM_PWR_CTRL3, ODM_MEM_VBLANK_PWR_MODE, mask_sh), \
-	HWS_SF(, MMHUBBUB_MEM_PWR_CNTL, VGA_MEM_PWR_FORCE, mask_sh), \
-	HWS_SF(, DIO_MEM_PWR_CTRL, I2C_LIGHT_SLEEP_FORCE, mask_sh), \
-	HWS_SF(, HPO_TOP_HW_CONTROL, HPO_IO_EN, mask_sh)
+	HWS_SF(, MMHUBBUB_MEM_PWR_CNTL, VGA_MEM_PWR_FORCE, mask_sh)
 
 static const struct dce_hwseq_shift hwseq_shift = {
 		HWSEQ_DCN31_MASK_SH_LIST(__SHIFT)
@@ -969,7 +967,7 @@ static const struct dc_plane_cap plane_cap = {
 			.argb8888 = true,
 			.nv12 = true,
 			.fp16 = true,
-			.p010 = true,
+			.p010 = false,
 			.ayuv = false,
 	},
 
@@ -1024,7 +1022,6 @@ static const struct dc_debug_options debug_defaults_drv = {
 	},
 	.optimize_edp_link_rate = true,
 	.enable_sw_cntl_psr = true,
-	.apply_vendor_specific_lttpr_wa = true,
 };
 
 static const struct dc_debug_options debug_defaults_diags = {
@@ -1272,7 +1269,7 @@ static struct link_encoder *dcn31_link_enc_create_minimal(
 	return &enc20->enc10.base;
 }
 
-static struct panel_cntl *dcn31_panel_cntl_create(const struct panel_cntl_init_data *init_data)
+struct panel_cntl *dcn31_panel_cntl_create(const struct panel_cntl_init_data *init_data)
 {
 	struct dcn31_panel_cntl *panel_cntl =
 		kzalloc(sizeof(struct dcn31_panel_cntl), GFP_KERNEL);
@@ -1825,15 +1822,12 @@ static int dcn31_populate_dml_pipes_from_context(
 			context->bw_ctx.dml.ip.det_buffer_size_kbytes = 192;
 			pipes[0].pipe.src.unbounded_req_mode = true;
 		}
-	} else if (context->stream_count >= dc->debug.crb_alloc_policy_min_disp_count
-			&& dc->debug.crb_alloc_policy > DET_SIZE_DEFAULT) {
-		context->bw_ctx.dml.ip.det_buffer_size_kbytes = dc->debug.crb_alloc_policy * 64;
 	}
 
 	return pipe_cnt;
 }
 
-void dcn31_update_soc_for_wm_a(struct dc *dc, struct dc_state *context)
+static void dcn31_update_soc_for_wm_a(struct dc *dc, struct dc_state *context)
 {
 	if (dc->clk_mgr->bw_params->wm_table.entries[WM_A].valid) {
 		context->bw_ctx.dml.soc.dram_clock_change_latency_us = dc->clk_mgr->bw_params->wm_table.entries[WM_A].pstate_latency_us;
@@ -1977,7 +1971,7 @@ static void dcn31_calculate_wm_and_dlg_fp(
 	dcn20_calculate_dlg_params(dc, context, pipes, pipe_cnt, vlevel);
 }
 
-void dcn31_calculate_wm_and_dlg(
+static void dcn31_calculate_wm_and_dlg(
 		struct dc *dc, struct dc_state *context,
 		display_e2e_pipe_params_st *pipes,
 		int pipe_cnt,
@@ -2198,8 +2192,6 @@ static bool dcn31_resource_construct(
 	dc->caps.post_blend_color_processing = true;
 	dc->caps.force_dp_tps4_for_cp2520 = true;
 	dc->caps.dp_hpo = true;
-	dc->caps.hdmi_frl_pcon_support = true;
-	dc->caps.edp_dsc_support = true;
 	dc->caps.extended_aux_timeout_support = true;
 	dc->caps.dmcub_support = true;
 	dc->caps.is_apu = true;
@@ -2237,9 +2229,6 @@ static bool dcn31_resource_construct(
 	dc->caps.color.mpc.ogam_rom_caps.pq = 0;
 	dc->caps.color.mpc.ogam_rom_caps.hlg = 0;
 	dc->caps.color.mpc.ocsc = 1;
-
-	/* Use pipe context based otg sync logic */
-	dc->config.use_pipe_ctx_sync_logic = true;
 
 	/* read VBIOS LTTPR caps */
 	{
@@ -2463,8 +2452,6 @@ static bool dcn31_resource_construct(
 		dc->caps.planes[i] = plane_cap;
 
 	dc->cap_funcs = cap_funcs;
-
-	dc->dcn_ip->max_num_dpp = dcn3_1_ip.max_num_dpp;
 
 	DC_FP_END();
 

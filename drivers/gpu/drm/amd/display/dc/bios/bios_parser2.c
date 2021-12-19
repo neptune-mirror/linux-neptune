@@ -2321,8 +2321,6 @@ static enum bp_result get_integrated_info_v2_2(
 
 	info->ext_disp_conn_info.checksum =
 		info_v2_2->extdispconninfo.checksum;
-	info->ext_disp_conn_info.fixdpvoltageswing =
-		info_v2_2->extdispconninfo.fixdpvoltageswing;
 
 	info->edp1_info.edp_backlight_pwm_hz =
 	le16_to_cpu(info_v2_2->edp1_info.edp_backlight_pwm_hz);
@@ -2995,7 +2993,7 @@ static bool bios_parser2_construct(
 		&bp->object_info_tbl.revision);
 
 	if (bp->object_info_tbl.revision.major == 1
-		&& bp->object_info_tbl.revision.minor == 4) {
+		&& bp->object_info_tbl.revision.minor >= 4) {
 		struct display_object_info_table_v1_4 *tbl_v1_4;
 
 		tbl_v1_4 = GET_IMAGE(struct display_object_info_table_v1_4,
@@ -3004,10 +3002,8 @@ static bool bios_parser2_construct(
 			return false;
 
 		bp->object_info_tbl.v1_4 = tbl_v1_4;
-	} else {
-		ASSERT(0);
+	} else
 		return false;
-	}
 
 	dal_firmware_parser_init_cmd_tbl(bp);
 	dal_bios_parser_init_cmd_tbl_helper2(&bp->cmd_helper, dce_version);

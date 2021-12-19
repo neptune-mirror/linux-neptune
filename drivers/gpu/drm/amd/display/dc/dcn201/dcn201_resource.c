@@ -672,8 +672,9 @@ static struct output_pixel_processor *dcn201_opp_create(
 	return &opp->base;
 }
 
-static struct dce_aux *dcn201_aux_engine_create(struct dc_context *ctx,
-						uint32_t inst)
+struct dce_aux *dcn201_aux_engine_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct aux_engine_dce110 *aux_engine =
 		kzalloc(sizeof(struct aux_engine_dce110), GFP_ATOMIC);
@@ -705,8 +706,9 @@ static const struct dce_i2c_mask i2c_masks = {
 		I2C_COMMON_MASK_SH_LIST_DCN2(_MASK)
 };
 
-static struct dce_i2c_hw *dcn201_i2c_hw_create(struct dc_context *ctx,
-					       uint32_t inst)
+struct dce_i2c_hw *dcn201_i2c_hw_create(
+	struct dc_context *ctx,
+	uint32_t inst)
 {
 	struct dce_i2c_hw *dce_i2c_hw =
 		kzalloc(sizeof(struct dce_i2c_hw), GFP_ATOMIC);
@@ -787,7 +789,7 @@ static const struct encoder_feature_support link_enc_feature = {
 		.flags.bits.IS_TPS4_CAPABLE = true
 };
 
-static struct link_encoder *dcn201_link_encoder_create(
+struct link_encoder *dcn201_link_encoder_create(
 	const struct encoder_init_data *enc_init_data)
 {
 	struct dcn20_link_encoder *enc20 =
@@ -809,7 +811,7 @@ static struct link_encoder *dcn201_link_encoder_create(
 	return &enc10->base;
 }
 
-static struct clock_source *dcn201_clock_source_create(
+struct clock_source *dcn201_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
@@ -904,7 +906,7 @@ static const struct resource_create_funcs res_create_maximus_funcs = {
 	.create_hwseq = dcn201_hwseq_create,
 };
 
-static void dcn201_clock_source_destroy(struct clock_source **clk_src)
+void dcn201_clock_source_destroy(struct clock_source **clk_src)
 {
 	kfree(TO_DCE110_CLK_SRC(*clk_src));
 	*clk_src = NULL;

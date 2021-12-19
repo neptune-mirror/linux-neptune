@@ -66,7 +66,7 @@
 #define TO_CLK_MGR_DCN31(clk_mgr)\
 	container_of(clk_mgr, struct clk_mgr_dcn31, base)
 
-static int dcn31_get_active_display_cnt_wa(
+int dcn31_get_active_display_cnt_wa(
 		struct dc *dc,
 		struct dc_state *context)
 {
@@ -118,7 +118,7 @@ static void dcn31_disable_otg_wa(struct clk_mgr *clk_mgr_base, bool disable)
 	}
 }
 
-void dcn31_update_clocks(struct clk_mgr *clk_mgr_base,
+static void dcn31_update_clocks(struct clk_mgr *clk_mgr_base,
 			struct dc_state *context,
 			bool safe_to_lower)
 {
@@ -284,7 +284,7 @@ static void dcn31_enable_pme_wa(struct clk_mgr *clk_mgr_base)
 	dcn31_smu_enable_pme_wa(clk_mgr);
 }
 
-void dcn31_init_clocks(struct clk_mgr *clk_mgr)
+static void dcn31_init_clocks(struct clk_mgr *clk_mgr)
 {
 	memset(&(clk_mgr->clks), 0, sizeof(struct dc_clocks));
 	// Assumption is that boot state always supports pstate
@@ -294,7 +294,7 @@ void dcn31_init_clocks(struct clk_mgr *clk_mgr)
 	clk_mgr->clks.zstate_support = DCN_ZSTATE_SUPPORT_UNKNOWN;
 }
 
-bool dcn31_are_clock_states_equal(struct dc_clocks *a,
+static bool dcn31_are_clock_states_equal(struct dc_clocks *a,
 		struct dc_clocks *b)
 {
 	if (a->dispclk_khz != b->dispclk_khz)
@@ -523,26 +523,20 @@ static unsigned int find_clk_for_voltage(
 		unsigned int voltage)
 {
 	int i;
-	int max_voltage = 0;
-	int clock = 0;
 
 	for (i = 0; i < NUM_SOC_VOLTAGE_LEVELS; i++) {
-		if (clock_table->SocVoltage[i] == voltage) {
+		if (clock_table->SocVoltage[i] == voltage)
 			return clocks[i];
-		} else if (clock_table->SocVoltage[i] >= max_voltage &&
-				clock_table->SocVoltage[i] < voltage) {
-			max_voltage = clock_table->SocVoltage[i];
-			clock = clocks[i];
-		}
 	}
 
-	ASSERT(clock);
-	return clock;
+	ASSERT(0);
+	return 0;
 }
 
-static void dcn31_clk_mgr_helper_populate_bw_params(struct clk_mgr_internal *clk_mgr,
-						    struct integrated_info *bios_info,
-						    const DpmClocks_t *clock_table)
+void dcn31_clk_mgr_helper_populate_bw_params(
+		struct clk_mgr_internal *clk_mgr,
+		struct integrated_info *bios_info,
+		const DpmClocks_t *clock_table)
 {
 	int i, j;
 	struct clk_bw_params *bw_params = clk_mgr->base.bw_params;

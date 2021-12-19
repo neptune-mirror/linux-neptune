@@ -695,9 +695,6 @@ int amdgpu_ttm_tt_get_user_pages(struct amdgpu_bo *bo, struct page **pages)
 	r = amdgpu_hmm_range_get_pages(&bo->notifier, mm, pages, start,
 				       ttm->num_pages, &gtt->range, readonly,
 				       false, NULL);
-	if (r)
-		pr_debug("failed %d to get user pages 0x%lx\n", r, start);
-
 out_putmm:
 	mmput(mm);
 
@@ -918,6 +915,11 @@ static int amdgpu_ttm_backend_bind(struct ttm_device *bdev,
 		WARN(1, "nothing to bind %u pages for mreg %p back %p!\n",
 		     ttm->num_pages, bo_mem, ttm);
 	}
+
+	if (bo_mem->mem_type == AMDGPU_PL_GDS ||
+	    bo_mem->mem_type == AMDGPU_PL_GWS ||
+	    bo_mem->mem_type == AMDGPU_PL_OA)
+		return -EINVAL;
 
 	if (bo_mem->mem_type != TTM_PL_TT ||
 	    !amdgpu_gtt_mgr_has_gart_addr(bo_mem)) {

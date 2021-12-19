@@ -107,8 +107,6 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
 	 */
 	// Init fail safe of 2 frames static
 	unsigned int num_frames_static = 2;
-	unsigned int power_opt = 0;
-	bool psr_enable = true;
 
 	DRM_DEBUG_DRIVER("Enabling psr...\n");
 
@@ -135,9 +133,7 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
 					   &stream, 1,
 					   &params);
 
-	power_opt |= psr_power_opt_z10_static_screen;
-
-	return dc_link_set_psr_allow_active(link, &psr_enable, false, false, &power_opt);
+	return dc_link_set_psr_allow_active(link, true, false, false);
 }
 
 /*
@@ -148,12 +144,10 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
  */
 bool amdgpu_dm_psr_disable(struct dc_stream_state *stream)
 {
-	unsigned int power_opt = 0;
-	bool psr_enable = false;
 
 	DRM_DEBUG_DRIVER("Disabling psr...\n");
 
-	return dc_link_set_psr_allow_active(stream->link, &psr_enable, true, false, &power_opt);
+	return dc_link_set_psr_allow_active(stream->link, false, true, false);
 }
 
 /*

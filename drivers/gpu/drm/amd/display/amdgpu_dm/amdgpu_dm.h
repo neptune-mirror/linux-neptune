@@ -540,7 +540,6 @@ struct amdgpu_display_manager {
 	 * cached backlight values.
 	 */
 	u32 brightness[AMDGPU_DM_MAX_NUM_EDP];
-	bool brightness_set[AMDGPU_DM_MAX_NUM_EDP];
 };
 
 enum dsc_clock_force_state {
@@ -732,7 +731,4 @@ extern const struct drm_encoder_helper_funcs amdgpu_dm_encoder_helper_funcs;
 int amdgpu_dm_process_dmub_aux_transfer_sync(bool is_cmd_aux,
 					struct dc_context *ctx, unsigned int link_index,
 					void *payload, void *operation_result);
-
-bool check_seamless_boot_capability(struct amdgpu_device *adev);
-
 #endif /* __AMDGPU_DM_H__ */

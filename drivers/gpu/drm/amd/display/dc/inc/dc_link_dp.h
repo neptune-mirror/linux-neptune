@@ -121,12 +121,12 @@ enum dc_status dpcd_set_lane_settings(
 	const struct link_training_settings *link_training_setting,
 	uint32_t offset);
 /* Read training status and adjustment requests from DPCD. */
-enum dc_status dp_get_lane_status_and_lane_adjust(
+enum dc_status dp_get_lane_status_and_drive_settings(
 	struct dc_link *link,
 	const struct link_training_settings *link_training_setting,
-	union lane_status ln_status[LANE_COUNT_DP_MAX],
-	union lane_align_status_updated *ln_align,
-	union lane_adjust ln_adjust[LANE_COUNT_DP_MAX],
+	union lane_status *ln_status,
+	union lane_align_status_updated *ln_status_updated,
+	struct link_training_settings *req_settings,
 	uint32_t offset);
 
 void dp_wait_for_training_aux_rd_interval(
@@ -151,11 +151,9 @@ void dp_hw_to_dpcd_lane_settings(
 	const struct link_training_settings *lt_settings,
 	const struct dc_lane_settings hw_lane_settings[LANE_COUNT_DP_MAX],
 	union dpcd_training_lane dpcd_lane_settings[LANE_COUNT_DP_MAX]);
-void dp_decide_lane_settings(
-	const struct link_training_settings *lt_settings,
-	const union lane_adjust ln_adjust[LANE_COUNT_DP_MAX],
-	struct dc_lane_settings hw_lane_settings[LANE_COUNT_DP_MAX],
-	union dpcd_training_lane dpcd_lane_settings[LANE_COUNT_DP_MAX]);
+void dp_update_drive_settings(
+	struct link_training_settings *dest,
+	struct link_training_settings src);
 
 uint32_t dp_translate_training_aux_read_interval(uint32_t dpcd_aux_read_interval);
 
@@ -170,7 +168,6 @@ uint8_t dc_dp_initialize_scrambling_data_symbols(
 
 enum dc_status dp_set_fec_ready(struct dc_link *link, bool ready);
 void dp_set_fec_enable(struct dc_link *link, bool enable);
-struct link_encoder *dp_get_link_enc(struct dc_link *link);
 bool dp_set_dsc_enable(struct pipe_ctx *pipe_ctx, bool enable);
 bool dp_set_dsc_pps_sdp(struct pipe_ctx *pipe_ctx, bool enable, bool immediate_update);
 void dp_set_dsc_on_stream(struct pipe_ctx *pipe_ctx, bool enable);
@@ -218,5 +215,4 @@ bool is_dp_128b_132b_signal(struct pipe_ctx *pipe_ctx);
 void reset_dp_hpo_stream_encoders_for_link(struct dc_link *link);
 
 bool dp_retrieve_lttpr_cap(struct dc_link *link);
-void edp_panel_backlight_power_on(struct dc_link *link);
 #endif /* __DC_LINK_DP_H__ */

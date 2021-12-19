@@ -221,9 +221,9 @@ static bool create_links(
 		link = link_create(&link_init_params);
 
 		if (link) {
-			dc->links[dc->link_count] = link;
-			link->dc = dc;
-			++dc->link_count;
+				dc->links[dc->link_count] = link;
+				link->dc = dc;
+				++dc->link_count;
 		}
 	}
 
@@ -808,10 +808,6 @@ void dc_stream_set_static_screen_params(struct dc *dc,
 
 static void dc_destruct(struct dc *dc)
 {
-	// reset link encoder assignment table on destruct
-	if (dc->res_pool && dc->res_pool->funcs->link_encs_assign)
-		link_enc_cfg_init(dc, dc->current_state);
-
 	if (dc->current_state) {
 		dc_release_state(dc->current_state);
 		dc->current_state = NULL;
@@ -1020,6 +1016,8 @@ static bool dc_construct(struct dc *dc,
 		goto fail;
 	}
 
+	dc_resource_state_construct(dc, dc->current_state);
+
 	if (!create_links(dc, init_params->num_virtual_links))
 		goto fail;
 
@@ -1029,7 +1027,8 @@ static bool dc_construct(struct dc *dc,
 	if (!create_link_encoders(dc))
 		goto fail;
 
-	dc_resource_state_construct(dc, dc->current_state);
+	/* Initialise DIG link encoder resource tracking variables. */
+	link_enc_cfg_init(dc, dc->current_state);
 
 	return true;
 
@@ -1086,8 +1085,6 @@ static void disable_dangling_plane(struct dc *dc, struct dc_state *context)
 		struct dc_stream_state *old_stream =
 				dc->current_state->res_ctx.pipe_ctx[i].stream;
 		bool should_disable = true;
-		bool pipe_split_change =
-			context->res_ctx.pipe_ctx[i].top_pipe != dc->current_state->res_ctx.pipe_ctx[i].top_pipe;
 
 		for (j = 0; j < context->stream_count; j++) {
 			if (old_stream == context->streams[j]) {
@@ -1095,9 +1092,6 @@ static void disable_dangling_plane(struct dc *dc, struct dc_state *context)
 				break;
 			}
 		}
-		if (!should_disable && pipe_split_change)
-			should_disable = true;
-
 		if (should_disable && old_stream) {
 			dc_rem_all_planes_for_stream(dc, old_stream, dangling_context);
 			disable_all_writeback_pipes_for_stream(dc, old_stream, dangling_context);
@@ -1422,29 +1416,22 @@ static void program_timing_sync(
 				status->timing_sync_info.master = false;
 
 		}
+		/* remove any other unblanked pipes as they have already been synced */
+		for (j = j + 1; j < group_size; j++) {
+			bool is_blanked;
 
-		/* remove any other pipes that are already been synced */
-		if (dc->config.use_pipe_ctx_sync_logic) {
-			/* check pipe's syncd to decide which pipe to be removed */
-			for (j = 1; j < group_size; j++) {
-				if (pipe_set[j]->pipe_idx_syncd == pipe_set[0]->pipe_idx_syncd) {
-					group_size--;
-					pipe_set[j] = pipe_set[group_size];
-					j--;
-				} else
-					/* link slave pipe's syncd with master pipe */
-					pipe_set[j]->pipe_idx_syncd = pipe_set[0]->pipe_idx_syncd;
+			if (pipe_set[j]->stream_res.opp->funcs->dpg_is_blanked)
+				is_blanked =
+					pipe_set[j]->stream_res.opp->funcs->dpg_is_blanked(pipe_set[j]->stream_res.opp);
+			else
+				is_blanked =
+					pipe_set[j]->stream_res.tg->funcs->is_blanked(pipe_set[j]->stream_res.tg);
+			if (!is_blanked) {
+				group_size--;
+				pipe_set[j] = pipe_set[group_size];
+				j--;
 			}
-		} else {
-			/* remove any other pipes by checking valid plane */
-			for (j = j + 1; j < group_size; j++) {
-				if (pipe_set[j]->plane_state) {
-					group_size--;
-					pipe_set[j] = pipe_set[group_size];
-					j--;
-				}
- 			}
- 		}
+		}
 
 		if (group_size > 1) {
 			if (sync_type == TIMING_SYNCHRONIZABLE) {
@@ -1838,19 +1825,6 @@ bool dc_commit_state(struct dc *dc, struct dc_state *context)
 		dc_stream_log(dc, stream);
 	}
 
-	/*
-	 * Previous validation was perfomred with fast_validation = true and
-	 * the full DML state required for hardware programming was skipped.
-	 *
-	 * Re-validate here to calculate these parameters / watermarks.
-	 */
-	result = dc_validate_global_state(dc, context, false);
-	if (result != DC_OK) {
-		DC_LOG_ERROR("DC commit global validation failure: %s (%d)",
-			     dc_status_to_str(result), result);
-		return result;
-	}
-
 	result = dc_commit_state_no_check(dc, context);
 
 	return (result == DC_OK);
@@ -1913,7 +1887,6 @@ static bool is_flip_pending_in_pipes(struct dc *dc, struct dc_state *context)
 	return false;
 }
 
-#ifdef CONFIG_DRM_AMD_DC_DCN
 /* Perform updates here which need to be deferred until next vupdate
  *
  * i.e. blnd lut, 3dlut, and shaper lut bypass regs are double buffered
@@ -1923,16 +1896,15 @@ static bool is_flip_pending_in_pipes(struct dc *dc, struct dc_state *context)
  */
 static void process_deferred_updates(struct dc *dc)
 {
-	int i = 0;
+#ifdef CONFIG_DRM_AMD_DC_DCN
+	int i;
 
-	if (dc->debug.enable_mem_low_power.bits.cm) {
-		ASSERT(dc->dcn_ip->max_num_dpp);
+	if (dc->debug.enable_mem_low_power.bits.cm)
 		for (i = 0; i < dc->dcn_ip->max_num_dpp; i++)
 			if (dc->res_pool->dpps[i]->funcs->dpp_deferred_update)
 				dc->res_pool->dpps[i]->funcs->dpp_deferred_update(dc->res_pool->dpps[i]);
-	}
+#endif
 }
-#endif /* CONFIG_DRM_AMD_DC_DCN */
 
 void dc_post_update_surfaces_to_stream(struct dc *dc)
 {
@@ -1959,9 +1931,7 @@ void dc_post_update_surfaces_to_stream(struct dc *dc)
 			dc->hwss.disable_plane(dc, &context->res_ctx.pipe_ctx[i]);
 		}
 
-#ifdef CONFIG_DRM_AMD_DC_DCN
 	process_deferred_updates(dc);
-#endif
 
 	dc->hwss.optimize_bandwidth(dc, context);
 
@@ -2313,9 +2283,6 @@ static enum surface_update_type det_surface_update(const struct dc *dc,
 			update_flags->bits.gamma_change = 1;
 	}
 
-	if (u->lut3d_func || u->func_shaper)
-		update_flags->bits.lut_3d = 1;
-
 	if (u->hdr_mult.value)
 		if (u->hdr_mult.value != u->surface->hdr_mult.value) {
 			update_flags->bits.hdr_mult = 1;
@@ -2329,7 +2296,6 @@ static enum surface_update_type det_surface_update(const struct dc *dc,
 
 	if (update_flags->bits.input_csc_change
 			|| update_flags->bits.coeff_reduction_change
-			|| update_flags->bits.lut_3d
 			|| update_flags->bits.gamma_change
 			|| update_flags->bits.gamut_remap_change) {
 		type = UPDATE_TYPE_FULL;
@@ -2387,11 +2353,6 @@ static enum surface_update_type check_update_surfaces_for_stream(
 
 		if (stream_update->dsc_config)
 			su_flags->bits.dsc_changed = 1;
-
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-		if (stream_update->mst_bw_update)
-			su_flags->bits.mst_bw = 1;
-#endif
 
 		if (su_flags->raw != 0)
 			overall_type = UPDATE_TYPE_FULL;
@@ -2770,15 +2731,6 @@ static void commit_planes_do_stream_update(struct dc *dc,
 			if (stream_update->dsc_config)
 				dp_update_dsc_config(pipe_ctx);
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-			if (stream_update->mst_bw_update) {
-				if (stream_update->mst_bw_update->is_increase)
-					dc_link_increase_mst_payload(pipe_ctx, stream_update->mst_bw_update->mst_stream_bw);
-				else
-					dc_link_reduce_mst_payload(pipe_ctx, stream_update->mst_bw_update->mst_stream_bw);
-			}
-#endif
-
 			if (stream_update->pending_test_pattern) {
 				dc_link_dp_set_test_pattern(stream->link,
 					stream->test_pattern.type,
@@ -2891,8 +2843,7 @@ static void commit_planes_for_stream(struct dc *dc,
 #endif
 
 	if ((update_type != UPDATE_TYPE_FAST) && stream->update_flags.bits.dsc_changed)
-		if (top_pipe_to_program &&
-			top_pipe_to_program->stream_res.tg->funcs->lock_doublebuffer_enable) {
+		if (top_pipe_to_program->stream_res.tg->funcs->lock_doublebuffer_enable) {
 			if (should_use_dmub_lock(stream->link)) {
 				union dmub_hw_lock_flags hw_locks = { 0 };
 				struct dmub_hw_lock_inst_flags inst_flags = { 0 };
@@ -3001,12 +2952,12 @@ static void commit_planes_for_stream(struct dc *dc,
 #ifdef CONFIG_DRM_AMD_DC_DCN
 		if (dc->debug.validate_dml_output) {
 			for (i = 0; i < dc->res_pool->pipe_count; i++) {
-				struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
-				if (cur_pipe->stream == NULL)
+				struct pipe_ctx cur_pipe = context->res_ctx.pipe_ctx[i];
+				if (cur_pipe.stream == NULL)
 					continue;
 
-				cur_pipe->plane_res.hubp->funcs->validate_dml_output(
-						cur_pipe->plane_res.hubp, dc->ctx,
+				cur_pipe.plane_res.hubp->funcs->validate_dml_output(
+						cur_pipe.plane_res.hubp, dc->ctx,
 						&context->res_ctx.pipe_ctx[i].rq_regs,
 						&context->res_ctx.pipe_ctx[i].dlg_regs,
 						&context->res_ctx.pipe_ctx[i].ttu_regs);
@@ -3448,7 +3399,7 @@ struct dc_sink *dc_link_add_remote_sink(
 		goto fail_add_sink;
 
 	edid_status = dm_helpers_parse_edid_caps(
-			link,
+			link->ctx,
 			&dc_sink->dc_edid,
 			&dc_sink->edid_caps);
 
@@ -3528,7 +3479,6 @@ void dc_get_clock(struct dc *dc, enum dc_clock_type clock_type, struct dc_clock_
 bool dc_set_psr_allow_active(struct dc *dc, bool enable)
 {
 	int i;
-	bool allow_active;
 
 	for (i = 0; i < dc->current_state->stream_count ; i++) {
 		struct dc_link *link;
@@ -3540,12 +3490,10 @@ bool dc_set_psr_allow_active(struct dc *dc, bool enable)
 
 		if (link->psr_settings.psr_feature_enabled) {
 			if (enable && !link->psr_settings.psr_allow_active) {
-				allow_active = true;
-				if (!dc_link_set_psr_allow_active(link, &allow_active, false, false, NULL))
+				if (!dc_link_set_psr_allow_active(link, true, false, false))
 					return false;
 			} else if (!enable && link->psr_settings.psr_allow_active) {
-				allow_active = false;
-				if (!dc_link_set_psr_allow_active(link, &allow_active, true, false, NULL))
+				if (!dc_link_set_psr_allow_active(link, false, true, false))
 					return false;
 			}
 		}
@@ -3632,8 +3580,7 @@ bool dc_enable_dmub_notifications(struct dc *dc)
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	/* YELLOW_CARP B0 USB4 DPIA needs dmub notifications for interrupts */
 	if (dc->ctx->asic_id.chip_family == FAMILY_YELLOW_CARP &&
-	    dc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0 &&
-	    !dc->debug.dpia_debug.bits.disable_dpia)
+	    dc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0)
 		return true;
 #endif
 	/* dmub aux needs dmub notifications to be enabled */
@@ -3778,60 +3725,6 @@ bool dc_process_dmub_set_config_async(struct dc *dc,
 		is_cmd_complete = false;
 
 	return is_cmd_complete;
-}
-
-/**
- *****************************************************************************
- *  Function: dc_process_dmub_set_mst_slots
- *
- *  @brief
- *		Submits mst slot allocation command to dmub via inbox message
- *
- *  @param
- *		[in] dc: dc structure
- *		[in] link_index: link index
- *		[in] mst_alloc_slots: mst slots to be allotted
- *		[out] mst_slots_in_use: mst slots in use returned in failure case
- *
- *	@return
- *		DC_OK if successful, DC_ERROR if failure
- *****************************************************************************
- */
-enum dc_status dc_process_dmub_set_mst_slots(const struct dc *dc,
-				uint32_t link_index,
-				uint8_t mst_alloc_slots,
-				uint8_t *mst_slots_in_use)
-{
-	union dmub_rb_cmd cmd = {0};
-	struct dc_dmub_srv *dmub_srv = dc->ctx->dmub_srv;
-
-	/* prepare MST_ALLOC_SLOTS command */
-	cmd.set_mst_alloc_slots.header.type = DMUB_CMD__DPIA;
-	cmd.set_mst_alloc_slots.header.sub_type = DMUB_CMD__DPIA_MST_ALLOC_SLOTS;
-
-	cmd.set_mst_alloc_slots.mst_slots_control.instance = dc->links[link_index]->ddc_hw_inst;
-	cmd.set_mst_alloc_slots.mst_slots_control.mst_alloc_slots = mst_alloc_slots;
-
-	if (!dc_dmub_srv_cmd_with_reply_data(dmub_srv, &cmd))
-		/* command is not processed by dmub */
-		return DC_ERROR_UNEXPECTED;
-
-	/* command processed by dmub, if ret_status is 1 */
-	if (cmd.set_config_access.header.ret_status != 1)
-		/* command processing error */
-		return DC_ERROR_UNEXPECTED;
-
-	/* command processed and we have a status of 2, mst not enabled in dpia */
-	if (cmd.set_mst_alloc_slots.mst_slots_control.immed_status == 2)
-		return DC_FAIL_UNSUPPORTED_1;
-
-	/* previously configured mst alloc and used slots did not match */
-	if (cmd.set_mst_alloc_slots.mst_slots_control.immed_status == 3) {
-		*mst_slots_in_use = cmd.set_mst_alloc_slots.mst_slots_control.mst_slots_in_use;
-		return DC_NOT_SUPPORTED;
-	}
-
-	return DC_OK;
 }
 
 /**
