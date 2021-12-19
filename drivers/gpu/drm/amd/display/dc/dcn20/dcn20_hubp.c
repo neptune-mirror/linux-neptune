@@ -984,10 +984,9 @@ void hubp2_cursor_set_position(
 	// Rotated cursor width/height and hotspots tweaks for offset calculation
 	if (param->rotation == ROTATION_ANGLE_90 || param->rotation == ROTATION_ANGLE_270) {
 		swap(cursor_height, cursor_width);
-		if (param->rotation == ROTATION_ANGLE_90) {
+		if (param->rotation == ROTATION_ANGLE_90)
 			src_x_offset = pos->x - pos->y_hotspot - param->viewport.x;
-			src_y_offset = pos->y - pos->x_hotspot - param->viewport.y;
-		}
+		src_y_offset = pos->y - pos->x_hotspot - param->viewport.y;
 	} else if (param->rotation == ROTATION_ANGLE_180) {
 		src_x_offset = pos->x - param->viewport.x;
 		src_y_offset = pos->y - param->viewport.y;

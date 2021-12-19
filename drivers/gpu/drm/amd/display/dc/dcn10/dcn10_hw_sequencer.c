@@ -3335,8 +3335,10 @@ void dcn10_set_cursor_position(struct pipe_ctx *pipe_ctx)
 	if (param.rotation == ROTATION_ANGLE_90 || param.rotation == ROTATION_ANGLE_270) {
 		x_pos = (x_pos - x_plane) * pipe_ctx->plane_state->src_rect.height /
 				pipe_ctx->plane_state->dst_rect.width;
-		y_pos = (y_pos - y_plane) * pipe_ctx->plane_state->src_rect.width /
-				pipe_ctx->plane_state->dst_rect.height;
+		if (param.rotation == ROTATION_ANGLE_90) {
+			y_pos = (y_pos - y_plane) * pipe_ctx->plane_state->src_rect.width /
+					pipe_ctx->plane_state->dst_rect.height;
+		}
 	} else {
 		x_pos = (x_pos - x_plane) * pipe_ctx->plane_state->src_rect.width /
 				pipe_ctx->plane_state->dst_rect.width;
