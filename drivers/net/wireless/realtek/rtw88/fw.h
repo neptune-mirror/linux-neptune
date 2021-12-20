@@ -48,6 +48,7 @@ enum rtw_c2h_cmd_id {
 };
 
 enum rtw_c2h_cmd_id_ext {
+	C2H_DEBUG_PRT = 0x0,
 	C2H_CCX_RPT = 0x0f,
 };
 

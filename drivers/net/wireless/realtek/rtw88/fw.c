@@ -28,6 +28,42 @@ static void rtw_fw_c2h_cmd_handle_ext(struct rtw_dev *rtwdev,
 	case C2H_CCX_RPT:
 		rtw_tx_report_handle(rtwdev, skb, C2H_CCX_RPT);
 		break;
+	case C2H_DEBUG_PRT:
+	{
+		u8 content, len;
+		u8 seq, next_msg = 0;
+		u8 cur_msg;
+		int i;
+		char tmp[500] = {0};
+		u8 *data = (u8 *)get_c2h_from_skb(skb);
+
+		content = data[3];
+		seq = data[1];
+
+		for (i = 0; i < content; i++) {
+			if (data[4 + i] == '\n') {
+				if (data[4 + i + 1] == '\0' ||
+				    data[4 + i + 1] == 0xff) {
+					next_msg = 4 + i + 1;
+					break;
+				}
+			}
+		}
+		len = next_msg - 4;
+
+		memcpy(tmp, data + 4, len);
+		tmp[len - 1] = '\0';
+		printk("[%u]%s", tmp[0], tmp + 1);
+
+		while (data[next_msg] != '\0' && next_msg <= content) {
+			cur_msg = next_msg;
+			len = data[cur_msg + 3] - 1;
+			next_msg += 4 + len;
+			memset(tmp, 0, 500);
+			memcpy(tmp, data + cur_msg + 4, len);
+			printk("[%u]%s", tmp[0], tmp + 1);
+		}
+	}
 	default:
 		break;
 	}
