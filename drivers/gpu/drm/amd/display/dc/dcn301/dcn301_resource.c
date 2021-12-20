@@ -847,7 +847,7 @@ static const struct dc_plane_cap plane_cap = {
 	.max_downscale_factor = {
 			.argb8888 = 167,
 			.nv12 = 167,
-			.fp16 = 167
+			.fp16 = 167 
 	},
 	64,
 	64
@@ -863,7 +863,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 	.disable_clock_gate = true,
 	.disable_pplib_clock_request = true,
 	.disable_pplib_wm_range = true,
-	.pipe_split_policy = MPC_SPLIT_AVOID,
+	.pipe_split_policy = MPC_SPLIT_AVOID_MULT_DISP,
 	.force_single_disp_pipe_split = false,
 	.disable_dcc = DCC_ENABLE,
 	.vsr_support = true,
