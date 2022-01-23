@@ -1658,7 +1658,7 @@ static void calculate_wm_set_for_vlevel(
 
 }
 
-static void dcn301_calculate_wm_and_dlg(
+static noinline void dcn301_calculate_wm_and_dlg_fp(
 		struct dc *dc, struct dc_state *context,
 		display_e2e_pipe_params_st *pipes,
 		int pipe_cnt,
@@ -1718,6 +1718,17 @@ static void dcn301_calculate_wm_and_dlg(
 	}
 
 	dcn20_calculate_dlg_params(dc, context, pipes, pipe_cnt, vlevel);
+}
+
+static void dcn301_calculate_wm_and_dlg(
+		struct dc *dc, struct dc_state *context,
+		display_e2e_pipe_params_st *pipes,
+		int pipe_cnt,
+		int vlevel)
+{
+	DC_FP_START();
+	dcn301_calculate_wm_and_dlg_fp(dc, context, pipes, pipe_cnt, vlevel);
+	DC_FP_END();
 }
 
 static struct resource_funcs dcn301_res_pool_funcs = {
