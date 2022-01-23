@@ -1689,17 +1689,17 @@ static void dml_rq_dlg_get_dlg_params(struct display_mode_lib *mode_lib,
 	disp_dlg_regs->refcyc_per_meta_chunk_vblank_c =
 		disp_dlg_regs->refcyc_per_meta_chunk_vblank_l; // dcc for 4:2:0 is not supported in dcn1.0.  assigned to be the same as _l for now
 
-	disp_dlg_regs->refcyc_per_pte_group_flip_l = (unsigned int)(dst_y_per_row_flip * htotal
-		* ref_freq_to_pix_freq) / dpte_groups_per_row_ub_l;
-	disp_dlg_regs->refcyc_per_meta_chunk_flip_l = (unsigned int)(dst_y_per_row_flip * htotal
-		* ref_freq_to_pix_freq) / meta_chunks_per_row_ub_l;
-
-	if (dual_plane) {
-		disp_dlg_regs->refcyc_per_pte_group_flip_c = (unsigned int)(dst_y_per_row_flip
-			* htotal * ref_freq_to_pix_freq) / dpte_groups_per_row_ub_c;
-		disp_dlg_regs->refcyc_per_meta_chunk_flip_c = (unsigned int)(dst_y_per_row_flip
-			* htotal * ref_freq_to_pix_freq) / meta_chunks_per_row_ub_c;
-	}
+// 	disp_dlg_regs->refcyc_per_pte_group_flip_l = (unsigned int)(dst_y_per_row_flip * htotal
+// 		* ref_freq_to_pix_freq) / dpte_groups_per_row_ub_l;
+// 	disp_dlg_regs->refcyc_per_meta_chunk_flip_l = (unsigned int)(dst_y_per_row_flip * htotal
+// 		* ref_freq_to_pix_freq) / meta_chunks_per_row_ub_l;
+//
+// 	if (dual_plane) {
+// 		disp_dlg_regs->refcyc_per_pte_group_flip_c = (unsigned int)(dst_y_per_row_flip
+// 			* htotal * ref_freq_to_pix_freq) / dpte_groups_per_row_ub_c;
+// 		disp_dlg_regs->refcyc_per_meta_chunk_flip_c = (unsigned int)(dst_y_per_row_flip
+// 			* htotal * ref_freq_to_pix_freq) / meta_chunks_per_row_ub_c;
+// 	}
 
 	disp_dlg_regs->refcyc_per_vm_group_vblank   = get_refcyc_per_vm_group_vblank(mode_lib, e2e_pipe_param, num_pipes, pipe_idx) * refclk_freq_in_mhz;
 	disp_dlg_regs->refcyc_per_vm_group_flip	 = get_refcyc_per_vm_group_flip(mode_lib, e2e_pipe_param, num_pipes, pipe_idx) * refclk_freq_in_mhz;
