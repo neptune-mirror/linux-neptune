@@ -168,7 +168,6 @@ static int jupiter_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct jupiter *jup = dev_get_drvdata(dev);
 	unsigned long long val;
-	int ret;
 
 	switch (type) {
 	case hwmon_temp:
