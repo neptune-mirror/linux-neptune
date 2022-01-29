@@ -355,10 +355,17 @@ static const struct i2c_device_id ltrf216a_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ltrf216a_id);
 
+static const struct of_device_id ltrf216a_of_match[] = {
+	{ .compatible = "ltr,ltrf216a" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, ltrf216a_of_match);
+
 static struct i2c_driver ltrf216a_driver = {
 	.driver = {
 		.name = LTRF216A_DRV_NAME,
 		.pm = LTRF216A_PM_OPS,
+		.of_match_table = ltrf216a_of_match,
 	},
 	.probe		= ltrf216a_probe,
 	.remove		= ltrf216a_remove,
