@@ -33,12 +33,17 @@
 #define AMD_SPI_OPCODE_MASK	0xFF
 
 #define AMD_SPI_ALT_CS_REG	0x1D
-#define AMD_SPI_ALT_CS_MASK	0x3
+#define AMD_SPI_ALT_CS_MASK	GENMASK(1, 0)
 
 #define AMD_SPI_FIFO_BASE	0x80
 #define AMD_SPI_TX_COUNT_REG	0x48
 #define AMD_SPI_RX_COUNT_REG	0x4B
 #define AMD_SPI_STATUS_REG	0x4C
+#define AMD_SPI_SPEED_REG	0x6C
+#define AMD_SPI_SPD7_SHIFT	8
+#define AMD_SPI_SPD7_MASK	GENMASK(13, AMD_SPI_SPD7_SHIFT)
+#define AMD_SPI_SPD6_SHIFT	0
+#define AMD_SPI_SPD6_MASK	GENMASK(5, AMD_SPI_SPD6_SHIFT)
 
 #define AMD_SPI_FIFO_SIZE	70
 #define AMD_SPI_MEM_SIZE	200
@@ -421,6 +426,17 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 	return ret;
 }
 
+static int amd_spi_prepare_message(struct spi_controller *ctlr, struct spi_message *msg)
+{
+	struct amd_spi *amd_spi = spi_controller_get_devdata(ctlr);
+	struct spi_device *spi = msg->spi;
+
+	if (max_speed)
+		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
+
+	return 0;
+}
+
 static size_t amd_spi_max_transfer_size(struct spi_device *spi)
 {
 	return AMD_SPI_FIFO_SIZE;
@@ -455,11 +471,14 @@ static int amd_spi_probe(struct platform_device *pdev)
 	master->bus_num = 0;
 	master->num_chipselect = 4;
 	master->mode_bits = 0;
-	master->flags = SPI_MASTER_HALF_DUPLEX;
-	master->setup = amd_spi_master_setup;
+	master->max_speed_hz = AMD_SPI_MAX_HZ;
+	master->min_speed_hz = AMD_SPI_MIN_HZ;
+	master->flags = SPI_CONTROLLER_HALF_DUPLEX | SPI_CONTROLLER_NO_TX_RX_CS;
 	master->transfer_one_message = amd_spi_transfer_one_message;
 	master->max_transfer_size = amd_spi_max_transfer_size;
 	master->max_message_size = amd_spi_max_transfer_size;
+	master->prepare_message = amd_spi_prepare_message;
+	master->setup = amd_spi_master_setup;
 
 	/* Register the controller with SPI framework */
 	err = devm_spi_register_master(dev, master);
