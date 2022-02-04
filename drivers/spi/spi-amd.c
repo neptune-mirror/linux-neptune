@@ -93,6 +93,7 @@ struct amd_spi {
 	enum amd_spi_versions version;
 	unsigned int speed_hz;
 	struct list_head rbuf_head;
+	struct spi_master *master;
 };
 
 /**
