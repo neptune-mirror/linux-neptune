@@ -105,6 +105,8 @@ struct i2s_stream_instance {
 	dma_addr_t dma_addr;
 	u64 bytescount;
 	void __iomem *acp5x_base;
+	u32 lrclk_div_val;
+	u32 bclk_div_val;
 };
 
 union acp_dma_count {
