@@ -88,10 +88,10 @@ static int acp5x_i2s_hwparams(struct snd_pcm_substream *substream,
 	struct snd_soc_card *card;
 	struct acp5x_platform_info *pinfo;
 	struct i2s_dev_data *adata;
-	union acp_i2stdm_mstrclkgen mclkgen;
 
+	u32 i2s_instance;
 	u32 val;
-	u32 reg_val, frmt_reg, master_reg;
+	u32 reg_val, frmt_reg;
 	u32 lrclk_div_val, bclk_div_val;
 
 	lrclk_div_val = 0;
@@ -160,20 +160,6 @@ static int acp5x_i2s_hwparams(struct snd_pcm_substream *substream,
 	acp_writel(val, rtd->acp5x_base + reg_val);
 
 	if (adata->master_mode) {
-		switch (rtd->i2s_instance) {
-		case I2S_HS_INSTANCE:
-			master_reg = ACP_I2STDM2_MSTRCLKGEN;
-			break;
-		case I2S_SP_INSTANCE:
-		default:
-			master_reg = ACP_I2STDM0_MSTRCLKGEN;
-			break;
-		}
-		mclkgen.bits.i2stdm_master_mode = 0x1;
-		if (adata->tdm_mode)
-			mclkgen.bits.i2stdm_format_mode = 0x01;
-		else
-			mclkgen.bits.i2stdm_format_mode = 0x0;
 		switch (params_format(params)) {
 		case SNDRV_PCM_FORMAT_S16_LE:
 			switch (params_rate(params)) {
@@ -238,9 +224,16 @@ static int acp5x_i2s_hwparams(struct snd_pcm_substream *substream,
 		default:
 			return -EINVAL;
 		}
-		mclkgen.bits.i2stdm_bclk_div_val = bclk_div_val;
-		mclkgen.bits.i2stdm_lrclk_div_val = lrclk_div_val;
-		acp_writel(mclkgen.u32_all, rtd->acp5x_base + master_reg);
+
+		i2s_instance = rtd->i2s_instance;
+		if (WARN_ON(i2s_instance != I2S_HS_INSTANCE &&
+			    i2s_instance != I2S_SP_INSTANCE))
+			i2s_instance = I2S_SP_INSTANCE;
+
+		rtd->lrclk_div = lrclk_div_val;
+		rtd->bclk_div = bclk_div_val;
+
+		acp5x_i2s_set_mclk(adata, rtd);
 	}
 	return 0;
 }
@@ -403,6 +396,7 @@ static int acp5x_dai_probe(struct platform_device *pdev)
 		return PTR_ERR(adata->acp5x_base);
 
 	adata->master_mode = I2S_MASTER_MODE_ENABLE;
+
 	dev_set_drvdata(&pdev->dev, adata);
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					      &acp5x_dai_component,

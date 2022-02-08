@@ -448,6 +448,8 @@ static int __maybe_unused acp5x_pcm_resume(struct device *dev)
 		}
 		acp_writel((rtd->xfer_resolution  << 3),
 			   rtd->acp5x_base + reg_val);
+
+		acp5x_i2s_set_mclk(adata, rtd);
 	}
 
 	if (adata->capture_stream && adata->capture_stream->runtime) {
