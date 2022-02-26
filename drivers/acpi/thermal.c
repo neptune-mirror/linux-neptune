@@ -260,6 +260,16 @@ do {	\
 		"Please report to linux-acpi@vger.kernel.org\n", str); \
 } while (0)
 
+static void acpi_thermal_devices_update(struct acpi_thermal *tz, int flag,
+					struct acpi_handle_list *old,
+					const struct acpi_handle_list *new)
+{
+	if (memcmp(old, new, sizeof(struct acpi_handle_list))) {
+		memcpy(old, new, sizeof(struct acpi_handle_list));
+		ACPI_THERMAL_TRIPS_EXCEPTION(flag, tz, "device");
+	}
+}
+
 static int acpi_thermal_trips_update(struct acpi_thermal *tz, int flag)
 {
 	acpi_status status = AE_OK;
@@ -383,12 +393,9 @@ static int acpi_thermal_trips_update(struct acpi_thermal *tz, int flag)
 		else
 			tz->trips.passive.flags.valid = 1;
 
-		if (memcmp(&tz->trips.passive.devices, &devices,
-				sizeof(struct acpi_handle_list))) {
-			memcpy(&tz->trips.passive.devices, &devices,
-				sizeof(struct acpi_handle_list));
-			ACPI_THERMAL_TRIPS_EXCEPTION(flag, tz, "device");
-		}
+		acpi_thermal_devices_update(tz, flag,
+					    &tz->trips.passive.devices,
+					    &devices);
 	}
 	if ((flag & ACPI_TRIPS_PASSIVE) || (flag & ACPI_TRIPS_DEVICES)) {
 		if (valid != tz->trips.passive.flags.valid)
@@ -446,12 +453,9 @@ static int acpi_thermal_trips_update(struct acpi_thermal *tz, int flag)
 			else
 				tz->trips.active[i].flags.valid = 1;
 
-			if (memcmp(&tz->trips.active[i].devices, &devices,
-					sizeof(struct acpi_handle_list))) {
-				memcpy(&tz->trips.active[i].devices, &devices,
-					sizeof(struct acpi_handle_list));
-				ACPI_THERMAL_TRIPS_EXCEPTION(flag, tz, "device");
-			}
+			acpi_thermal_devices_update(tz, flag,
+						    &tz->trips.active[i].devices,
+						    &devices);
 		}
 		if ((flag & ACPI_TRIPS_ACTIVE) || (flag & ACPI_TRIPS_DEVICES))
 			if (valid != tz->trips.active[i].flags.valid)
@@ -465,11 +469,10 @@ static int acpi_thermal_trips_update(struct acpi_thermal *tz, int flag)
 		memset(&devices, 0, sizeof(devices));
 		status = acpi_evaluate_reference(tz->device->handle, "_TZD",
 						NULL, &devices);
-		if (ACPI_SUCCESS(status)
-		    && memcmp(&tz->devices, &devices, sizeof(devices))) {
-			tz->devices = devices;
-			ACPI_THERMAL_TRIPS_EXCEPTION(flag, tz, "device");
-		}
+		if (ACPI_SUCCESS(status))
+			acpi_thermal_devices_update(tz, flag,
+						    &tz->devices,
+						    &devices);
 	}
 
 	return 0;
