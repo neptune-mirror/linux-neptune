@@ -88,7 +88,11 @@ steamdeck_hwmon_pid_attr_store(struct device *dev, const char *buf,
 
 	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 
-	return steamdeck_hwmon_ec_fan_recalculate(sd, value > 0);
+	ret = steamdeck_hwmon_ec_fan_recalculate(sd, value > 0);
+	if (ret < 0)
+		return ret;
+
+	return count;
 }
 
 #define STEAMDECK_HWMON_PID_ATTR_WO(_name, _method, _upper_limit)	\
