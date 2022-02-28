@@ -25,16 +25,24 @@ steamdeck_hwmon_simple_store(struct device *dev, const char *buf, size_t count,
 	struct steamdeck_hwmon *sd = dev_get_drvdata(dev);
 	unsigned long value;
 
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
+
 	if (kstrtoul(buf, 10, &value))
 		return -EINVAL;
+
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 
 	value = clamp_val(value, lower_limit, upper_limit);
 	if (parsed_value)
 		*parsed_value = value;
 
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
+
 	if (ACPI_FAILURE(acpi_execute_simple_method(sd->adev->handle,
 						    (char *)method, value)))
 		return -EIO;
+
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 
 	return count;
 }
@@ -42,6 +50,7 @@ steamdeck_hwmon_simple_store(struct device *dev, const char *buf, size_t count,
 static int steamdeck_hwmon_ec_fan_recalculate(struct steamdeck_hwmon *sd,
 					      bool on)
 {
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 	/*
 	 * We need to call SCHG(1) to notify EC that one of the PID
 	 * loop attributes has been updated and to enable PID control
@@ -53,6 +62,8 @@ static int steamdeck_hwmon_ec_fan_recalculate(struct steamdeck_hwmon *sd,
 	if (ACPI_FAILURE(acpi_execute_simple_method(sd->adev->handle,
 						    "SCHG", on)))
 		return -EIO;
+
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 
 	return 0;
 }
@@ -67,11 +78,15 @@ steamdeck_hwmon_pid_attr_store(struct device *dev, const char *buf,
 	unsigned long value;
 	ssize_t ret;
 
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
+
 	ret = steamdeck_hwmon_simple_store(dev, buf, count, method,
 					   lower_limit, upper_limit,
 					   &value);
 	if (ret < 0)
 		return ret;
+
+	pr_info("XXXXXXXXXXXXXXXXXXXX: %s %d\n", __func__, __LINE__);
 
 	return steamdeck_hwmon_ec_fan_recalculate(sd, value > 0);
 }
