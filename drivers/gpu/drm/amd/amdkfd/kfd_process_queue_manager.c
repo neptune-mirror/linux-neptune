@@ -118,10 +118,10 @@ int pqm_set_gws(struct process_queue_manager *pqm, unsigned int qid,
 		return ret;
 
 	pqn->q->gws = mem;
-	pdd->qpd.num_gws = gws ? amdgpu_amdkfd_get_num_gws(dev->kgd) : 0;
+	pdd->qpd.num_gws = gws ? dev->adev->gds.gws_size : 0;
 
 	return pqn->q->device->dqm->ops.update_queue(pqn->q->device->dqm,
-							pqn->q);
+							pqn->q, NULL);
 }
 
 void kfd_process_dequeue_from_all_devices(struct kfd_process *p)
@@ -135,9 +135,8 @@ void kfd_process_dequeue_from_all_devices(struct kfd_process *p)
 int pqm_init(struct process_queue_manager *pqm, struct kfd_process *p)
 {
 	INIT_LIST_HEAD(&pqm->queues);
-	pqm->queue_slot_bitmap =
-			kzalloc(DIV_ROUND_UP(KFD_MAX_NUM_OF_QUEUES_PER_PROCESS,
-					BITS_PER_BYTE), GFP_KERNEL);
+	pqm->queue_slot_bitmap = bitmap_zalloc(KFD_MAX_NUM_OF_QUEUES_PER_PROCESS,
+					       GFP_KERNEL);
 	if (!pqm->queue_slot_bitmap)
 		return -ENOMEM;
 	pqm->process = p;
@@ -153,12 +152,13 @@ void pqm_uninit(struct process_queue_manager *pqm)
 		if (pqn->q && pqn->q->gws)
 			amdgpu_amdkfd_remove_gws_from_process(pqm->process->kgd_process_info,
 				pqn->q->gws);
+		kfd_procfs_del_queue(pqn->q);
 		uninit_queue(pqn->q);
 		list_del(&pqn->process_queue_list);
 		kfree(pqn);
 	}
 
-	kfree(pqm->queue_slot_bitmap);
+	bitmap_free(pqm->queue_slot_bitmap);
 	pqm->queue_slot_bitmap = NULL;
 }
 
@@ -219,7 +219,7 @@ int pqm_create_queue(struct process_queue_manager *pqm,
 	 * Hence we also check the type as well
 	 */
 	if ((pdd->qpd.is_debug) || (type == KFD_QUEUE_TYPE_DIQ))
-		max_queues = dev->device_info->max_no_of_hqd/2;
+		max_queues = dev->device_info.max_no_of_hqd/2;
 
 	if (pdd->qpd.queue_count >= max_queues)
 		return -ENOSPC;
@@ -393,8 +393,6 @@ int pqm_destroy_queue(struct process_queue_manager *pqm, unsigned int qid)
 			pdd->qpd.num_gws = 0;
 		}
 
-		kfree(pqn->q->properties.cu_mask);
-		pqn->q->properties.cu_mask = NULL;
 		uninit_queue(pqn->q);
 	}
 
@@ -410,8 +408,8 @@ err_destroy_queue:
 	return retval;
 }
 
-int pqm_update_queue(struct process_queue_manager *pqm, unsigned int qid,
-			struct queue_properties *p)
+int pqm_update_queue_properties(struct process_queue_manager *pqm,
+				unsigned int qid, struct queue_properties *p)
 {
 	int retval;
 	struct process_queue_node *pqn;
@@ -428,15 +426,15 @@ int pqm_update_queue(struct process_queue_manager *pqm, unsigned int qid,
 	pqn->q->properties.priority = p->priority;
 
 	retval = pqn->q->device->dqm->ops.update_queue(pqn->q->device->dqm,
-							pqn->q);
+							pqn->q, NULL);
 	if (retval != 0)
 		return retval;
 
 	return 0;
 }
 
-int pqm_set_cu_mask(struct process_queue_manager *pqm, unsigned int qid,
-			struct queue_properties *p)
+int pqm_update_mqd(struct process_queue_manager *pqm,
+				unsigned int qid, struct mqd_update_info *minfo)
 {
 	int retval;
 	struct process_queue_node *pqn;
@@ -447,16 +445,8 @@ int pqm_set_cu_mask(struct process_queue_manager *pqm, unsigned int qid,
 		return -EFAULT;
 	}
 
-	/* Free the old CU mask memory if it is already allocated, then
-	 * allocate memory for the new CU mask.
-	 */
-	kfree(pqn->q->properties.cu_mask);
-
-	pqn->q->properties.cu_mask_count = p->cu_mask_count;
-	pqn->q->properties.cu_mask = p->cu_mask;
-
 	retval = pqn->q->device->dqm->ops.update_queue(pqn->q->device->dqm,
-							pqn->q);
+							pqn->q, minfo);
 	if (retval != 0)
 		return retval;
 

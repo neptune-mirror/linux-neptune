@@ -55,9 +55,7 @@
 
 
 /* TODO: evaluate how to lower or disable all dcn clocks in screen off case */
-int rn_get_active_display_cnt_wa(
-		struct dc *dc,
-		struct dc_state *context)
+static int rn_get_active_display_cnt_wa(struct dc *dc, struct dc_state *context)
 {
 	int i, display_count;
 	bool tmds_present = false;
@@ -76,7 +74,8 @@ int rn_get_active_display_cnt_wa(
 		const struct dc_link *link = dc->links[i];
 
 		/* abusing the fact that the dig and phy are coupled to see if the phy is enabled */
-		if (link->link_enc->funcs->is_dig_enabled(link->link_enc))
+		if (link->link_enc->funcs->is_dig_enabled &&
+		    link->link_enc->funcs->is_dig_enabled(link->link_enc))
 			display_count++;
 	}
 
@@ -87,7 +86,7 @@ int rn_get_active_display_cnt_wa(
 	return display_count;
 }
 
-void rn_set_low_power_state(struct clk_mgr *clk_mgr_base)
+static void rn_set_low_power_state(struct clk_mgr *clk_mgr_base)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
 
@@ -106,10 +105,10 @@ static void rn_update_clocks_update_dpp_dto(struct clk_mgr_internal *clk_mgr,
 	for (i = 0; i < clk_mgr->base.ctx->dc->res_pool->pipe_count; i++) {
 		int dpp_inst, dppclk_khz, prev_dppclk_khz;
 
-		/* Loop index will match dpp->inst if resource exists,
-		 * and we want to avoid dependency on dpp object
+		/* Loop index may not match dpp->inst if some pipes disabled,
+		 * so select correct inst from res_pool
 		 */
-		dpp_inst = i;
+		dpp_inst = clk_mgr->base.ctx->dc->res_pool->dpps[i]->inst;
 		dppclk_khz = context->res_ctx.pipe_ctx[i].plane_res.bw.dppclk_khz;
 
 		prev_dppclk_khz = clk_mgr->dccg->pipe_dppclk_khz[i];
@@ -121,14 +120,14 @@ static void rn_update_clocks_update_dpp_dto(struct clk_mgr_internal *clk_mgr,
 }
 
 
-void rn_update_clocks(struct clk_mgr *clk_mgr_base,
+static void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 			struct dc_state *context,
 			bool safe_to_lower)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
 	struct dc_clocks *new_clocks = &context->bw_ctx.bw.dcn.clk;
 	struct dc *dc = clk_mgr_base->ctx->dc;
-	int display_count, i;
+	int display_count;
 	bool update_dppclk = false;
 	bool update_dispclk = false;
 	bool dpp_clock_lowered = false;
@@ -147,6 +146,7 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_LOW_POWER) {
 
 			display_count = rn_get_active_display_cnt_wa(dc, context);
+
 			/* if we can go lower, go lower */
 			if (display_count == 0) {
 				rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_LOW_POWER);
@@ -209,14 +209,6 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 				context,
 				clk_mgr_base->clks.dppclk_khz,
 				safe_to_lower);
-
-		for (i = 0; i < context->stream_count; i++) {
-			if (context->streams[i]->signal == SIGNAL_TYPE_EDP &&
-				context->streams[i]->apply_seamless_boot_optimization) {
-				dc_wait_for_vblank(dc, context->streams[i]);
-				break;
-			}
-		}
 
 		clk_mgr_base->clks.actual_dppclk_khz =
 				rn_vbios_smu_set_dppclk(clk_mgr, clk_mgr_base->clks.dppclk_khz);
@@ -435,25 +427,14 @@ static void rn_dump_clk_registers(struct clk_state_registers_and_bypass *regs_an
 	}
 }
 
-/* This function produce translated logical clk state values*/
-void rn_get_clk_states(struct clk_mgr *clk_mgr_base, struct clk_states *s)
-{
-	struct clk_state_registers_and_bypass sb = { 0 };
-	struct clk_log_info log_info = { 0 };
-
-	rn_dump_clk_registers(&sb, clk_mgr_base, &log_info);
-
-	s->dprefclk_khz = sb.dprefclk * 1000;
-}
-
-void rn_enable_pme_wa(struct clk_mgr *clk_mgr_base)
+static void rn_enable_pme_wa(struct clk_mgr *clk_mgr_base)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
 
 	rn_vbios_smu_enable_pme_wa(clk_mgr);
 }
 
-void rn_init_clocks(struct clk_mgr *clk_mgr)
+static void rn_init_clocks(struct clk_mgr *clk_mgr)
 {
 	memset(&(clk_mgr->clks), 0, sizeof(struct dc_clocks));
 	// Assumption is that boot state always supports pstate
@@ -842,6 +823,7 @@ static struct wm_table lpddr4_wm_table_rn = {
 		},
 	}
 };
+
 static unsigned int find_socclk_for_voltage(struct dpm_clocks *clock_table, unsigned int voltage)
 {
 	int i;
@@ -854,6 +836,7 @@ static unsigned int find_socclk_for_voltage(struct dpm_clocks *clock_table, unsi
 	ASSERT(0);
 	return 0;
 }
+
 static unsigned int find_dcfclk_for_voltage(struct dpm_clocks *clock_table, unsigned int voltage)
 {
 	int i;

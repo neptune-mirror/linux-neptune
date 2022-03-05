@@ -27,6 +27,8 @@
 #include "dcn10/dcn10_hw_sequencer.h"
 #include "dcn20_hwseq.h"
 
+#include "dcn20_init.h"
+
 static const struct hw_sequencer_funcs dcn20_funcs = {
 	.program_gamut_remap = dcn10_program_gamut_remap,
 	.init_hw = dcn10_init_hw,
@@ -96,6 +98,7 @@ static const struct hw_sequencer_funcs dcn20_funcs = {
 #endif
 	.set_disp_pattern_generator = dcn20_set_disp_pattern_generator,
 	.get_dcc_en_bits = dcn10_get_dcc_en_bits,
+	.update_visual_confirm_color = dcn20_update_visual_confirm_color
 };
 
 static const struct hwseq_private_funcs dcn20_private_funcs = {
@@ -125,8 +128,6 @@ static const struct hwseq_private_funcs dcn20_private_funcs = {
 	.hubp_pg_control = dcn20_hubp_pg_control,
 	.update_odm = dcn20_update_odm,
 	.dsc_pg_control = dcn20_dsc_pg_control,
-	.get_surface_visual_confirm_color = dcn10_get_surface_visual_confirm_color,
-	.get_hdr_visual_confirm_color = dcn10_get_hdr_visual_confirm_color,
 	.set_hdr_multiplier = dcn10_set_hdr_multiplier,
 	.verify_allow_pstate_change_high = dcn10_verify_allow_pstate_change_high,
 	.wait_for_blank_complete = dcn20_wait_for_blank_complete,
