@@ -60,8 +60,6 @@ MODULE_FIRMWARE("amdgpu/aldebaran_smc.bin");
 
 #define SMU13_VOLTAGE_SCALE 4
 
-#define SMU13_MODE1_RESET_WAIT_TIME_IN_MS 500  //500ms
-
 #define LINK_WIDTH_MAX				6
 #define LINK_SPEED_MAX				3
 
@@ -85,12 +83,17 @@ int smu_v13_0_init_microcode(struct smu_context *smu)
 	const struct common_firmware_header *header;
 	struct amdgpu_firmware_info *ucode = NULL;
 
-	switch (adev->asic_type) {
-	case CHIP_ALDEBARAN:
+	/* doesn't need to load smu firmware in IOV mode */
+	if (amdgpu_sriov_vf(adev))
+		return 0;
+
+	switch (adev->ip_versions[MP1_HWIP][0]) {
+	case IP_VERSION(13, 0, 2):
 		chip_name = "aldebaran";
 		break;
 	default:
-		dev_err(adev->dev, "Unsupported ASIC type %d\n", adev->asic_type);
+		dev_err(adev->dev, "Unsupported IP version 0x%x\n",
+			adev->ip_versions[MP1_HWIP][0]);
 		return -EINVAL;
 	}
 
@@ -193,31 +196,41 @@ int smu_v13_0_check_fw_status(struct smu_context *smu)
 
 int smu_v13_0_check_fw_version(struct smu_context *smu)
 {
+	struct amdgpu_device *adev = smu->adev;
 	uint32_t if_version = 0xff, smu_version = 0xff;
-	uint16_t smu_major;
-	uint8_t smu_minor, smu_debug;
+	uint8_t smu_program, smu_major, smu_minor, smu_debug;
 	int ret = 0;
 
 	ret = smu_cmn_get_smc_version(smu, &if_version, &smu_version);
 	if (ret)
 		return ret;
 
-	smu_major = (smu_version >> 16) & 0xffff;
+	smu_program = (smu_version >> 24) & 0xff;
+	smu_major = (smu_version >> 16) & 0xff;
 	smu_minor = (smu_version >> 8) & 0xff;
 	smu_debug = (smu_version >> 0) & 0xff;
+	if (smu->is_apu)
+		adev->pm.fw_version = smu_version;
 
-	switch (smu->adev->asic_type) {
-	case CHIP_ALDEBARAN:
+	switch (adev->ip_versions[MP1_HWIP][0]) {
+	case IP_VERSION(13, 0, 2):
 		smu->smc_driver_if_version = SMU13_DRIVER_IF_VERSION_ALDE;
 		break;
+	case IP_VERSION(13, 0, 1):
+	case IP_VERSION(13, 0, 3):
+		smu->smc_driver_if_version = SMU13_DRIVER_IF_VERSION_YELLOW_CARP;
+		break;
 	default:
-		dev_err(smu->adev->dev, "smu unsupported asic type:%d.\n", smu->adev->asic_type);
+		dev_err(adev->dev, "smu unsupported IP version: 0x%x.\n",
+			adev->ip_versions[MP1_HWIP][0]);
 		smu->smc_driver_if_version = SMU13_DRIVER_IF_VERSION_INV;
 		break;
 	}
 
-	dev_info(smu->adev->dev, "smu fw reported version = 0x%08x (%d.%d.%d)\n",
-			 smu_version, smu_major, smu_minor, smu_debug);
+	/* only for dGPU w/ SMU13*/
+	if (adev->pm.fw)
+		dev_dbg(smu->adev->dev, "smu fw reported program %d, version = 0x%08x (%d.%d.%d)\n",
+			 smu_program, smu_version, smu_major, smu_minor, smu_debug);
 
 	/*
 	 * 1. if_version mismatch is not critical as our fw is designed
@@ -228,11 +241,11 @@ int smu_v13_0_check_fw_version(struct smu_context *smu)
 	 * of halt driver loading.
 	 */
 	if (if_version != smu->smc_driver_if_version) {
-		dev_info(smu->adev->dev, "smu driver if version = 0x%08x, smu fw if version = 0x%08x, "
-			 "smu fw version = 0x%08x (%d.%d.%d)\n",
+		dev_info(adev->dev, "smu driver if version = 0x%08x, smu fw if version = 0x%08x, "
+			 "smu fw program = %d, smu fw version = 0x%08x (%d.%d.%d)\n",
 			 smu->smc_driver_if_version, if_version,
-			 smu_version, smu_major, smu_minor, smu_debug);
-		dev_warn(smu->adev->dev, "SMU driver if version not matched\n");
+			 smu_program, smu_version, smu_major, smu_minor, smu_debug);
+		dev_warn(adev->dev, "SMU driver if version not matched\n");
 	}
 
 	return ret;
@@ -265,51 +278,85 @@ static int smu_v13_0_set_pptable_v2_1(struct smu_context *smu, void **table,
 	return 0;
 }
 
+static int smu_v13_0_get_pptable_from_vbios(struct smu_context *smu, void **table, uint32_t *size)
+{
+	struct amdgpu_device *adev = smu->adev;
+	uint16_t atom_table_size;
+	uint8_t frev, crev;
+	int ret, index;
+
+	dev_info(adev->dev, "use vbios provided pptable\n");
+	index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
+					    powerplayinfo);
+
+	ret = amdgpu_atombios_get_data_table(adev, index, &atom_table_size, &frev, &crev,
+					     (uint8_t **)table);
+	if (ret)
+		return ret;
+
+	if (size)
+		*size = atom_table_size;
+
+	return 0;
+}
+
+static int smu_v13_0_get_pptable_from_firmware(struct smu_context *smu, void **table, uint32_t *size,
+					       uint32_t pptable_id)
+{
+	const struct smc_firmware_header_v1_0 *hdr;
+	struct amdgpu_device *adev = smu->adev;
+	uint16_t version_major, version_minor;
+	int ret;
+
+	hdr = (const struct smc_firmware_header_v1_0 *) adev->pm.fw->data;
+	if (!hdr)
+		return -EINVAL;
+
+	dev_info(adev->dev, "use driver provided pptable %d\n", pptable_id);
+
+	version_major = le16_to_cpu(hdr->header.header_version_major);
+	version_minor = le16_to_cpu(hdr->header.header_version_minor);
+	if (version_major != 2) {
+		dev_err(adev->dev, "Unsupported smu firmware version %d.%d\n",
+			version_major, version_minor);
+		return -EINVAL;
+	}
+
+	switch (version_minor) {
+	case 1:
+		ret = smu_v13_0_set_pptable_v2_1(smu, table, size, pptable_id);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 int smu_v13_0_setup_pptable(struct smu_context *smu)
 {
 	struct amdgpu_device *adev = smu->adev;
-	const struct smc_firmware_header_v1_0 *hdr;
-	int ret, index;
-	uint32_t size = 0;
-	uint16_t atom_table_size;
-	uint8_t frev, crev;
+	uint32_t size = 0, pptable_id = 0;
 	void *table;
-	uint16_t version_major, version_minor;
+	int ret = 0;
 
-
+	/* override pptable_id from driver parameter */
 	if (amdgpu_smu_pptable_id >= 0) {
-		smu->smu_table.boot_values.pp_table_id = amdgpu_smu_pptable_id;
-		dev_info(adev->dev, "override pptable id %d\n", amdgpu_smu_pptable_id);
-	}
-
-	hdr = (const struct smc_firmware_header_v1_0 *) adev->pm.fw->data;
-	version_major = le16_to_cpu(hdr->header.header_version_major);
-	version_minor = le16_to_cpu(hdr->header.header_version_minor);
-	if (version_major == 2 && smu->smu_table.boot_values.pp_table_id > 0) {
-		dev_info(adev->dev, "use driver provided pptable %d\n", smu->smu_table.boot_values.pp_table_id);
-		switch (version_minor) {
-		case 1:
-			ret = smu_v13_0_set_pptable_v2_1(smu, &table, &size,
-							 smu->smu_table.boot_values.pp_table_id);
-			break;
-		default:
-			ret = -EINVAL;
-			break;
-		}
-		if (ret)
-			return ret;
-
+		pptable_id = amdgpu_smu_pptable_id;
+		dev_info(adev->dev, "override pptable id %d\n", pptable_id);
 	} else {
-		dev_info(adev->dev, "use vbios provided pptable\n");
-		index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
-						    powerplayinfo);
-
-		ret = amdgpu_atombios_get_data_table(adev, index, &atom_table_size, &frev, &crev,
-						     (uint8_t **)&table);
-		if (ret)
-			return ret;
-		size = atom_table_size;
+		pptable_id = smu->smu_table.boot_values.pp_table_id;
 	}
+
+	/* force using vbios pptable in sriov mode */
+	if (amdgpu_sriov_vf(adev) || !pptable_id)
+		ret = smu_v13_0_get_pptable_from_vbios(smu, &table, &size);
+	else
+		ret = smu_v13_0_get_pptable_from_firmware(smu, &table, &size, pptable_id);
+
+	if (ret)
+		return ret;
 
 	if (!smu->smu_table.power_play_table)
 		smu->smu_table.power_play_table = table;
@@ -386,8 +433,10 @@ int smu_v13_0_fini_smc_tables(struct smu_context *smu)
 	kfree(smu_table->hardcode_pptable);
 	smu_table->hardcode_pptable = NULL;
 
+	kfree(smu_table->ecc_table);
 	kfree(smu_table->metrics_table);
 	kfree(smu_table->watermarks_table);
+	smu_table->ecc_table = NULL;
 	smu_table->metrics_table = NULL;
 	smu_table->watermarks_table = NULL;
 	smu_table->metrics_time = 0;
@@ -673,24 +722,42 @@ int smu_v13_0_set_allowed_mask(struct smu_context *smu)
 	int ret = 0;
 	uint32_t feature_mask[2];
 
-	mutex_lock(&feature->mutex);
-	if (bitmap_empty(feature->allowed, SMU_FEATURE_MAX) || feature->feature_num < 64)
-		goto failed;
+	if (bitmap_empty(feature->allowed, SMU_FEATURE_MAX) ||
+	    feature->feature_num < 64)
+		return -EINVAL;
 
 	bitmap_copy((unsigned long *)feature_mask, feature->allowed, 64);
 
 	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_SetAllowedFeaturesMaskHigh,
 					      feature_mask[1], NULL);
 	if (ret)
-		goto failed;
+		return ret;
 
-	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_SetAllowedFeaturesMaskLow,
-					      feature_mask[0], NULL);
-	if (ret)
-		goto failed;
+	return smu_cmn_send_smc_msg_with_param(smu,
+					       SMU_MSG_SetAllowedFeaturesMaskLow,
+					       feature_mask[0],
+					       NULL);
+}
 
-failed:
-	mutex_unlock(&feature->mutex);
+int smu_v13_0_gfx_off_control(struct smu_context *smu, bool enable)
+{
+	int ret = 0;
+	struct amdgpu_device *adev = smu->adev;
+
+	switch (adev->ip_versions[MP1_HWIP][0]) {
+	case IP_VERSION(13, 0, 1):
+	case IP_VERSION(13, 0, 3):
+		if (!(adev->pm.pp_feature & PP_GFXOFF_MASK))
+			return 0;
+		if (enable)
+			ret = smu_cmn_send_smc_msg(smu, SMU_MSG_AllowGfxOff, NULL);
+		else
+			ret = smu_cmn_send_smc_msg(smu, SMU_MSG_DisallowGfxOff, NULL);
+		break;
+	default:
+		break;
+	}
+
 	return ret;
 }
 
@@ -879,22 +946,27 @@ int smu_v13_0_get_current_power_limit(struct smu_context *smu,
 	return ret;
 }
 
-int smu_v13_0_set_power_limit(struct smu_context *smu, uint32_t n)
+int smu_v13_0_set_power_limit(struct smu_context *smu,
+			      enum smu_ppt_limit_type limit_type,
+			      uint32_t limit)
 {
 	int ret = 0;
+
+	if (limit_type != SMU_DEFAULT_PPT_LIMIT)
+		return -EINVAL;
 
 	if (!smu_cmn_feature_is_enabled(smu, SMU_FEATURE_PPT_BIT)) {
 		dev_err(smu->adev->dev, "Setting new power limit is not supported!\n");
 		return -EOPNOTSUPP;
 	}
 
-	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_SetPptLimit, n, NULL);
+	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_SetPptLimit, limit, NULL);
 	if (ret) {
 		dev_err(smu->adev->dev, "[%s] Set power limit Failed!\n", __func__);
 		return ret;
 	}
 
-	smu->current_power_limit = n;
+	smu->current_power_limit = limit;
 
 	return 0;
 }
@@ -1124,7 +1196,7 @@ static int smu_v13_0_set_irq_state(struct amdgpu_device *adev,
 				   unsigned tyep,
 				   enum amdgpu_interrupt_state state)
 {
-	struct smu_context *smu = &adev->smu;
+	struct smu_context *smu = adev->powerplay.pp_handle;
 	uint32_t low, high;
 	uint32_t val = 0;
 
@@ -1199,7 +1271,7 @@ static int smu_v13_0_irq_process(struct amdgpu_device *adev,
 				 struct amdgpu_irq_src *source,
 				 struct amdgpu_iv_entry *entry)
 {
-	struct smu_context *smu = &adev->smu;
+	struct smu_context *smu = adev->powerplay.pp_handle;
 	uint32_t client_id = entry->client_id;
 	uint32_t src_id = entry->src_id;
 	/*
@@ -1245,11 +1317,11 @@ static int smu_v13_0_irq_process(struct amdgpu_device *adev,
 			switch (ctxid) {
 			case 0x3:
 				dev_dbg(adev->dev, "Switched to AC mode!\n");
-				smu_v13_0_ack_ac_dc_interrupt(&adev->smu);
+				smu_v13_0_ack_ac_dc_interrupt(smu);
 				break;
 			case 0x4:
 				dev_dbg(adev->dev, "Switched to DC mode!\n");
-				smu_v13_0_ack_ac_dc_interrupt(&adev->smu);
+				smu_v13_0_ack_ac_dc_interrupt(smu);
 				break;
 			case 0x7:
 				/*
@@ -1349,25 +1421,6 @@ int smu_v13_0_set_azalia_d3_pme(struct smu_context *smu)
 	int ret = 0;
 
 	ret = smu_cmn_send_smc_msg(smu, SMU_MSG_BacoAudioD3PME, NULL);
-
-	return ret;
-}
-
-int smu_v13_0_mode1_reset(struct smu_context *smu)
-{
-	u32 smu_version;
-	int ret = 0;
-	/*
-	* PM FW support SMU_MSG_GfxDeviceDriverReset from 68.07
-	*/
-	smu_cmn_get_smc_version(smu, NULL, &smu_version);
-	if (smu_version < 0x00440700)
-		ret = smu_cmn_send_smc_msg(smu, SMU_MSG_Mode1Reset, NULL);
-	else
-		ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_GfxDeviceDriverReset, SMU_RESET_MODE_1, NULL);
-
-	if (!ret)
-		msleep(SMU13_MODE1_RESET_WAIT_TIME_IN_MS);
 
 	return ret;
 }
@@ -1476,7 +1529,6 @@ int smu_v13_0_set_soft_freq_limited_range(struct smu_context *smu,
 					  uint32_t min,
 					  uint32_t max)
 {
-	struct amdgpu_device *adev = smu->adev;
 	int ret = 0, clk_id = 0;
 	uint32_t param;
 
@@ -1488,9 +1540,6 @@ int smu_v13_0_set_soft_freq_limited_range(struct smu_context *smu,
 						clk_type);
 	if (clk_id < 0)
 		return clk_id;
-
-	if (clk_type == SMU_GFXCLK)
-		amdgpu_gfx_off_ctrl(adev, false);
 
 	if (max > 0) {
 		param = (uint32_t)((clk_id << 16) | (max & 0xffff));
@@ -1509,9 +1558,6 @@ int smu_v13_0_set_soft_freq_limited_range(struct smu_context *smu,
 	}
 
 out:
-	if (clk_type == SMU_GFXCLK)
-		amdgpu_gfx_off_ctrl(adev, true);
-
 	return ret;
 }
 
@@ -1626,6 +1672,9 @@ int smu_v13_0_set_performance_level(struct smu_context *smu,
 							    sclk_max);
 		if (ret)
 			return ret;
+
+		pstate_table->gfxclk_pstate.curr.min = sclk_min;
+		pstate_table->gfxclk_pstate.curr.max = sclk_max;
 	}
 
 	if (mclk_min && mclk_max) {
@@ -1635,6 +1684,9 @@ int smu_v13_0_set_performance_level(struct smu_context *smu,
 							    mclk_max);
 		if (ret)
 			return ret;
+
+		pstate_table->uclk_pstate.curr.min = mclk_min;
+		pstate_table->uclk_pstate.curr.max = mclk_max;
 	}
 
 	if (socclk_min && socclk_max) {
@@ -1644,6 +1696,9 @@ int smu_v13_0_set_performance_level(struct smu_context *smu,
 							    socclk_max);
 		if (ret)
 			return ret;
+
+		pstate_table->socclk_pstate.curr.min = socclk_min;
+		pstate_table->socclk_pstate.curr.max = socclk_max;
 	}
 
 	return ret;
