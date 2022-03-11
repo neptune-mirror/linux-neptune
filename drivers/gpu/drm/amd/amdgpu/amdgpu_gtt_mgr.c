@@ -130,14 +130,11 @@ static int amdgpu_gtt_mgr_new(struct ttm_resource_manager *man,
 	struct amdgpu_gtt_node *node;
 	int r;
 
-	spin_lock(&mgr->lock);
-	if (tbo->resource && tbo->resource->mem_type != TTM_PL_TT &&
-	    atomic64_read(&mgr->available) < num_pages) {
-		spin_unlock(&mgr->lock);
+	if (!(place->flags & TTM_PL_FLAG_TEMPORARY) &&
+	    atomic64_add_return(num_pages, &mgr->used) >  man->size) {
+		atomic64_sub(num_pages, &mgr->used);
 		return -ENOSPC;
 	}
-	atomic64_sub(num_pages, &mgr->available);
-	spin_unlock(&mgr->lock);
 
 	node = kzalloc(struct_size(node, base.mm_nodes, 1), GFP_KERNEL);
 	if (!node) {
@@ -170,10 +167,12 @@ static int amdgpu_gtt_mgr_new(struct ttm_resource_manager *man,
 	return 0;
 
 err_free:
+	ttm_resource_fini(man, &node->base.base);
 	kfree(node);
 
 err_out:
-	atomic64_add(num_pages, &mgr->available);
+	if (!(place->flags & TTM_PL_FLAG_TEMPORARY))
+		atomic64_sub(num_pages, &mgr->used);
 
 	return r;
 }
@@ -196,8 +195,10 @@ static void amdgpu_gtt_mgr_del(struct ttm_resource_manager *man,
 	if (drm_mm_node_allocated(&node->base.mm_nodes[0]))
 		drm_mm_remove_node(&node->base.mm_nodes[0]);
 	spin_unlock(&mgr->lock);
-	atomic64_add(res->num_pages, &mgr->available);
+	if (!(res->placement & TTM_PL_FLAG_TEMPORARY))
+		atomic64_sub(res->num_pages, &mgr->used);
 
+	ttm_resource_fini(man, res);
 	kfree(node);
 }
 
@@ -210,11 +211,7 @@ static void amdgpu_gtt_mgr_del(struct ttm_resource_manager *man,
  */
 uint64_t amdgpu_gtt_mgr_usage(struct amdgpu_gtt_mgr *mgr)
 {
-	s64 result;
-
-	result = mgr->manager.size - atomic64_read(&mgr->available);
-
-	return (result > 0 ? result : 0) * PAGE_SIZE;
+	return atomic64_read(&mgr->used) * PAGE_SIZE;
 }
 
 /**
@@ -258,9 +255,8 @@ static void amdgpu_gtt_mgr_debug(struct ttm_resource_manager *man,
 	drm_mm_print(&mgr->mm, printer);
 	spin_unlock(&mgr->lock);
 
-	drm_printf(printer, "man size:%llu pages, gtt available:%lld pages, usage:%lluMB\n",
-		   man->size, (u64)atomic64_read(&mgr->available),
-		   amdgpu_gtt_mgr_usage(mgr) >> 20);
+	drm_printf(printer, "man size:%llu pages,  gtt used:%llu pages\n",
+		   man->size, atomic64_read(&mgr->used));
 }
 
 static const struct ttm_resource_manager_func amdgpu_gtt_mgr_func = {
@@ -286,13 +282,14 @@ int amdgpu_gtt_mgr_init(struct amdgpu_device *adev, uint64_t gtt_size)
 	man->use_tt = true;
 	man->func = &amdgpu_gtt_mgr_func;
 
-	ttm_resource_manager_init(man, gtt_size >> PAGE_SHIFT);
+	ttm_resource_manager_init(man, &adev->mman.bdev,
+				  gtt_size >> PAGE_SHIFT);
 
 	start = AMDGPU_GTT_MAX_TRANSFER_SIZE * AMDGPU_GTT_NUM_TRANSFER_WINDOWS;
 	size = (adev->gmc.gart_size >> PAGE_SHIFT) - start;
 	drm_mm_init(&mgr->mm, start, size);
 	spin_lock_init(&mgr->lock);
-	atomic64_set(&mgr->available, gtt_size >> PAGE_SHIFT);
+	atomic64_set(&mgr->used, 0);
 
 	ttm_set_driver_manager(&adev->mman.bdev, TTM_PL_TT, &mgr->manager);
 	ttm_resource_manager_set_used(man, true);

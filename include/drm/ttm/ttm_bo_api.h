@@ -56,8 +56,6 @@ struct ttm_placement;
 
 struct ttm_place;
 
-struct ttm_lru_bulk_move;
-
 /**
  * enum ttm_bo_type
  *
@@ -95,7 +93,6 @@ struct ttm_tt;
  * @ttm: TTM structure holding system pages.
  * @evicted: Whether the object was evicted without user-space knowing.
  * @deleted: True if the object is only a zombie and already deleted.
- * @lru: List head for the lru list.
  * @ddestroy: List head for the delayed destroy list.
  * @swap: List head for swap LRU list.
  * @moving: Fence set when BO is moving
@@ -139,12 +136,12 @@ struct ttm_buffer_object {
 	struct ttm_resource *resource;
 	struct ttm_tt *ttm;
 	bool deleted;
+	struct ttm_lru_bulk_move *bulk_move;
 
 	/**
 	 * Members protected by the bdev::lru_lock.
 	 */
 
-	struct list_head lru;
 	struct list_head ddestroy;
 
 	/**
@@ -265,18 +262,6 @@ static inline int ttm_bo_wait_ctx(struct ttm_buffer_object *bo, struct ttm_opera
 }
 
 /**
- * ttm_bo_mem_compat - Check if proposed placement is compatible with a bo
- *
- * @placement:  Return immediately if buffer is busy.
- * @mem:  The struct ttm_resource indicating the region where the bo resides
- * @new_flags: Describes compatible placement found
- *
- * Returns true if the placement is compatible
- */
-bool ttm_bo_mem_compat(struct ttm_placement *placement, struct ttm_resource *mem,
-		       uint32_t *new_flags);
-
-/**
  * ttm_bo_validate
  *
  * @bo: The buffer object.
@@ -304,30 +289,9 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
  */
 void ttm_bo_put(struct ttm_buffer_object *bo);
 
-/**
- * ttm_bo_move_to_lru_tail
- *
- * @bo: The buffer object.
- * @mem: Resource object.
- * @bulk: optional bulk move structure to remember BO positions
- *
- * Move this BO to the tail of all lru lists used to lookup and reserve an
- * object. This function must be called with struct ttm_global::lru_lock
- * held, and is used to make a BO less likely to be considered for eviction.
- */
-void ttm_bo_move_to_lru_tail(struct ttm_buffer_object *bo,
-			     struct ttm_resource *mem,
-			     struct ttm_lru_bulk_move *bulk);
-
-/**
- * ttm_bo_bulk_move_lru_tail
- *
- * @bulk: bulk move structure
- *
- * Bulk move BOs to the LRU tail, only valid to use when driver makes sure that
- * BO order never changes. Should be called with ttm_global::lru_lock held.
- */
-void ttm_bo_bulk_move_lru_tail(struct ttm_lru_bulk_move *bulk);
+void ttm_bo_move_to_lru_tail(struct ttm_buffer_object *bo);
+void ttm_bo_set_bulk_move(struct ttm_buffer_object *bo,
+			  struct ttm_lru_bulk_move *bulk);
 
 /**
  * ttm_bo_lock_delayed_workqueue
@@ -594,8 +558,7 @@ vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
 
 vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 				    pgprot_t prot,
-				    pgoff_t num_prefault,
-				    pgoff_t fault_page_size);
+				    pgoff_t num_prefault);
 
 vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf);
 
