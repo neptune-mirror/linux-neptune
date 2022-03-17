@@ -35,6 +35,36 @@
 
 #define AMD_SPI_MEM_SIZE	200
 
+#define AMD_SPI_ENA_REG		0x20
+#define AMD_SPI_ALT_SPD_SHIFT	20
+#define AMD_SPI_ALT_SPD_MASK	GENMASK(23, AMD_SPI_ALT_SPD_SHIFT)
+#define AMD_SPI_SPI100_SHIFT	0
+#define AMD_SPI_SPI100_MASK	GENMASK(AMD_SPI_SPI100_SHIFT, AMD_SPI_SPI100_SHIFT)
+#define AMD_SPI_SPEED_REG	0x6C
+#define AMD_SPI_SPD7_SHIFT	8
+#define AMD_SPI_SPD7_MASK	GENMASK(13, AMD_SPI_SPD7_SHIFT)
+
+#define AMD_SPI_MAX_HZ		100000000
+#define AMD_SPI_MIN_HZ		800000
+
+/* Set device speed to the maximum frequency supported */
+static bool max_speed;
+module_param(max_speed, bool, 0644);
+
+enum amd_spi_speed {
+	F_66_66MHz,
+	F_33_33MHz,
+	F_22_22MHz,
+	F_16_66MHz,
+	F_100MHz,
+	F_800KHz,
+	SPI_SPD6,
+	SPI_SPD7,
+	F_50MHz = 0x4,
+	F_4MHz = 0x32,
+	F_3_17MHz = 0x3F
+};
+
 /* M_CMD OP codes for SPI */
 #define AMD_SPI_XFER_TX		1
 #define AMD_SPI_XFER_RX		2
@@ -48,6 +78,19 @@ struct amd_spi {
 	void __iomem *io_remap_addr;
 	unsigned long io_base_addr;
 	enum amd_spi_versions version;
+	unsigned int speed_hz;
+};
+
+/**
+ * struct amd_spi_freq - Matches device speed with values to write in regs
+ * @speed_hz: Device frequency
+ * @ena: Value to be written to "enable register"
+ * @spd7: Some frequencies requires to have a value written at SPISPEED register
+ */
+struct amd_spi_freq {
+	unsigned int speed_hz;
+	unsigned int enable_val;
+	unsigned int spd7_val;
 };
 
 static inline u8 amd_spi_readreg8(struct amd_spi *amd_spi, int idx)
@@ -170,11 +213,66 @@ static int amd_spi_execute_opcode(struct amd_spi *amd_spi)
 	}
 }
 
+static const struct amd_spi_freq amd_spi_freq[] = {
+	{ AMD_SPI_MAX_HZ,   F_100MHz,         0},
+	{       66660000, F_66_66MHz,         0},
+	{       50000000,   SPI_SPD7,   F_50MHz},
+	{       33330000, F_33_33MHz,         0},
+	{       22220000, F_22_22MHz,         0},
+	{       16660000, F_16_66MHz,         0},
+	{        4000000,   SPI_SPD7,    F_4MHz},
+	{        3170000,   SPI_SPD7, F_3_17MHz},
+	{ AMD_SPI_MIN_HZ,   F_800KHz,         0},
+};
+
+static int amd_set_spi_freq(struct amd_spi *amd_spi, u32 speed_hz)
+{
+	unsigned int i, spd7_val, enable_val;
+
+	if (speed_hz == amd_spi->speed_hz)
+		return 0;
+
+	if (speed_hz < AMD_SPI_MIN_HZ)
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(amd_spi_freq); i++) {
+		if (speed_hz >= amd_spi_freq[i].speed_hz) {
+			if (amd_spi->speed_hz == amd_spi_freq[i].speed_hz)
+				return 0;
+
+			amd_spi->speed_hz = amd_spi_freq[i].speed_hz;
+
+			enable_val = (amd_spi_freq[i].enable_val << AMD_SPI_ALT_SPD_SHIFT)
+				     & AMD_SPI_ALT_SPD_MASK;
+			amd_spi_setclear_reg32(amd_spi, AMD_SPI_ENA_REG, enable_val,
+					       AMD_SPI_ALT_SPD_MASK);
+
+			if (amd_spi->speed_hz == AMD_SPI_MAX_HZ)
+				amd_spi_setclear_reg32(amd_spi, AMD_SPI_ENA_REG, 1,
+						       AMD_SPI_SPI100_MASK);
+
+			if (amd_spi_freq[i].spd7_val) {
+				spd7_val = (amd_spi_freq[i].spd7_val << AMD_SPI_SPD7_SHIFT)
+					   & AMD_SPI_SPD7_MASK;
+				amd_spi_setclear_reg32(amd_spi, AMD_SPI_SPEED_REG, spd7_val,
+						       AMD_SPI_SPD7_MASK);
+			}
+
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+};
+
 static int amd_spi_master_setup(struct spi_device *spi)
 {
 	struct amd_spi *amd_spi = spi_master_get_devdata(spi->master);
 
 	amd_spi_clear_fifo_ptr(amd_spi);
+
+	if (max_speed)
+		amd_set_spi_freq(amd_spi, spi->max_speed_hz);
 
 	return 0;
 }
