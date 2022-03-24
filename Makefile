@@ -2,7 +2,7 @@
 VERSION = 5
 PATCHLEVEL = 13
 SUBLEVEL = 0
-EXTRAVERSION =-valve12
+EXTRAVERSION =-valve12-rtw-debug
 NAME = Opossums on Parade
 
 # *DOCUMENTATION*
