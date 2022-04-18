@@ -31,6 +31,7 @@ static DEFINE_IDA(ps_player_id_allocator);
 struct ps_device {
 	struct list_head list;
 	struct hid_device *hdev;
+	struct mutex mutex;
 	spinlock_t lock;
 
 	uint32_t player_id;
@@ -140,7 +141,7 @@ struct dualsense {
 	struct ps_device base;
 	struct input_dev *gamepad;
 	struct input_dev *sensors;
-	struct input_dev *touchpad;
+	struct input_dev __rcu *touchpad;
 
 	/* Calibration data for accelerometer and gyroscope. */
 	struct ps_calibration_data accel_calib_data[3];
@@ -668,6 +669,22 @@ static struct input_dev *ps_touchpad_create(struct hid_device *hdev, int width, 
 	return touchpad;
 }
 
+static void dualsense_unregister_touchpad(struct dualsense *ds)
+{
+	struct input_dev *touchpad;
+
+	rcu_read_lock();
+	touchpad = rcu_dereference(ds->touchpad);
+	rcu_read_unlock();
+
+	if (!touchpad)
+		return;
+
+	RCU_INIT_POINTER(ds->touchpad, NULL);
+	synchronize_rcu();
+	input_unregister_device(touchpad);
+}
+
 static ssize_t firmware_version_show(struct device *dev,
 				struct device_attribute
 				*attr, char *buf)
@@ -1013,6 +1030,7 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 	struct hid_device *hdev = ps_dev->hdev;
 	struct dualsense *ds = container_of(ps_dev, struct dualsense, base);
 	struct dualsense_input_report *ds_report;
+	struct input_dev *touchpad = NULL;
 	uint8_t battery_data, battery_capacity, charging_status, value;
 	int battery_status;
 	uint32_t sensor_timestamp;
@@ -1127,24 +1145,29 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 	input_event(ds->sensors, EV_MSC, MSC_TIMESTAMP, ds->sensor_timestamp_us);
 	input_sync(ds->sensors);
 
-	for (i = 0; i < ARRAY_SIZE(ds_report->points); i++) {
-		struct dualsense_touch_point *point = &ds_report->points[i];
-		bool active = (point->contact & DS_TOUCH_POINT_INACTIVE) ? false : true;
+	rcu_read_lock();
+	touchpad = rcu_dereference(ds->touchpad);
+	rcu_read_unlock();
+	if (touchpad) {
+		for (i = 0; i < ARRAY_SIZE(ds_report->points); i++) {
+			struct dualsense_touch_point *point = &ds_report->points[i];
+			bool active = (point->contact & DS_TOUCH_POINT_INACTIVE) ? false : true;
 
-		input_mt_slot(ds->touchpad, i);
-		input_mt_report_slot_state(ds->touchpad, MT_TOOL_FINGER, active);
+			input_mt_slot(ds->touchpad, i);
+			input_mt_report_slot_state(ds->touchpad, MT_TOOL_FINGER, active);
 
-		if (active) {
-			int x = (point->x_hi << 8) | point->x_lo;
-			int y = (point->y_hi << 4) | point->y_lo;
+			if (active) {
+				int x = (point->x_hi << 8) | point->x_lo;
+				int y = (point->y_hi << 4) | point->y_lo;
 
-			input_report_abs(ds->touchpad, ABS_MT_POSITION_X, x);
-			input_report_abs(ds->touchpad, ABS_MT_POSITION_Y, y);
+				input_report_abs(ds->touchpad, ABS_MT_POSITION_X, x);
+				input_report_abs(ds->touchpad, ABS_MT_POSITION_Y, y);
+			}
 		}
+		input_mt_sync_frame(ds->touchpad);
+		input_report_key(ds->touchpad, BTN_LEFT, ds_report->buttons[2] & DS_BUTTONS2_TOUCHPAD);
+		input_sync(ds->touchpad);
 	}
-	input_mt_sync_frame(ds->touchpad);
-	input_report_key(ds->touchpad, BTN_LEFT, ds_report->buttons[2] & DS_BUTTONS2_TOUCHPAD);
-	input_sync(ds->touchpad);
 
 	battery_data = ds_report->status & DS_STATUS_BATTERY_CAPACITY;
 	charging_status = (ds_report->status & DS_STATUS_CHARGING) >> DS_STATUS_CHARGING_SHIFT;
@@ -1270,6 +1293,7 @@ static struct ps_device *dualsense_create(struct hid_device *hdev)
 {
 	struct dualsense *ds;
 	struct ps_device *ps_dev;
+	struct input_dev *touchpad;
 	uint8_t max_output_report_size;
 	int i, ret;
 
@@ -1299,6 +1323,7 @@ static struct ps_device *dualsense_create(struct hid_device *hdev)
 	ps_dev = &ds->base;
 	ps_dev->hdev = hdev;
 	spin_lock_init(&ps_dev->lock);
+	mutex_init(&ps_dev->mutex);
 	ps_dev->battery_capacity = 100; /* initial value until parse_report. */
 	ps_dev->battery_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	ps_dev->parse_report = dualsense_parse_report;
@@ -1348,11 +1373,12 @@ static struct ps_device *dualsense_create(struct hid_device *hdev)
 		goto err;
 	}
 
-	ds->touchpad = ps_touchpad_create(hdev, DS_TOUCHPAD_WIDTH, DS_TOUCHPAD_HEIGHT, 2);
-	if (IS_ERR(ds->touchpad)) {
-		ret = PTR_ERR(ds->touchpad);
+	touchpad = ps_touchpad_create(hdev, DS_TOUCHPAD_WIDTH, DS_TOUCHPAD_HEIGHT, 2);
+	if (IS_ERR(touchpad)) {
+		ret = PTR_ERR(touchpad);
 		goto err;
 	}
+	rcu_assign_pointer(ds->touchpad, touchpad);
 
 	ret = ps_device_register_battery(ps_dev);
 	if (ret)
