@@ -25,6 +25,8 @@ static LIST_HEAD(ps_devices_list);
 
 static DEFINE_IDA(ps_player_id_allocator);
 
+static bool touchpad_mouse = true;
+
 #define HID_PLAYSTATION_VERSION_PATCH 0x8000
 
 /* Base class for playstation devices. */
@@ -1499,6 +1501,45 @@ static void ps_remove(struct hid_device *hdev)
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);
 }
+
+static int ps_param_set_touchpad_mouse(const char *val,
+					const struct kernel_param *kp)
+{
+	struct ps_device *dev;
+	struct dualsense *ds;
+	struct input_dev *touchpad;
+	int ret;
+
+	ret = param_set_bool(val, kp);
+	if (ret)
+		return ret;
+
+	mutex_lock(&ps_devices_lock);
+	list_for_each_entry(dev, &ps_devices_list, list) {
+		mutex_lock(&dev->mutex);
+		if (dev->hdev->product == USB_DEVICE_ID_SONY_PS5_CONTROLLER) {
+			ds = container_of(dev, struct dualsense, base);
+			if (touchpad_mouse) {
+				touchpad = ps_touchpad_create(dev->hdev, DS_TOUCHPAD_WIDTH, DS_TOUCHPAD_HEIGHT, 2);
+				if (IS_ERR(touchpad))
+					continue;
+				rcu_assign_pointer(ds->touchpad, touchpad);
+			} else
+				dualsense_unregister_touchpad(ds);
+		}
+		mutex_unlock(&dev->mutex);
+	}
+	mutex_unlock(&ps_devices_lock);
+	return 0;
+}
+
+static const struct kernel_param_ops ps_touchpad_mouse_ops = {
+	.set	= ps_param_set_touchpad_mouse,
+	.get	= param_get_bool,
+};
+
+module_param_cb(touchpad_mouse, &ps_touchpad_mouse_ops, &touchpad_mouse, 0644);
+MODULE_PARM_DESC(touchpad_mouse, "Enable mouse emulation using the touchpad");
 
 static const struct hid_device_id ps_devices[] = {
 	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SONY, USB_DEVICE_ID_SONY_PS5_CONTROLLER) },
