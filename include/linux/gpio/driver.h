@@ -212,6 +212,15 @@ struct gpio_irq_chip {
 	int (*init_hw)(struct gpio_chip *gc);
 
 	/**
+	 * @initialized:
+	 *
+	 * Flag to track GPIO chip irq member's initialization.
+	 * This flag will make sure GPIO chip irq members are not used
+	 * before they are initialized.
+	 */
+	bool initialized;
+
+	/**
 	 * @init_valid_mask: optional routine to initialize @valid_mask, to be
 	 * used if not all GPIO lines are valid interrupts. Sometimes some
 	 * lines just cannot fire interrupts, and this routine, when defined,
