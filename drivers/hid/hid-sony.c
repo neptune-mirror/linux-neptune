@@ -468,6 +468,8 @@ static enum power_supply_property sony_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 };
 
+static struct hid_ll_driver sony_client_ll_driver;
+
 struct sixaxis_led {
 	u8 time_enabled; /* the total time the led is active (0xff means forever) */
 	u8 duty_length;  /* how long a cycle is in deciseconds (0 means "really fast") */
@@ -569,7 +571,7 @@ enum sony_worker {
 struct sony_sc {
 	spinlock_t lock;
 	struct list_head list_node;
-	struct hid_device *hdev;
+	struct hid_device *hdev, *client_hdev;
 	struct input_dev __rcu *touchpad;
 	struct input_dev *sensor_dev;
 	struct led_classdev *leds[MAX_LEDS];
@@ -580,6 +582,7 @@ struct sony_sc {
 	struct power_supply *battery;
 	struct power_supply_desc battery_desc;
 	struct mutex mutex;
+	bool client_opened;
 	int device_id;
 	unsigned fw_version;
 	bool fw_version_created;
@@ -945,7 +948,7 @@ static u8 *sony_report_fixup(struct hid_device *hdev, u8 *rdesc,
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
 
-	if (sc->quirks & (SINO_LITE_CONTROLLER | FUTUREMAX_DANCE_MAT))
+	if (!sc || (sc->quirks & (SINO_LITE_CONTROLLER | FUTUREMAX_DANCE_MAT)))
 		return rdesc;
 
 	/*
@@ -1343,6 +1346,22 @@ static int sony_raw_event(struct hid_device *hdev, struct hid_report *report,
 		u8 *rd, int size)
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
+	int ret;
+
+	/*
+	 * Check if we're the client hdev, which is only used for a separate
+	 * hidraw device. If so, there's nothing to be done here.
+	 */
+	if (hdev->ll_driver == &sony_client_ll_driver)
+		return 0;
+
+	if (sc->client_opened) {
+		ret = hid_input_report(sc->client_hdev, HID_INPUT_REPORT, rd, size, 0);
+		if (ret) {
+			hid_err(hdev, "can't send input report to client hdev: %d\n", ret);
+			return ret;
+		}
+	}
 
 	/*
 	 * Sixaxis HID report has acclerometers/gyro with MSByte first, this
@@ -3032,6 +3051,92 @@ err_stop:
 	return ret;
 }
 
+static int sony_client_ll_parse(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	return hid_parse_report(hdev, sc->hdev->dev_rdesc,
+			sc->hdev->dev_rsize);
+}
+
+static int sony_client_ll_start(struct hid_device *hdev)
+{
+	return 0;
+}
+
+static void sony_client_ll_stop(struct hid_device *hdev)
+{
+}
+
+static int sony_client_ll_open(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	mutex_lock(&sc->mutex);
+	sc->client_opened = true;
+	mutex_unlock(&sc->mutex);
+
+	if (sc->quirks & DUALSHOCK4_CONTROLLER)
+		sony_unregister_touchpad(sc);
+
+	return 0;
+}
+
+static void sony_client_ll_close(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	mutex_lock(&sc->mutex);
+	sc->client_opened = false;
+	mutex_unlock(&sc->mutex);
+
+	if (sc->quirks & DUALSHOCK4_CONTROLLER)
+		sony_register_ds4_touchpad(sc);
+}
+
+static int sony_client_ll_raw_request(struct hid_device *hdev,
+				unsigned char reportnum, u8 *buf,
+				size_t count, unsigned char report_type,
+				int reqtype)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	return hid_hw_raw_request(sc->hdev, reportnum, buf, count,
+			report_type, reqtype);
+}
+
+static struct hid_ll_driver sony_client_ll_driver = {
+	.parse = sony_client_ll_parse,
+	.start = sony_client_ll_start,
+	.stop = sony_client_ll_stop,
+	.open = sony_client_ll_open,
+	.close = sony_client_ll_close,
+	.raw_request = sony_client_ll_raw_request,
+};
+
+static struct hid_device *sony_create_client_hid(struct hid_device *hdev)
+{
+	struct hid_device *client_hdev;
+
+	client_hdev = hid_allocate_device();
+	if (IS_ERR(client_hdev))
+		return client_hdev;
+
+	client_hdev->ll_driver = &sony_client_ll_driver;
+	client_hdev->dev.parent = hdev->dev.parent;
+	client_hdev->bus = hdev->bus;
+	client_hdev->vendor = hdev->vendor;
+	client_hdev->product = hdev->product;
+	client_hdev->version = hdev->version;
+	client_hdev->type = hdev->type;
+	client_hdev->country = hdev->country;
+	strlcpy(client_hdev->name, hdev->name,
+			sizeof(client_hdev->name));
+	strlcpy(client_hdev->phys, hdev->phys,
+			sizeof(client_hdev->phys));
+	return client_hdev;
+}
+
 static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret;
@@ -3039,6 +3144,19 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	struct sony_sc *sc;
 	struct usb_device *usbdev;
 	unsigned int connect_mask = HID_CONNECT_DEFAULT;
+
+	ret = hid_parse(hdev);
+	if (ret) {
+		hid_err(hdev, "parse failed\n");
+		return ret;
+	}
+
+	/*
+	 * The virtual client_dev is only used for hidraw.
+	 * Also avoid the recursive probe.
+	 */
+	if (hdev->ll_driver == &sony_client_ll_driver)
+		return hid_hw_start(hdev, HID_CONNECT_HIDRAW);
 
 	if (!strcmp(hdev->name, "FutureMax Dance Mat"))
 		quirks |= FUTUREMAX_DANCE_MAT;
@@ -3060,12 +3178,6 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	hid_set_drvdata(hdev, sc);
 	sc->hdev = hdev;
 
-	ret = hid_parse(hdev);
-	if (ret) {
-		hid_err(hdev, "parse failed\n");
-		return ret;
-	}
-
 	if (sc->quirks & VAIO_RDESC_CONSTANT)
 		connect_mask |= HID_CONNECT_HIDDEV_FORCE;
 	else if (sc->quirks & SIXAXIS_CONTROLLER)
@@ -3080,9 +3192,29 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (sc->quirks & (SIXAXIS_CONTROLLER | DUALSHOCK4_CONTROLLER))
 		hdev->version |= 0x8000;
 
+	/* For DualShock 4 controllers, we create a client_hid device so that
+	 * we can tell when it's been opened directly and disable the touchpad
+	 * from being used as a mouse at the same time.
+	 */
+	if (sc->quirks & DUALSHOCK4_CONTROLLER) {
+		connect_mask &= ~HID_CONNECT_HIDRAW;
+		sc->client_hdev = sony_create_client_hid(hdev);
+		if (IS_ERR(sc->client_hdev))
+			return PTR_ERR(sc->client_hdev);
+		sc->client_hdev->driver_data = sc;
+	}
+
 	ret = hid_hw_start(hdev, connect_mask);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
+		return ret;
+	}
+
+	if (sc->client_hdev)
+		ret = hid_add_device(sc->client_hdev);
+	if (ret) {
+		hid_err(hdev, "client hw start failed\n");
+		hid_hw_stop(hdev);
 		return ret;
 	}
 
@@ -3096,6 +3228,8 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	 */
 	if (!(hdev->claimed & HID_CLAIMED_INPUT)) {
 		hid_err(hdev, "failed to claim input\n");
+		if (sc->client_hdev)
+			hid_destroy_device(sc->client_hdev);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -3140,6 +3274,13 @@ err:
 static void sony_remove(struct hid_device *hdev)
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
+
+	if (!sc || hdev->ll_driver == &sony_client_ll_driver) {
+		hid_hw_stop(hdev);
+		return;
+	}
+	if (sc->client_hdev)
+		hid_destroy_device(sc->client_hdev);
 
 	if (sc->quirks & (GHL_GUITAR_PS3WIIU | GHL_GUITAR_PS4)) {
 		del_timer_sync(&sc->ghl_poke_timer);
@@ -3216,10 +3357,12 @@ static int sony_param_set_touchpad_mouse(const char *val,
 	mutex_lock(&sony_dev_list_lock);
 	list_for_each_entry(sc, &sony_device_list, list_node) {
 		mutex_lock(&sc->mutex);
-		if (touchpad_mouse)
-			sony_register_ds4_touchpad(sc);
-		else
-			sony_unregister_touchpad(sc);
+		if (!sc->client_opened) {
+			if (touchpad_mouse)
+				sony_register_ds4_touchpad(sc);
+			else
+				sony_unregister_touchpad(sc);
+		}
 		mutex_unlock(&sc->mutex);
 	}
 	mutex_unlock(&sony_dev_list_lock);
