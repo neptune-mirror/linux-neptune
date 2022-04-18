@@ -109,6 +109,8 @@ static const char ghl_ps4_magic_data[] = {
 	0x30, 0x02, 0x08, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+static bool touchpad_mouse = true;
+
 /* PS/3 Motion controller */
 static u8 motion_rdesc[] = {
 	0x05, 0x01,         /*  Usage Page (Desktop),               */
@@ -536,7 +538,7 @@ struct motion_output_report_02 {
 #define SIXAXIS_INPUT_REPORT_ACC_X_OFFSET 41
 #define SIXAXIS_ACC_RES_PER_G 113
 
-static DEFINE_SPINLOCK(sony_dev_list_lock);
+static DEFINE_MUTEX(sony_dev_list_lock);
 static LIST_HEAD(sony_device_list);
 static DEFINE_IDA(sony_device_id_allocator);
 
@@ -1668,6 +1670,9 @@ static int sony_register_ds4_touchpad(struct sony_sc *sc)
 	struct input_dev *touchpad;
 	int ret;
 
+	if (!touchpad_mouse)
+		return 0;
+
 	rcu_read_lock();
 	touchpad = rcu_dereference(sc->touchpad);
 	rcu_read_unlock();
@@ -2597,10 +2602,9 @@ static inline int sony_compare_connection_type(struct sony_sc *sc0,
 static int sony_check_add_dev_list(struct sony_sc *sc)
 {
 	struct sony_sc *entry;
-	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&sony_dev_list_lock, flags);
+	mutex_lock(&sony_dev_list_lock);
 
 	list_for_each_entry(entry, &sony_device_list, list_node) {
 		ret = memcmp(sc->mac_address, entry->mac_address,
@@ -2622,18 +2626,16 @@ static int sony_check_add_dev_list(struct sony_sc *sc)
 	list_add(&(sc->list_node), &sony_device_list);
 
 unlock:
-	spin_unlock_irqrestore(&sony_dev_list_lock, flags);
+	mutex_unlock(&sony_dev_list_lock);
 	return ret;
 }
 
 static void sony_remove_dev_list(struct sony_sc *sc)
 {
-	unsigned long flags;
-
 	if (sc->list_node.next) {
-		spin_lock_irqsave(&sony_dev_list_lock, flags);
+		mutex_lock(&sony_dev_list_lock);
 		list_del(&(sc->list_node));
-		spin_unlock_irqrestore(&sony_dev_list_lock, flags);
+		mutex_unlock(&sony_dev_list_lock);
 	}
 }
 
@@ -3200,6 +3202,37 @@ static int sony_resume(struct hid_device *hdev)
 }
 
 #endif
+
+static int sony_param_set_touchpad_mouse(const char *val,
+					const struct kernel_param *kp)
+{
+	struct sony_sc *sc;
+	int ret;
+
+	ret = param_set_bool(val, kp);
+	if (ret)
+		return ret;
+
+	mutex_lock(&sony_dev_list_lock);
+	list_for_each_entry(sc, &sony_device_list, list_node) {
+		mutex_lock(&sc->mutex);
+		if (touchpad_mouse)
+			sony_register_ds4_touchpad(sc);
+		else
+			sony_unregister_touchpad(sc);
+		mutex_unlock(&sc->mutex);
+	}
+	mutex_unlock(&sony_dev_list_lock);
+	return 0;
+}
+
+static const struct kernel_param_ops sony_touchpad_mouse_ops = {
+	.set	= sony_param_set_touchpad_mouse,
+	.get	= param_get_bool,
+};
+
+module_param_cb(touchpad_mouse, &sony_touchpad_mouse_ops, &touchpad_mouse, 0644);
+MODULE_PARM_DESC(touchpad_mouse, "Enable mouse emulation using the touchpad");
 
 static const struct hid_device_id sony_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SONY, USB_DEVICE_ID_SONY_PS3_CONTROLLER),
