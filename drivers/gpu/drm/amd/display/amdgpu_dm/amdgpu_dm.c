@@ -4330,6 +4330,13 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 		} else if (dc_link_detect(link, DETECT_REASON_BOOT)) {
 			amdgpu_dm_update_connector_after_detect(aconnector);
 			register_backlight_device(dm, link);
+
+			if (dm->dc->ctx->dce_version ==  DCN_VERSION_3_01 &&
+				link->dpcd_caps.sink_dev_id == DP_BRANCH_DEVICE_ID_0022B9 &&
+				memcmp(&link->dpcd_caps.branch_dev_name, DP_SINK_BRANCH_DEV_NAME_7580, sizeof(link->dpcd_caps.branch_dev_name)) == 0) {
+				dm->dc->config.edp_no_power_sequencing = true;
+			}
+
 			if (dm->num_of_edps)
 				update_connector_ext_caps(aconnector);
 			if (psr_feature_enabled)
