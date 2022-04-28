@@ -90,7 +90,8 @@ void dp_enable_link_phy(
 	ASSERT(link_enc);
 
 	if (link->connector_signal == SIGNAL_TYPE_EDP) {
-		link->dc->hwss.edp_power_control(link, true);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
 	}
 
@@ -238,7 +239,8 @@ void dp_disable_link_phy(struct dc_link *link, const struct link_resource *link_
 			disable_dp_hpo_output(link, link_res, signal);
 		else
 			link_enc->funcs->disable_output(link_enc, signal);
-		link->dc->hwss.edp_power_control(link, false);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, false);
 	} else {
 		if (dmcu != NULL && dmcu->funcs->lock_phy)
 			dmcu->funcs->lock_phy(dmcu);
