@@ -40,6 +40,7 @@
 #include <linux/crc32.h>
 #include <linux/usb.h>
 #include <linux/timer.h>
+#include <linux/rcupdate.h>
 #include <asm/unaligned.h>
 
 #include "hid-ids.h"
@@ -107,6 +108,8 @@ static const char ghl_ps3wiiu_magic_data[] = {
 static const char ghl_ps4_magic_data[] = {
 	0x30, 0x02, 0x08, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00
 };
+
+static bool touchpad_mouse = true;
 
 /* PS/3 Motion controller */
 static u8 motion_rdesc[] = {
@@ -465,6 +468,8 @@ static enum power_supply_property sony_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 };
 
+static struct hid_ll_driver sony_client_ll_driver;
+
 struct sixaxis_led {
 	u8 time_enabled; /* the total time the led is active (0xff means forever) */
 	u8 duty_length;  /* how long a cycle is in deciseconds (0 means "really fast") */
@@ -535,7 +540,7 @@ struct motion_output_report_02 {
 #define SIXAXIS_INPUT_REPORT_ACC_X_OFFSET 41
 #define SIXAXIS_ACC_RES_PER_G 113
 
-static DEFINE_SPINLOCK(sony_dev_list_lock);
+static DEFINE_MUTEX(sony_dev_list_lock);
 static LIST_HEAD(sony_device_list);
 static DEFINE_IDA(sony_device_id_allocator);
 
@@ -566,8 +571,8 @@ enum sony_worker {
 struct sony_sc {
 	spinlock_t lock;
 	struct list_head list_node;
-	struct hid_device *hdev;
-	struct input_dev *touchpad;
+	struct hid_device *hdev, *client_hdev;
+	struct input_dev __rcu *touchpad;
 	struct input_dev *sensor_dev;
 	struct led_classdev *leds[MAX_LEDS];
 	unsigned long quirks;
@@ -576,6 +581,8 @@ struct sony_sc {
 	void (*send_output_report)(struct sony_sc *);
 	struct power_supply *battery;
 	struct power_supply_desc battery_desc;
+	struct mutex mutex;
+	bool client_opened;
 	int device_id;
 	unsigned fw_version;
 	bool fw_version_created;
@@ -941,7 +948,7 @@ static u8 *sony_report_fixup(struct hid_device *hdev, u8 *rdesc,
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
 
-	if (sc->quirks & (SINO_LITE_CONTROLLER | FUTUREMAX_DANCE_MAT))
+	if (!sc || (sc->quirks & (SINO_LITE_CONTROLLER | FUTUREMAX_DANCE_MAT)))
 		return rdesc;
 
 	/*
@@ -1039,6 +1046,7 @@ static void dualshock4_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	struct hid_input *hidinput = list_entry(sc->hdev->inputs.next,
 						struct hid_input, list);
 	struct input_dev *input_dev = hidinput->input;
+	struct input_dev *touchpad = NULL;
 	unsigned long flags;
 	int n, m, offset, num_touch_data, max_touch_data;
 	u8 cable_state, battery_capacity;
@@ -1048,9 +1056,15 @@ static void dualshock4_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	/* When using Bluetooth the header is 2 bytes longer, so skip these. */
 	int data_offset = (sc->quirks & DUALSHOCK4_CONTROLLER_BT) ? 2 : 0;
 
+	rcu_read_lock();
+	touchpad = rcu_dereference(sc->touchpad);
+	rcu_read_unlock();
+
 	/* Second bit of third button byte is for the touchpad button. */
-	offset = data_offset + DS4_INPUT_REPORT_BUTTON_OFFSET;
-	input_report_key(sc->touchpad, BTN_LEFT, rd[offset+2] & 0x2);
+	if (touchpad) {
+		offset = data_offset + DS4_INPUT_REPORT_BUTTON_OFFSET;
+		input_report_key(touchpad, BTN_LEFT, rd[offset+2] & 0x2);
+	}
 
 	/*
 	 * The default behavior of the Dualshock 4 is to send reports using
@@ -1195,6 +1209,9 @@ static void dualshock4_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	sc->battery_status = battery_status;
 	spin_unlock_irqrestore(&sc->lock, flags);
 
+	if (!touchpad)
+		return;
+
 	/*
 	 * The Dualshock 4 multi-touch trackpad data starts at offset 33 on USB
 	 * and 35 on Bluetooth.
@@ -1229,24 +1246,25 @@ static void dualshock4_parse_report(struct sony_sc *sc, u8 *rd, int size)
 			y = ((rd[offset+2] & 0xF0) >> 4) | (rd[offset+3] << 4);
 
 			active = !(rd[offset] >> 7);
-			input_mt_slot(sc->touchpad, n);
-			input_mt_report_slot_state(sc->touchpad, MT_TOOL_FINGER, active);
+			input_mt_slot(touchpad, n);
+			input_mt_report_slot_state(touchpad, MT_TOOL_FINGER, active);
 
 			if (active) {
-				input_report_abs(sc->touchpad, ABS_MT_POSITION_X, x);
-				input_report_abs(sc->touchpad, ABS_MT_POSITION_Y, y);
+				input_report_abs(touchpad, ABS_MT_POSITION_X, x);
+				input_report_abs(touchpad, ABS_MT_POSITION_Y, y);
 			}
 
 			offset += 4;
 		}
-		input_mt_sync_frame(sc->touchpad);
-		input_sync(sc->touchpad);
+		input_mt_sync_frame(touchpad);
+		input_sync(touchpad);
 	}
 }
 
 static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 {
 	int n, offset, relx, rely;
+	struct input_dev *touchpad;
 	u8 active;
 
 	/*
@@ -1269,7 +1287,13 @@ static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	 */
 	offset = 1;
 
-	input_report_key(sc->touchpad, BTN_LEFT, rd[offset] & 0x0F);
+	rcu_read_lock();
+	touchpad = rcu_dereference(sc->touchpad);
+	rcu_read_unlock();
+	if (!touchpad)
+		return;
+
+	input_report_key(touchpad, BTN_LEFT, rd[offset] & 0x0F);
 	active = (rd[offset] >> 4);
 	relx = (s8) rd[offset+5];
 	rely = ((s8) rd[offset+10]) * -1;
@@ -1283,20 +1307,20 @@ static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 		x = rd[offset] | ((rd[offset+1] & 0x0F) << 8);
 		y = ((rd[offset+1] & 0xF0) >> 4) | (rd[offset+2] << 4);
 
-		input_mt_slot(sc->touchpad, n);
-		input_mt_report_slot_state(sc->touchpad, MT_TOOL_FINGER, active & 0x03);
+		input_mt_slot(touchpad, n);
+		input_mt_report_slot_state(touchpad, MT_TOOL_FINGER, active & 0x03);
 
 		if (active & 0x03) {
 			contactx = rd[offset+3] & 0x0F;
 			contacty = rd[offset+3] >> 4;
-			input_report_abs(sc->touchpad, ABS_MT_TOUCH_MAJOR,
+			input_report_abs(touchpad, ABS_MT_TOUCH_MAJOR,
 				max(contactx, contacty));
-			input_report_abs(sc->touchpad, ABS_MT_TOUCH_MINOR,
+			input_report_abs(touchpad, ABS_MT_TOUCH_MINOR,
 				min(contactx, contacty));
-			input_report_abs(sc->touchpad, ABS_MT_ORIENTATION,
+			input_report_abs(touchpad, ABS_MT_ORIENTATION,
 				(bool) (contactx > contacty));
-			input_report_abs(sc->touchpad, ABS_MT_POSITION_X, x);
-			input_report_abs(sc->touchpad, ABS_MT_POSITION_Y,
+			input_report_abs(touchpad, ABS_MT_POSITION_X, x);
+			input_report_abs(touchpad, ABS_MT_POSITION_Y,
 				NSG_MRXU_MAX_Y - y);
 			/*
 			 * The relative coordinates belong to the first touch
@@ -1304,8 +1328,8 @@ static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 			 * when the first is not active.
 			 */
 			if ((n == 0) || ((n == 1) && (active & 0x01))) {
-				input_report_rel(sc->touchpad, REL_X, relx);
-				input_report_rel(sc->touchpad, REL_Y, rely);
+				input_report_rel(touchpad, REL_X, relx);
+				input_report_rel(touchpad, REL_Y, rely);
 			}
 		}
 
@@ -1313,15 +1337,31 @@ static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 		active >>= 2;
 	}
 
-	input_mt_sync_frame(sc->touchpad);
+	input_mt_sync_frame(touchpad);
 
-	input_sync(sc->touchpad);
+	input_sync(touchpad);
 }
 
 static int sony_raw_event(struct hid_device *hdev, struct hid_report *report,
 		u8 *rd, int size)
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
+	int ret;
+
+	/*
+	 * Check if we're the client hdev, which is only used for a separate
+	 * hidraw device. If so, there's nothing to be done here.
+	 */
+	if (hdev->ll_driver == &sony_client_ll_driver)
+		return 0;
+
+	if (sc->client_opened) {
+		ret = hid_input_report(sc->client_hdev, HID_INPUT_REPORT, rd, size, 0);
+		if (ret) {
+			hid_err(hdev, "can't send input report to client hdev: %d\n", ret);
+			return ret;
+		}
+	}
 
 	/*
 	 * Sixaxis HID report has acclerometers/gyro with MSByte first, this
@@ -1494,19 +1534,20 @@ static int sony_register_touchpad(struct sony_sc *sc, int touch_count,
 	size_t name_sz;
 	char *name;
 	int ret;
+	struct input_dev *touchpad;
 
-	sc->touchpad = devm_input_allocate_device(&sc->hdev->dev);
-	if (!sc->touchpad)
+	touchpad = devm_input_allocate_device(&sc->hdev->dev);
+	if (!touchpad)
 		return -ENOMEM;
 
-	input_set_drvdata(sc->touchpad, sc);
-	sc->touchpad->dev.parent = &sc->hdev->dev;
-	sc->touchpad->phys = sc->hdev->phys;
-	sc->touchpad->uniq = sc->hdev->uniq;
-	sc->touchpad->id.bustype = sc->hdev->bus;
-	sc->touchpad->id.vendor = sc->hdev->vendor;
-	sc->touchpad->id.product = sc->hdev->product;
-	sc->touchpad->id.version = sc->hdev->version;
+	input_set_drvdata(touchpad, sc);
+	touchpad->dev.parent = &sc->hdev->dev;
+	touchpad->phys = sc->hdev->phys;
+	touchpad->uniq = sc->hdev->uniq;
+	touchpad->id.bustype = sc->hdev->bus;
+	touchpad->id.vendor = sc->hdev->vendor;
+	touchpad->id.product = sc->hdev->product;
+	touchpad->id.version = sc->hdev->version;
 
 	/* Append a suffix to the controller name as there are various
 	 * DS4 compatible non-Sony devices with different names.
@@ -1516,38 +1557,40 @@ static int sony_register_touchpad(struct sony_sc *sc, int touch_count,
 	if (!name)
 		return -ENOMEM;
 	snprintf(name, name_sz, "%s" DS4_TOUCHPAD_SUFFIX, sc->hdev->name);
-	sc->touchpad->name = name;
+	touchpad->name = name;
 
 	/* We map the button underneath the touchpad to BTN_LEFT. */
-	__set_bit(EV_KEY, sc->touchpad->evbit);
-	__set_bit(BTN_LEFT, sc->touchpad->keybit);
-	__set_bit(INPUT_PROP_BUTTONPAD, sc->touchpad->propbit);
+	__set_bit(EV_KEY, touchpad->evbit);
+	__set_bit(BTN_LEFT, touchpad->keybit);
+	__set_bit(INPUT_PROP_BUTTONPAD, touchpad->propbit);
 
-	input_set_abs_params(sc->touchpad, ABS_MT_POSITION_X, 0, w, 0, 0);
-	input_set_abs_params(sc->touchpad, ABS_MT_POSITION_Y, 0, h, 0, 0);
+	input_set_abs_params(touchpad, ABS_MT_POSITION_X, 0, w, 0, 0);
+	input_set_abs_params(touchpad, ABS_MT_POSITION_Y, 0, h, 0, 0);
 
 	if (touch_major > 0) {
-		input_set_abs_params(sc->touchpad, ABS_MT_TOUCH_MAJOR, 
+		input_set_abs_params(touchpad, ABS_MT_TOUCH_MAJOR, 
 			0, touch_major, 0, 0);
 		if (touch_minor > 0)
-			input_set_abs_params(sc->touchpad, ABS_MT_TOUCH_MINOR, 
+			input_set_abs_params(touchpad, ABS_MT_TOUCH_MINOR, 
 				0, touch_minor, 0, 0);
 		if (orientation > 0)
-			input_set_abs_params(sc->touchpad, ABS_MT_ORIENTATION, 
+			input_set_abs_params(touchpad, ABS_MT_ORIENTATION, 
 				0, orientation, 0, 0);
 	}
 
 	if (sc->quirks & NSG_MRXU_REMOTE) {
-		__set_bit(EV_REL, sc->touchpad->evbit);
+		__set_bit(EV_REL, touchpad->evbit);
 	}
 
-	ret = input_mt_init_slots(sc->touchpad, touch_count, INPUT_MT_POINTER);
+	ret = input_mt_init_slots(touchpad, touch_count, INPUT_MT_POINTER);
 	if (ret < 0)
 		return ret;
 
-	ret = input_register_device(sc->touchpad);
+	ret = input_register_device(touchpad);
 	if (ret < 0)
 		return ret;
+
+	rcu_assign_pointer(sc->touchpad, touchpad);
 
 	return 0;
 }
@@ -1623,6 +1666,51 @@ static int sony_register_sensors(struct sony_sc *sc)
 		return ret;
 
 	return 0;
+}
+
+static void sony_unregister_touchpad(struct sony_sc *sc)
+{
+	struct input_dev *touchpad;
+
+	rcu_read_lock();
+	touchpad = rcu_dereference(sc->touchpad);
+	rcu_read_unlock();
+
+	if (!touchpad)
+		return;
+
+	RCU_INIT_POINTER(sc->touchpad, NULL);
+	synchronize_rcu();
+	input_unregister_device(touchpad);
+}
+
+static int sony_register_ds4_touchpad(struct sony_sc *sc)
+{
+	struct input_dev *touchpad;
+	int ret;
+
+	if (!touchpad_mouse)
+		return 0;
+
+	rcu_read_lock();
+	touchpad = rcu_dereference(sc->touchpad);
+	rcu_read_unlock();
+
+	if (touchpad)
+		return 0;
+
+	/*
+	 * The Dualshock 4 touchpad supports 2 touches and has a
+	 * resolution of 1920x942 (44.86 dots/mm).
+	 */
+	ret = sony_register_touchpad(sc, 2, 1920, 942, 0, 0, 0);
+	if (ret) {
+		hid_err(sc->hdev,
+		"Unable to initialize multi-touch slots: %d\n",
+		ret);
+	}
+
+	return ret;
 }
 
 /*
@@ -2533,10 +2621,9 @@ static inline int sony_compare_connection_type(struct sony_sc *sc0,
 static int sony_check_add_dev_list(struct sony_sc *sc)
 {
 	struct sony_sc *entry;
-	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&sony_dev_list_lock, flags);
+	mutex_lock(&sony_dev_list_lock);
 
 	list_for_each_entry(entry, &sony_device_list, list_node) {
 		ret = memcmp(sc->mac_address, entry->mac_address,
@@ -2558,18 +2645,16 @@ static int sony_check_add_dev_list(struct sony_sc *sc)
 	list_add(&(sc->list_node), &sony_device_list);
 
 unlock:
-	spin_unlock_irqrestore(&sony_dev_list_lock, flags);
+	mutex_unlock(&sony_dev_list_lock);
 	return ret;
 }
 
 static void sony_remove_dev_list(struct sony_sc *sc)
 {
-	unsigned long flags;
-
 	if (sc->list_node.next) {
-		spin_lock_irqsave(&sony_dev_list_lock, flags);
+		mutex_lock(&sony_dev_list_lock);
 		list_del(&(sc->list_node));
-		spin_unlock_irqrestore(&sony_dev_list_lock, flags);
+		mutex_unlock(&sony_dev_list_lock);
 	}
 }
 
@@ -2874,17 +2959,9 @@ static int sony_input_configured(struct hid_device *hdev,
 		}
 		sc->hw_version_created = true;
 
-		/*
-		 * The Dualshock 4 touchpad supports 2 touches and has a
-		 * resolution of 1920x942 (44.86 dots/mm).
-		 */
-		ret = sony_register_touchpad(sc, 2, 1920, 942, 0, 0, 0);
-		if (ret) {
-			hid_err(sc->hdev,
-			"Unable to initialize multi-touch slots: %d\n",
-			ret);
+		ret = sony_register_ds4_touchpad(sc);
+		if (ret)
 			goto err_stop;
-		}
 
 		ret = sony_register_sensors(sc);
 		if (ret) {
@@ -2974,6 +3051,92 @@ err_stop:
 	return ret;
 }
 
+static int sony_client_ll_parse(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	return hid_parse_report(hdev, sc->hdev->dev_rdesc,
+			sc->hdev->dev_rsize);
+}
+
+static int sony_client_ll_start(struct hid_device *hdev)
+{
+	return 0;
+}
+
+static void sony_client_ll_stop(struct hid_device *hdev)
+{
+}
+
+static int sony_client_ll_open(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	mutex_lock(&sc->mutex);
+	sc->client_opened = true;
+	mutex_unlock(&sc->mutex);
+
+	if (sc->quirks & DUALSHOCK4_CONTROLLER)
+		sony_unregister_touchpad(sc);
+
+	return 0;
+}
+
+static void sony_client_ll_close(struct hid_device *hdev)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	mutex_lock(&sc->mutex);
+	sc->client_opened = false;
+	mutex_unlock(&sc->mutex);
+
+	if (sc->quirks & DUALSHOCK4_CONTROLLER)
+		sony_register_ds4_touchpad(sc);
+}
+
+static int sony_client_ll_raw_request(struct hid_device *hdev,
+				unsigned char reportnum, u8 *buf,
+				size_t count, unsigned char report_type,
+				int reqtype)
+{
+	struct sony_sc *sc = hdev->driver_data;
+
+	return hid_hw_raw_request(sc->hdev, reportnum, buf, count,
+			report_type, reqtype);
+}
+
+static struct hid_ll_driver sony_client_ll_driver = {
+	.parse = sony_client_ll_parse,
+	.start = sony_client_ll_start,
+	.stop = sony_client_ll_stop,
+	.open = sony_client_ll_open,
+	.close = sony_client_ll_close,
+	.raw_request = sony_client_ll_raw_request,
+};
+
+static struct hid_device *sony_create_client_hid(struct hid_device *hdev)
+{
+	struct hid_device *client_hdev;
+
+	client_hdev = hid_allocate_device();
+	if (IS_ERR(client_hdev))
+		return client_hdev;
+
+	client_hdev->ll_driver = &sony_client_ll_driver;
+	client_hdev->dev.parent = hdev->dev.parent;
+	client_hdev->bus = hdev->bus;
+	client_hdev->vendor = hdev->vendor;
+	client_hdev->product = hdev->product;
+	client_hdev->version = hdev->version;
+	client_hdev->type = hdev->type;
+	client_hdev->country = hdev->country;
+	strlcpy(client_hdev->name, hdev->name,
+			sizeof(client_hdev->name));
+	strlcpy(client_hdev->phys, hdev->phys,
+			sizeof(client_hdev->phys));
+	return client_hdev;
+}
+
 static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret;
@@ -2981,6 +3144,19 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	struct sony_sc *sc;
 	struct usb_device *usbdev;
 	unsigned int connect_mask = HID_CONNECT_DEFAULT;
+
+	ret = hid_parse(hdev);
+	if (ret) {
+		hid_err(hdev, "parse failed\n");
+		return ret;
+	}
+
+	/*
+	 * The virtual client_dev is only used for hidraw.
+	 * Also avoid the recursive probe.
+	 */
+	if (hdev->ll_driver == &sony_client_ll_driver)
+		return hid_hw_start(hdev, HID_CONNECT_HIDRAW);
 
 	if (!strcmp(hdev->name, "FutureMax Dance Mat"))
 		quirks |= FUTUREMAX_DANCE_MAT;
@@ -2996,16 +3172,11 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	spin_lock_init(&sc->lock);
+	mutex_init(&sc->mutex);
 
 	sc->quirks = quirks;
 	hid_set_drvdata(hdev, sc);
 	sc->hdev = hdev;
-
-	ret = hid_parse(hdev);
-	if (ret) {
-		hid_err(hdev, "parse failed\n");
-		return ret;
-	}
 
 	if (sc->quirks & VAIO_RDESC_CONSTANT)
 		connect_mask |= HID_CONNECT_HIDDEV_FORCE;
@@ -3021,9 +3192,29 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (sc->quirks & (SIXAXIS_CONTROLLER | DUALSHOCK4_CONTROLLER))
 		hdev->version |= 0x8000;
 
+	/* For DualShock 4 controllers, we create a client_hid device so that
+	 * we can tell when it's been opened directly and disable the touchpad
+	 * from being used as a mouse at the same time.
+	 */
+	if (sc->quirks & DUALSHOCK4_CONTROLLER) {
+		connect_mask &= ~HID_CONNECT_HIDRAW;
+		sc->client_hdev = sony_create_client_hid(hdev);
+		if (IS_ERR(sc->client_hdev))
+			return PTR_ERR(sc->client_hdev);
+		sc->client_hdev->driver_data = sc;
+	}
+
 	ret = hid_hw_start(hdev, connect_mask);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
+		return ret;
+	}
+
+	if (sc->client_hdev)
+		ret = hid_add_device(sc->client_hdev);
+	if (ret) {
+		hid_err(hdev, "client hw start failed\n");
+		hid_hw_stop(hdev);
 		return ret;
 	}
 
@@ -3037,6 +3228,8 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	 */
 	if (!(hdev->claimed & HID_CLAIMED_INPUT)) {
 		hid_err(hdev, "failed to claim input\n");
+		if (sc->client_hdev)
+			hid_destroy_device(sc->client_hdev);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -3081,6 +3274,13 @@ err:
 static void sony_remove(struct hid_device *hdev)
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
+
+	if (!sc || hdev->ll_driver == &sony_client_ll_driver) {
+		hid_hw_stop(hdev);
+		return;
+	}
+	if (sc->client_hdev)
+		hid_destroy_device(sc->client_hdev);
 
 	if (sc->quirks & (GHL_GUITAR_PS3WIIU | GHL_GUITAR_PS4)) {
 		del_timer_sync(&sc->ghl_poke_timer);
@@ -3143,6 +3343,39 @@ static int sony_resume(struct hid_device *hdev)
 }
 
 #endif
+
+static int sony_param_set_touchpad_mouse(const char *val,
+					const struct kernel_param *kp)
+{
+	struct sony_sc *sc;
+	int ret;
+
+	ret = param_set_bool(val, kp);
+	if (ret)
+		return ret;
+
+	mutex_lock(&sony_dev_list_lock);
+	list_for_each_entry(sc, &sony_device_list, list_node) {
+		mutex_lock(&sc->mutex);
+		if (!sc->client_opened) {
+			if (touchpad_mouse)
+				sony_register_ds4_touchpad(sc);
+			else
+				sony_unregister_touchpad(sc);
+		}
+		mutex_unlock(&sc->mutex);
+	}
+	mutex_unlock(&sony_dev_list_lock);
+	return 0;
+}
+
+static const struct kernel_param_ops sony_touchpad_mouse_ops = {
+	.set	= sony_param_set_touchpad_mouse,
+	.get	= param_get_bool,
+};
+
+module_param_cb(touchpad_mouse, &sony_touchpad_mouse_ops, &touchpad_mouse, 0644);
+MODULE_PARM_DESC(touchpad_mouse, "Enable mouse emulation using the touchpad");
 
 static const struct hid_device_id sony_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SONY, USB_DEVICE_ID_SONY_PS3_CONTROLLER),
