@@ -29,10 +29,137 @@
 #include <drm/ttm/ttm_resource.h>
 #include <drm/ttm/ttm_bo_driver.h>
 
+/**
+ * ttm_lru_bulk_move_init - initialize a bulk move structure
+ * @bulk: the structure to init
+ *
+ * For now just memset the structure to zero.
+ */
+void ttm_lru_bulk_move_init(struct ttm_lru_bulk_move *bulk)
+{
+	memset(bulk, 0, sizeof(*bulk));
+}
+EXPORT_SYMBOL(ttm_lru_bulk_move_init);
+
+/**
+ * ttm_lru_bulk_move_tail - bulk move range of resources to the LRU tail.
+ *
+ * @bulk: bulk move structure
+ *
+ * Bulk move BOs to the LRU tail, only valid to use when driver makes sure that
+ * resource order never changes. Should be called with &ttm_device.lru_lock held.
+ */
+void ttm_lru_bulk_move_tail(struct ttm_lru_bulk_move *bulk)
+{
+	unsigned i, j;
+
+	for (i = 0; i < TTM_NUM_MEM_TYPES; ++i) {
+		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
+			struct ttm_lru_bulk_move_pos *pos = &bulk->pos[i][j];
+			struct ttm_resource_manager *man;
+
+			if (!pos->first)
+				continue;
+
+			lockdep_assert_held(&pos->first->bo->bdev->lru_lock);
+			dma_resv_assert_held(pos->first->bo->base.resv);
+			dma_resv_assert_held(pos->last->bo->base.resv);
+
+			man = ttm_manager_type(pos->first->bo->bdev, i);
+			list_bulk_move_tail(&man->lru[j], &pos->first->lru,
+					    &pos->last->lru);
+		}
+	}
+}
+EXPORT_SYMBOL(ttm_lru_bulk_move_tail);
+
+/* Return the bulk move pos object for this resource */
+static struct ttm_lru_bulk_move_pos *
+ttm_lru_bulk_move_pos(struct ttm_lru_bulk_move *bulk, struct ttm_resource *res)
+{
+	return &bulk->pos[res->mem_type][res->bo->priority];
+}
+
+/* Move the resource to the tail of the bulk move range */
+static void ttm_lru_bulk_move_pos_tail(struct ttm_lru_bulk_move_pos *pos,
+				       struct ttm_resource *res)
+{
+	if (pos->last != res) {
+		list_move(&res->lru, &pos->last->lru);
+		pos->last = res;
+	}
+}
+
+/* Add the resource to a bulk_move cursor */
+void ttm_lru_bulk_move_add(struct ttm_lru_bulk_move *bulk,
+			   struct ttm_resource *res)
+{
+	struct ttm_lru_bulk_move_pos *pos = ttm_lru_bulk_move_pos(bulk, res);
+
+	if (!pos->first) {
+		pos->first = res;
+		pos->last = res;
+	} else {
+		ttm_lru_bulk_move_pos_tail(pos, res);
+	}
+}
+
+/* Remove the resource from a bulk_move range */
+void ttm_lru_bulk_move_del(struct ttm_lru_bulk_move *bulk,
+			   struct ttm_resource *res)
+{
+	struct ttm_lru_bulk_move_pos *pos = ttm_lru_bulk_move_pos(bulk, res);
+
+	if (unlikely(pos->first == res && pos->last == res)) {
+		pos->first = NULL;
+		pos->last = NULL;
+	} else if (pos->first == res) {
+		pos->first = list_next_entry(res, lru);
+	} else if (pos->last == res) {
+		pos->last = list_prev_entry(res, lru);
+	} else {
+		list_move(&res->lru, &pos->last->lru);
+	}
+}
+
+/* Move a resource to the LRU or bulk tail */
+void ttm_resource_move_to_lru_tail(struct ttm_resource *res)
+{
+	struct ttm_buffer_object *bo = res->bo;
+	struct ttm_device *bdev = bo->bdev;
+
+	lockdep_assert_held(&bo->bdev->lru_lock);
+
+	if (bo->pin_count) {
+		list_move_tail(&res->lru, &bdev->pinned);
+
+	} else	if (bo->bulk_move) {
+		struct ttm_lru_bulk_move_pos *pos =
+			ttm_lru_bulk_move_pos(bo->bulk_move, res);
+
+		ttm_lru_bulk_move_pos_tail(pos, res);
+	} else {
+		struct ttm_resource_manager *man;
+
+		man = ttm_manager_type(bdev, res->mem_type);
+		list_move_tail(&res->lru, &man->lru[bo->priority]);
+	}
+}
+
+/**
+ * ttm_resource_init - resource object constructure
+ * @bo: buffer object this resources is allocated for
+ * @place: placement of the resource
+ * @res: the resource object to inistilize
+ *
+ * Initialize a new resource object. Counterpart of &ttm_resource_fini.
+ */
 void ttm_resource_init(struct ttm_buffer_object *bo,
                        const struct ttm_place *place,
                        struct ttm_resource *res)
 {
+	struct ttm_resource_manager *man;
+
 	res->start = 0;
 	res->num_pages = PFN_UP(bo->base.size);
 	res->mem_type = place->mem_type;
@@ -41,8 +168,38 @@ void ttm_resource_init(struct ttm_buffer_object *bo,
 	res->bus.offset = 0;
 	res->bus.is_iomem = false;
 	res->bus.caching = ttm_cached;
+	res->bo = bo;
+	INIT_LIST_HEAD(&res->lru);
+
+	man = ttm_manager_type(bo->bdev, place->mem_type);
+	spin_lock(&bo->bdev->lru_lock);
+	man->usage += bo->base.size;
+	ttm_resource_move_to_lru_tail(res);
+	spin_unlock(&bo->bdev->lru_lock);
 }
 EXPORT_SYMBOL(ttm_resource_init);
+
+/**
+ * ttm_resource_fini - resource destructor
+ * @man: the resource manager this resource belongs to
+ * @res: the resource to clean up
+ *
+ * Should be used by resource manager backends to clean up the TTM resource
+ * objects before freeing the underlying structure. Makes sure the resource is
+ * removed from the LRU before destruction.
+ * Counterpart of &ttm_resource_init.
+ */
+void ttm_resource_fini(struct ttm_resource_manager *man,
+		       struct ttm_resource *res)
+{
+	struct ttm_device *bdev = man->bdev;
+
+	spin_lock(&bdev->lru_lock);
+	list_del_init(&res->lru);
+	man->usage -= res->num_pages << PAGE_SHIFT;
+	spin_unlock(&bdev->lru_lock);
+}
+EXPORT_SYMBOL(ttm_resource_fini);
 
 int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
@@ -60,6 +217,12 @@ void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res)
 
 	if (!*res)
 		return;
+
+	if (bo->bulk_move) {
+		spin_lock(&bo->bdev->lru_lock);
+		ttm_lru_bulk_move_del(bo->bulk_move, *res);
+		spin_unlock(&bo->bdev->lru_lock);
+	}
 
 	man = ttm_manager_type(bo->bdev, (*res)->mem_type);
 	man->func->free(man, *res);
@@ -116,21 +279,33 @@ bool ttm_resource_compat(struct ttm_resource *res,
 }
 EXPORT_SYMBOL(ttm_resource_compat);
 
+void ttm_resource_set_bo(struct ttm_resource *res,
+			 struct ttm_buffer_object *bo)
+{
+	spin_lock(&bo->bdev->lru_lock);
+	res->bo = bo;
+	spin_unlock(&bo->bdev->lru_lock);
+}
+
 /**
  * ttm_resource_manager_init
  *
  * @man: memory manager object to init
+ * @bdev: ttm device this manager belongs to
  * @p_size: size managed area in pages.
  *
  * Initialise core parts of a manager object.
  */
 void ttm_resource_manager_init(struct ttm_resource_manager *man,
+			       struct ttm_device *bdev,
 			       unsigned long p_size)
 {
 	unsigned i;
 
 	spin_lock_init(&man->move_lock);
+	man->bdev = bdev;
 	man->size = p_size;
+	man->usage = 0;
 
 	for (i = 0; i < TTM_MAX_BO_PRIORITY; ++i)
 		INIT_LIST_HEAD(&man->lru[i]);
@@ -192,6 +367,24 @@ int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 EXPORT_SYMBOL(ttm_resource_manager_evict_all);
 
 /**
+ * ttm_resource_manager_usage
+ *
+ * @man: A memory manager object.
+ *
+ * Return how many resources are currently used.
+ */
+uint64_t ttm_resource_manager_usage(struct ttm_resource_manager *man)
+{
+	uint64_t usage;
+
+	spin_lock(&man->bdev->lru_lock);
+	usage = man->usage;
+	spin_unlock(&man->bdev->lru_lock);
+	return usage;
+}
+EXPORT_SYMBOL(ttm_resource_manager_usage);
+
+/**
  * ttm_resource_manager_debug
  *
  * @man: manager type to dump.
@@ -203,6 +396,7 @@ void ttm_resource_manager_debug(struct ttm_resource_manager *man,
 	drm_printf(p, "  use_type: %d\n", man->use_type);
 	drm_printf(p, "  use_tt: %d\n", man->use_tt);
 	drm_printf(p, "  size: %llu\n", man->size);
+	drm_printf(p, "  usage: %llu\n", ttm_resource_manager_usage(man));
 	if (man->func->debug)
 		man->func->debug(man, p);
 }
