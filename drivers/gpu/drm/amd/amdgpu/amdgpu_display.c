@@ -41,6 +41,11 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_vblank.h>
 
+static int amdgpu_display_framebuffer_init(struct drm_device *dev,
+					   struct amdgpu_framebuffer *rfb,
+					   const struct drm_mode_fb_cmd2 *mode_cmd,
+					   struct drm_gem_object *obj);
+
 static void amdgpu_display_flip_callback(struct dma_fence *f,
 					 struct dma_fence_cb *cb)
 {
@@ -113,8 +118,9 @@ static void amdgpu_display_flip_work_func(struct work_struct *__work)
 	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 
 
-	DRM_DEBUG_DRIVER("crtc:%d[%p], pflip_stat:AMDGPU_FLIP_SUBMITTED, work: %p,\n",
-					 amdgpu_crtc->crtc_id, amdgpu_crtc, work);
+	drm_dbg_vbl(adev_to_drm(adev),
+		    "crtc:%d[%p], pflip_stat:AMDGPU_FLIP_SUBMITTED, work: %p,\n",
+		    amdgpu_crtc->crtc_id, amdgpu_crtc, work);
 
 }
 
@@ -504,28 +510,9 @@ uint32_t amdgpu_display_supported_domains(struct amdgpu_device *adev,
 	 */
 	if ((bo_flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC) &&
 	    amdgpu_bo_support_uswc(bo_flags) &&
-	    amdgpu_device_asic_has_dc_support(adev->asic_type)) {
-		switch (adev->asic_type) {
-		case CHIP_CARRIZO:
-		case CHIP_STONEY:
-			domain |= AMDGPU_GEM_DOMAIN_GTT;
-			break;
-		case CHIP_RAVEN:
-			/* enable S/G on PCO and RV2 */
-			if ((adev->apu_flags & AMD_APU_IS_RAVEN2) ||
-			    (adev->apu_flags & AMD_APU_IS_PICASSO))
-				domain |= AMDGPU_GEM_DOMAIN_GTT;
-			break;
-		case CHIP_RENOIR:
-		case CHIP_VANGOGH:
-		case CHIP_YELLOW_CARP:
-			domain |= AMDGPU_GEM_DOMAIN_GTT;
-			break;
-
-		default:
-			break;
-		}
-	}
+	    amdgpu_device_asic_has_dc_support(adev->asic_type) &&
+	    adev->mode_info.gpu_vm_support)
+		domain |= AMDGPU_GEM_DOMAIN_GTT;
 #endif
 
 	return domain;
@@ -708,9 +695,9 @@ static int convert_tiling_flags_to_modifier(struct amdgpu_framebuffer *afb)
 			return -EINVAL;
 		}
 
-		if (adev->asic_type >= CHIP_SIENNA_CICHLID)
+		if (adev->ip_versions[GC_HWIP][0] >= IP_VERSION(10, 3, 0))
 			version = AMD_FMT_MOD_TILE_VER_GFX10_RBPLUS;
-		else if (adev->family == AMDGPU_FAMILY_NV)
+		else if (adev->ip_versions[GC_HWIP][0] >= IP_VERSION(10, 0, 0))
 			version = AMD_FMT_MOD_TILE_VER_GFX10;
 		else
 			version = AMD_FMT_MOD_TILE_VER_GFX9;
@@ -804,7 +791,7 @@ static int convert_tiling_flags_to_modifier(struct amdgpu_framebuffer *afb)
 				if (adev->family >= AMDGPU_FAMILY_NV) {
 					int extra_pipe = 0;
 
-					if (adev->asic_type >= CHIP_SIENNA_CICHLID &&
+					if ((adev->ip_versions[GC_HWIP][0] >= IP_VERSION(10, 3, 0)) &&
 					    pipes == packers && pipes > 1)
 						extra_pipe = 1;
 
@@ -1056,35 +1043,11 @@ static int amdgpu_display_get_fb_info(const struct amdgpu_framebuffer *amdgpu_fb
 	return r;
 }
 
-int amdgpu_display_gem_fb_init(struct drm_device *dev,
-			       struct amdgpu_framebuffer *rfb,
-			       const struct drm_mode_fb_cmd2 *mode_cmd,
-			       struct drm_gem_object *obj)
-{
-	int ret;
-
-	rfb->base.obj[0] = obj;
-	drm_helper_mode_fill_fb_struct(dev, &rfb->base, mode_cmd);
-
-	ret = amdgpu_display_framebuffer_init(dev, rfb, mode_cmd, obj);
-	if (ret)
-		goto err;
-
-	ret = drm_framebuffer_init(dev, &rfb->base, &amdgpu_fb_funcs);
-	if (ret)
-		goto err;
-
-	return 0;
-err:
-	drm_dbg_kms(dev, "Failed to init gem fb: %d\n", ret);
-	rfb->base.obj[0] = NULL;
-	return ret;
-}
-
-int amdgpu_display_gem_fb_verify_and_init(
-	struct drm_device *dev, struct amdgpu_framebuffer *rfb,
-	struct drm_file *file_priv, const struct drm_mode_fb_cmd2 *mode_cmd,
-	struct drm_gem_object *obj)
+static int amdgpu_display_gem_fb_verify_and_init(struct drm_device *dev,
+						 struct amdgpu_framebuffer *rfb,
+						 struct drm_file *file_priv,
+						 const struct drm_mode_fb_cmd2 *mode_cmd,
+						 struct drm_gem_object *obj)
 {
 	int ret;
 
@@ -1116,10 +1079,10 @@ err:
 	return ret;
 }
 
-int amdgpu_display_framebuffer_init(struct drm_device *dev,
-				    struct amdgpu_framebuffer *rfb,
-				    const struct drm_mode_fb_cmd2 *mode_cmd,
-				    struct drm_gem_object *obj)
+static int amdgpu_display_framebuffer_init(struct drm_device *dev,
+					   struct amdgpu_framebuffer *rfb,
+					   const struct drm_mode_fb_cmd2 *mode_cmd,
+					   struct drm_gem_object *obj)
 {
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	int ret, i;
