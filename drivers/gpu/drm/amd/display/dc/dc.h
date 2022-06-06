@@ -338,6 +338,7 @@ struct dc_config {
 	bool is_asymmetric_memory;
 	bool is_single_rank_dimm;
 	bool use_pipe_ctx_sync_logic;
+	bool enable_mipi_converter_optimization;
 };
 
 enum visual_confirm {
@@ -1225,6 +1226,7 @@ struct dpcd_caps {
 	bool panel_mode_edp;
 	bool dpcd_display_control_capable;
 	bool ext_receiver_cap_field_present;
+	bool set_power_state_capable_edp;
 	bool dynamic_backlight_capable_edp;
 	union dpcd_fec_capability fec_cap;
 	struct dpcd_dsc_capabilities dsc_caps;
