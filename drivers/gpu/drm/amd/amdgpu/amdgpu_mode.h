@@ -341,6 +341,7 @@ struct amdgpu_mode_info {
 	int			num_crtc; /* number of crtcs */
 	int			num_hpd; /* number of hpd pins */
 	int			num_dig; /* number of dig blocks */
+	bool			gpu_vm_support; /* supports display from GTT */
 	int			disp_priority;
 	const struct amdgpu_display_funcs *funcs;
 	const enum drm_plane_type *plane_type;
@@ -590,19 +591,6 @@ int amdgpu_display_get_crtc_scanoutpos(struct drm_device *dev,
 			unsigned int pipe, unsigned int flags, int *vpos,
 			int *hpos, ktime_t *stime, ktime_t *etime,
 			const struct drm_display_mode *mode);
-
-int amdgpu_display_gem_fb_init(struct drm_device *dev,
-			       struct amdgpu_framebuffer *rfb,
-			       const struct drm_mode_fb_cmd2 *mode_cmd,
-			       struct drm_gem_object *obj);
-int amdgpu_display_gem_fb_verify_and_init(
-	struct drm_device *dev, struct amdgpu_framebuffer *rfb,
-	struct drm_file *file_priv, const struct drm_mode_fb_cmd2 *mode_cmd,
-	struct drm_gem_object *obj);
-int amdgpu_display_framebuffer_init(struct drm_device *dev,
-				    struct amdgpu_framebuffer *rfb,
-				    const struct drm_mode_fb_cmd2 *mode_cmd,
-				    struct drm_gem_object *obj);
 
 int amdgpufb_remove(struct drm_device *dev, struct drm_framebuffer *fb);
 

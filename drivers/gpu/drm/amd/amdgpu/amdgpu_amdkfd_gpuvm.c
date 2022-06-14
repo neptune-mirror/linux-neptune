@@ -121,7 +121,7 @@ static size_t amdgpu_amdkfd_acc_size(uint64_t size)
 }
 
 /**
- * @amdgpu_amdkfd_reserve_mem_limit() - Decrease available memory by size
+ * amdgpu_amdkfd_reserve_mem_limit() - Decrease available memory by size
  * of buffer including any reserved for control structures
  *
  * @adev: Device to which allocated BO belongs to
@@ -778,7 +778,7 @@ unwind:
 			continue;
 		if (attachment[i]->bo_va) {
 			amdgpu_bo_reserve(bo[i], true);
-			amdgpu_vm_bo_rmv(adev, attachment[i]->bo_va);
+			amdgpu_vm_bo_del(adev, attachment[i]->bo_va);
 			amdgpu_bo_unreserve(bo[i]);
 			list_del(&attachment[i]->list);
 		}
@@ -795,7 +795,7 @@ static void kfd_mem_detach(struct kfd_mem_attachment *attachment)
 
 	pr_debug("\t remove VA 0x%llx in entry %p\n",
 			attachment->va, attachment);
-	amdgpu_vm_bo_rmv(attachment->adev, attachment->bo_va);
+	amdgpu_vm_bo_del(attachment->adev, attachment->bo_va);
 	drm_gem_object_put(&bo->tbo.base);
 	list_del(&attachment->list);
 	kfree(attachment);
@@ -842,7 +842,8 @@ static void remove_kgd_mem_from_kfd_bo_list(struct kgd_mem *mem,
  *
  * Returns 0 for success, negative errno for errors.
  */
-static int init_user_pages(struct kgd_mem *mem, uint64_t user_addr)
+static int init_user_pages(struct kgd_mem *mem, uint64_t user_addr,
+			   bool criu_resume)
 {
 	struct amdkfd_process_info *process_info = mem->process_info;
 	struct amdgpu_bo *bo = mem->bo;
@@ -862,6 +863,18 @@ static int init_user_pages(struct kgd_mem *mem, uint64_t user_addr)
 		pr_err("%s: Failed to register MMU notifier: %d\n",
 		       __func__, ret);
 		goto out;
+	}
+
+	if (criu_resume) {
+		/*
+		 * During a CRIU restore operation, the userptr buffer objects
+		 * will be validated in the restore_userptr_work worker at a
+		 * later stage when it is scheduled by another ioctl called by
+		 * CRIU master process for the target pid for restore.
+		 */
+		atomic_inc(&mem->invalid);
+		mutex_unlock(&process_info->lock);
+		return 0;
 	}
 
 	ret = amdgpu_ttm_tt_get_user_pages(bo, bo->tbo.ttm->pages);
@@ -1080,8 +1093,7 @@ static void unmap_bo_from_gpuvm(struct kgd_mem *mem,
 
 static int update_gpuvm_pte(struct kgd_mem *mem,
 			    struct kfd_mem_attachment *entry,
-			    struct amdgpu_sync *sync,
-			    bool *table_freed)
+			    struct amdgpu_sync *sync)
 {
 	struct amdgpu_bo_va *bo_va = entry->bo_va;
 	struct amdgpu_device *adev = entry->adev;
@@ -1092,7 +1104,7 @@ static int update_gpuvm_pte(struct kgd_mem *mem,
 		return ret;
 
 	/* Update the page tables  */
-	ret = amdgpu_vm_bo_update(adev, bo_va, false, table_freed);
+	ret = amdgpu_vm_bo_update(adev, bo_va, false);
 	if (ret) {
 		pr_err("amdgpu_vm_bo_update failed\n");
 		return ret;
@@ -1104,8 +1116,7 @@ static int update_gpuvm_pte(struct kgd_mem *mem,
 static int map_bo_to_gpuvm(struct kgd_mem *mem,
 			   struct kfd_mem_attachment *entry,
 			   struct amdgpu_sync *sync,
-			   bool no_update_pte,
-			   bool *table_freed)
+			   bool no_update_pte)
 {
 	int ret;
 
@@ -1122,7 +1133,7 @@ static int map_bo_to_gpuvm(struct kgd_mem *mem,
 	if (no_update_pte)
 		return 0;
 
-	ret = update_gpuvm_pte(mem, entry, sync, table_freed);
+	ret = update_gpuvm_pte(mem, entry, sync);
 	if (ret) {
 		pr_err("update_gpuvm_pte() failed\n");
 		goto update_gpuvm_pte_failed;
@@ -1452,10 +1463,39 @@ uint64_t amdgpu_amdkfd_gpuvm_get_process_page_dir(void *drm_priv)
 	return avm->pd_phys_addr;
 }
 
+void amdgpu_amdkfd_block_mmu_notifications(void *p)
+{
+	struct amdkfd_process_info *pinfo = (struct amdkfd_process_info *)p;
+
+	mutex_lock(&pinfo->lock);
+	WRITE_ONCE(pinfo->block_mmu_notifications, true);
+	mutex_unlock(&pinfo->lock);
+}
+
+int amdgpu_amdkfd_criu_resume(void *p)
+{
+	int ret = 0;
+	struct amdkfd_process_info *pinfo = (struct amdkfd_process_info *)p;
+
+	mutex_lock(&pinfo->lock);
+	pr_debug("scheduling work\n");
+	atomic_inc(&pinfo->evicted_bos);
+	if (!READ_ONCE(pinfo->block_mmu_notifications)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	WRITE_ONCE(pinfo->block_mmu_notifications, false);
+	schedule_delayed_work(&pinfo->restore_userptr_work, 0);
+
+out_unlock:
+	mutex_unlock(&pinfo->lock);
+	return ret;
+}
+
 int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 		struct amdgpu_device *adev, uint64_t va, uint64_t size,
 		void *drm_priv, struct kgd_mem **mem,
-		uint64_t *offset, uint32_t flags)
+		uint64_t *offset, uint32_t flags, bool criu_resume)
 {
 	struct amdgpu_vm *avm = drm_priv_to_vm(drm_priv);
 	enum ttm_bo_type bo_type = ttm_bo_type_device;
@@ -1558,7 +1598,8 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 	add_kgd_mem_to_kfd_bo_list(*mem, avm->process_info, user_addr);
 
 	if (user_addr) {
-		ret = init_user_pages(*mem, user_addr);
+		pr_debug("creating userptr BO for user_addr = %llu\n", user_addr);
+		ret = init_user_pages(*mem, user_addr, criu_resume);
 		if (ret)
 			goto allocate_init_user_pages_failed;
 	} else  if (flags & (KFD_IOC_ALLOC_MEM_FLAGS_DOORBELL |
@@ -1702,7 +1743,7 @@ int amdgpu_amdkfd_gpuvm_free_memory_of_gpu(
 
 int amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
 		struct amdgpu_device *adev, struct kgd_mem *mem,
-		void *drm_priv, bool *table_freed)
+		void *drm_priv)
 {
 	struct amdgpu_vm *avm = drm_priv_to_vm(drm_priv);
 	int ret;
@@ -1789,7 +1830,7 @@ int amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
 			 entry->va, entry->va + bo_size, entry);
 
 		ret = map_bo_to_gpuvm(mem, entry, ctx.sync,
-				      is_invalid_userptr, table_freed);
+				      is_invalid_userptr);
 		if (ret) {
 			pr_err("Failed to map bo to gpuvm\n");
 			goto out_unreserve;
@@ -1812,12 +1853,6 @@ int amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
 				&avm->process_info->eviction_fence->base,
 				true);
 	ret = unreserve_bo_and_vms(&ctx, false, false);
-
-	/* Only apply no TLB flush on Aldebaran to
-	 * workaround regressions on other Asics.
-	 */
-	if (table_freed && (adev->asic_type != CHIP_ALDEBARAN))
-		*table_freed = true;
 
 	goto out;
 
@@ -2068,6 +2103,10 @@ int amdgpu_amdkfd_evict_userptr(struct kgd_mem *mem,
 	int evicted_bos;
 	int r = 0;
 
+	/* Do not process MMU notifications until stage-4 IOCTL is received */
+	if (READ_ONCE(process_info->block_mmu_notifications))
+		return 0;
+
 	atomic_inc(&mem->invalid);
 	evicted_bos = atomic_inc_return(&process_info->evicted_bos);
 	if (evicted_bos == 1) {
@@ -2259,7 +2298,7 @@ static int validate_invalid_user_pages(struct amdkfd_process_info *process_info)
 				continue;
 
 			kfd_mem_dmaunmap_attachment(mem, attachment);
-			ret = update_gpuvm_pte(mem, attachment, &sync, NULL);
+			ret = update_gpuvm_pte(mem, attachment, &sync);
 			if (ret) {
 				pr_err("%s: update PTE failed\n", __func__);
 				/* make sure this gets validated again */
@@ -2465,7 +2504,7 @@ int amdgpu_amdkfd_gpuvm_restore_process_bos(void *info, struct dma_fence **ef)
 				continue;
 
 			kfd_mem_dmaunmap_attachment(mem, attachment);
-			ret = update_gpuvm_pte(mem, attachment, &sync_obj, NULL);
+			ret = update_gpuvm_pte(mem, attachment, &sync_obj);
 			if (ret) {
 				pr_debug("Memory eviction: update PTE failed. Try again\n");
 				goto validate_map_fail;
@@ -2634,4 +2673,15 @@ int amdgpu_amdkfd_get_tile_config(struct amdgpu_device *adev,
 	config->num_ranks = adev->gfx.config.num_ranks;
 
 	return 0;
+}
+
+bool amdgpu_amdkfd_bo_mapped_to_dev(struct amdgpu_device *adev, struct kgd_mem *mem)
+{
+	struct kfd_mem_attachment *entry;
+
+	list_for_each_entry(entry, &mem->attachments, list) {
+		if (entry->is_mapped && entry->adev == adev)
+			return true;
+	}
+	return false;
 }
