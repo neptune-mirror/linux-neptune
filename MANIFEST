@@ -1,0 +1,38 @@
+5.17/features/acpi:
+    c836bb0a081b33be6146b053b58443be2cf9a3f8 ("acpi: Bump ACPI_MAX_HANDLES to 16")
+5.17/features/als:
+    6d030343b482bc42571b8686a7be37ff96da29c8 ("ltrf216a: Add entry for depmod alias")
+5.17/features/amd-extra:
+    b042a02bd60f47d11d357c6023a57b8481ac6809 ("drm/amd/display: Optimize modeset time")
+5.17/features/amd-staging-drm-next:
+    6a8ba1aad045a85b169170ce6ab825cd6341eb71 ("drm/amdgpu: Remove duplicated argument in vcn_v4_0")
+5.17/features/backlight-precision:
+    d0c1573ab76aaf5b14a6b65218f6380cfaee0b7c ("amd/drm : override backlight min value from 12 -> 0")
+5.17/features/futex-waitv:
+    8286d77405f995344238ecebb76a907b4b53ad71 ("futex: Add entry point for FUTEX_WAIT_MULTIPLE (opcode 31)")
+5.17/features/fwd-port:
+    f689fba3064965e4530d01c0275b6b25ebb1dcb3 ("ASoC: cs35l41: Set correct ACPI device ID")
+5.17/features/mm-soft-dirty-file:
+    fe6dc94aa93d0f1c8fed63450647d16c3b62d4c6 ("mm: Support soft dirty flag read with reset.")
+5.17/features/platform:
+    372fa2f3d206b32d351168ac57d741972b08e0f0 ("platform: jupiter: Add support for PD voltage/current readings")
+5.17/features/pstore:
+    316e1d50d43e8601eab8a733a35d4a93a5d4401f ("panic: move panic_print before kmsg dumpers")
+5.17/features/rtw88:
+    6e7c89af996479946c7304fec17c0fd4ce1a156c ("rtw88: change rtw_info() to proper message level")
+5.17/features/setup-gitlabci:
+    0c81012ca85e4b01608200c8c101e310f90ddb43 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
+5.17/features/sound:
+    309bd04f8903bd7924bb8fb0a0b9d481ace90054 ("ASoC: amd: vg: apply 32bit pcm constraint")
+5.17/features/spi:
+    021c294ebed741e13a7f6593c7a59ab2360f78fe ("spi: amd: Fill FIFO buffer with the whole message")
+5.17/features/tcp-timewait:
+    96548f9c1c17c6dd0b3597eadf10aa7dd45772fd ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+5.17/features/touchscreen-probe:
+    0df987d02583e3be1654a129ee8044756140729d ("gpio: Request interrupts after IRQ is initialized")
+5.17/features/tsc:
+    916ce0fc9627e59f5038ea4eb9290a7cfacc7994 ("x86: don't check for random warps if using direct sync")
+5.17/features/ttm:
+    3b90d2338d27379ebd314d0eed7572f4cc3a09ce ("drm/ttm: rework bulk move handling v2")
+5.17/features/usb:
+    06a33a8cb0458119dd80b6e8830ae6caf2247ceb ("usb: dwc3: Bump USB gadget wakeup timeout")

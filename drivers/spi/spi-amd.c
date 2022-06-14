@@ -317,13 +317,15 @@ static int amd_spi_transfer(struct amd_spi *amd_spi, u8 opcode, u8 tx_len, u8 rx
 
 		list_for_each(p, &amd_spi->rbuf_head) {
 			rbuf = list_entry(p, struct amd_spi_read_buffer, node);
-			for (i = 0; i < rbuf->len; i++)
+			for (i = 0; i < rbuf->len; i++) {
 				rbuf->buf[i] = amd_spi_readreg8(amd_spi, fifo_pos++);
+				printk(KERN_DEBUG "RX BUF = %d, FIFO = %d\n", rbuf->buf[i], fifo_pos-1);
+			}
 		}
 
 		amd_spi_clear_list(amd_spi);
 	}
-
+	printk(KERN_DEBUG "Finish amd_spi_transfer\n");
 	return 0;
 }
 
@@ -343,7 +345,9 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 
 	amd_spi_select_chip(amd_spi, msg->spi->chip_select);
 
+	printk(KERN_DEBUG "Calling spi_transfer_one\n");
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		printk(KERN_DEBUG "Inside LOOP\n");
 		if (xfer->tx_buf) {
 			tx_buf = (u8 *)xfer->tx_buf;
 			if (!tx_len) {
@@ -353,8 +357,11 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 			}
 
 			tx_len += xfer->len;
-			for (i = 0; i < xfer->len; i++)
+			for (i = 0; i < xfer->len; i++) {
+				printk(KERN_DEBUG "TX BUF = %d, FIFO = %d\n", tx_buf[i], fifo_pos);
 				amd_spi_writereg8(amd_spi, fifo_pos++, tx_buf[i]);
+			}
+
 		}
 
 		if (xfer->rx_buf) {
@@ -371,6 +378,7 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 		}
 
 		if (xfer->cs_change) {
+			printk(KERN_DEBUG "CS CHANGE, FIFO = %d\n", fifo_pos);
 			ret = amd_spi_transfer(amd_spi, opcode, tx_len, rx_len, fifo_pos);
 			if (ret)
 				goto complete;
@@ -385,8 +393,10 @@ static int amd_spi_transfer_one_message(struct spi_controller *ctrl, struct spi_
 			rx_len = 0;
 		}
 	}
-
+	
+	printk(KERN_DEBUG "Outside LOOP\n");
 	if (tx_len || rx_len) {
+		printk(KERN_DEBUG "Inside TX | RX, TX = %d, RX = %d\n", tx_len, rx_len);
 		ret = amd_spi_transfer(amd_spi, opcode, tx_len, rx_len, fifo_pos);
 		if (ret)
 			goto complete;
@@ -405,6 +415,7 @@ complete:
 	msg->status = ret;
 	spi_finalize_current_message(ctrl);
 
+	printk(KERN_DEBUG "COMPLETE\n");
 	return ret;
 }
 
