@@ -31,6 +31,8 @@
 /* delay 0.1 second to enable gfx off feature */
 #define GFX_OFF_DELAY_ENABLE         msecs_to_jiffies(100)
 
+#define GFX_OFF_NO_DELAY 0
+
 /*
  * GPU GFX IP block helpers function.
  */
@@ -558,29 +560,51 @@ int amdgpu_gfx_enable_kcq(struct amdgpu_device *adev)
 
 void amdgpu_gfx_off_ctrl(struct amdgpu_device *adev, bool enable)
 {
+	unsigned long delay = GFX_OFF_DELAY_ENABLE;
+
 	if (!(adev->pm.pp_feature & PP_GFXOFF_MASK))
 		return;
 
 	mutex_lock(&adev->gfx.gfx_off_mutex);
 
-	if (!enable)
-		adev->gfx.gfx_off_req_count++;
-	else if (adev->gfx.gfx_off_req_count > 0)
+	if (enable) {
+		/* If the count is already 0, it means there's an imbalance bug somewhere.
+		 * Note that the bug may be in a different caller than the one which triggers the
+		 * WARN_ON_ONCE.
+		 */
+		if (WARN_ON_ONCE(adev->gfx.gfx_off_req_count == 0))
+			goto unlock;
+
 		adev->gfx.gfx_off_req_count--;
 
-	if (enable && !adev->gfx.gfx_off_state && !adev->gfx.gfx_off_req_count) {
-		schedule_delayed_work(&adev->gfx.gfx_off_delay_work, GFX_OFF_DELAY_ENABLE);
-	} else if (!enable && adev->gfx.gfx_off_state) {
-		if (!amdgpu_dpm_set_powergating_by_smu(adev, AMD_IP_BLOCK_TYPE_GFX, false)) {
-			adev->gfx.gfx_off_state = false;
+		if (adev->gfx.gfx_off_req_count == 0 &&
+		    !adev->gfx.gfx_off_state) {
+			/* If going to s2idle, no need to wait */
+			if (adev->in_s0ix)
+				delay = GFX_OFF_NO_DELAY;
+			schedule_delayed_work(&adev->gfx.gfx_off_delay_work,
+					      delay);
+		}
+	} else {
+		if (adev->gfx.gfx_off_req_count == 0) {
+			cancel_delayed_work_sync(&adev->gfx.gfx_off_delay_work);
 
-			if (adev->gfx.funcs->init_spm_golden) {
-				dev_dbg(adev->dev, "GFXOFF is disabled, re-init SPM golden settings\n");
-				amdgpu_gfx_init_spm_golden(adev);
+			if (adev->gfx.gfx_off_state &&
+			    !amdgpu_dpm_set_powergating_by_smu(adev, AMD_IP_BLOCK_TYPE_GFX, false)) {
+				adev->gfx.gfx_off_state = false;
+
+				if (adev->gfx.funcs->init_spm_golden) {
+					dev_dbg(adev->dev,
+						"GFXOFF is disabled, re-init SPM golden settings\n");
+					amdgpu_gfx_init_spm_golden(adev);
+				}
 			}
 		}
+
+		adev->gfx.gfx_off_req_count++;
 	}
 
+unlock:
 	mutex_unlock(&adev->gfx.gfx_off_mutex);
 }
 
@@ -591,14 +615,14 @@ int amdgpu_get_gfx_off_status(struct amdgpu_device *adev, uint32_t *value)
 
 	mutex_lock(&adev->gfx.gfx_off_mutex);
 
-	r = smu_get_status_gfxoff(adev, value);
+	r = amdgpu_dpm_get_status_gfxoff(adev, value);
 
 	mutex_unlock(&adev->gfx.gfx_off_mutex);
 
 	return r;
 }
 
-int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev)
+int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev, void *ras_info)
 {
 	int r;
 	struct ras_fs_if fs_info = {
@@ -607,7 +631,6 @@ int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev)
 	struct ras_ih_if ih_info = {
 		.cb = amdgpu_gfx_process_ras_data_cb,
 	};
-	struct ras_query_if info = { 0 };
 
 	if (!adev->gfx.ras_if) {
 		adev->gfx.ras_if = kmalloc(sizeof(struct ras_common_if), GFP_KERNEL);
@@ -616,7 +639,6 @@ int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev)
 		adev->gfx.ras_if->block = AMDGPU_RAS_BLOCK__GFX;
 		adev->gfx.ras_if->type = AMDGPU_RAS_ERROR__MULTI_UNCORRECTABLE;
 		adev->gfx.ras_if->sub_block_index = 0;
-		strcpy(adev->gfx.ras_if->name, "gfx");
 	}
 	fs_info.head = ih_info.head = *adev->gfx.ras_if;
 	r = amdgpu_ras_late_init(adev, adev->gfx.ras_if,
@@ -625,12 +647,8 @@ int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev)
 		goto free;
 
 	if (amdgpu_ras_is_supported(adev, adev->gfx.ras_if->block)) {
-		if (adev->gmc.xgmi.connected_to_cpu) {
-			info.head = *adev->gfx.ras_if;
-			amdgpu_ras_query_error_status(adev, &info);
-		} else {
+		if (!amdgpu_persistent_edc_harvesting_supported(adev))
 			amdgpu_ras_reset_error_status(adev, AMDGPU_RAS_BLOCK__GFX);
-		}
 
 		r = amdgpu_irq_get(adev, &adev->gfx.cp_ecc_error_irq, 0);
 		if (r)
@@ -677,9 +695,9 @@ int amdgpu_gfx_process_ras_data_cb(struct amdgpu_device *adev,
 	 */
 	if (!amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX)) {
 		kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
-		if (adev->gfx.ras_funcs &&
-		    adev->gfx.ras_funcs->query_ras_error_count)
-			adev->gfx.ras_funcs->query_ras_error_count(adev, err_data);
+		if (adev->gfx.ras && adev->gfx.ras->ras_block.hw_ops &&
+		    adev->gfx.ras->ras_block.hw_ops->query_ras_error_count)
+			adev->gfx.ras->ras_block.hw_ops->query_ras_error_count(adev, err_data);
 		amdgpu_ras_reset_gpu(adev);
 	}
 	return AMDGPU_RAS_SUCCESS;
@@ -833,20 +851,4 @@ int amdgpu_gfx_get_num_kcq(struct amdgpu_device *adev)
 		return 8;
 	}
 	return amdgpu_num_kcq;
-}
-
-/* amdgpu_gfx_state_change_set - Handle gfx power state change set
- * @adev: amdgpu_device pointer
- * @state: gfx power state(1 -sGpuChangeState_D0Entry and 2 -sGpuChangeState_D3Entry)
- *
- */
-
-void amdgpu_gfx_state_change_set(struct amdgpu_device *adev, enum gfx_change_state state)
-{
-	mutex_lock(&adev->pm.mutex);
-	if (adev->powerplay.pp_funcs &&
-	    adev->powerplay.pp_funcs->gfx_state_change_set)
-		((adev)->powerplay.pp_funcs->gfx_state_change_set(
-			(adev)->powerplay.pp_handle, state));
-	mutex_unlock(&adev->pm.mutex);
 }

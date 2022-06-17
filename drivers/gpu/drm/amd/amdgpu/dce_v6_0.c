@@ -456,7 +456,7 @@ static void dce_v6_0_program_fmt(struct drm_encoder *encoder)
 }
 
 /**
- * cik_get_number_of_dram_channels - get the number of dram channels
+ * si_get_number_of_dram_channels - get the number of dram channels
  *
  * @adev: amdgpu_device pointer
  *
@@ -2424,7 +2424,7 @@ static void dce_v6_0_crtc_dpms(struct drm_crtc *crtc, int mode)
 		break;
 	}
 	/* adjust pm to dpms */
-	amdgpu_pm_compute_clocks(adev);
+	amdgpu_dpm_compute_clocks(adev);
 }
 
 static void dce_v6_0_crtc_prepare(struct drm_crtc *crtc)

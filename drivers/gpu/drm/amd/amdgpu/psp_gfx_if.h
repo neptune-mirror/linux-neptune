@@ -97,7 +97,6 @@ enum psp_gfx_cmd_id
     GFX_CMD_ID_SETUP_VMR          = 0x00000009,   /* setup VMR region */
     GFX_CMD_ID_DESTROY_VMR        = 0x0000000A,   /* destroy VMR region */
     GFX_CMD_ID_PROG_REG           = 0x0000000B,   /* program regs */
-    GFX_CMD_ID_CLEAR_VF_FW        = 0x0000000D,   /* Clear VF FW, to be used on VF shutdown. */
     GFX_CMD_ID_GET_FW_ATTESTATION = 0x0000000F,   /* Query GPUVA of the Fw Attestation DB */
     /* IDs upto 0x1F are reserved for older programs (Raven, Vega 10/12/20) */
     GFX_CMD_ID_LOAD_TOC           = 0x00000020,   /* Load TOC and obtain TMR size */
@@ -259,6 +258,7 @@ enum psp_gfx_fw_type {
 	GFX_FW_TYPE_SDMA6                           = 56,   /* SDMA6                    MI      */
 	GFX_FW_TYPE_SDMA7                           = 57,   /* SDMA7                    MI      */
 	GFX_FW_TYPE_VCN1                            = 58,   /* VCN1                     MI      */
+	GFX_FW_TYPE_CAP                             = 62,   /* CAP_FW                           */
 	GFX_FW_TYPE_REG_LIST                        = 67,   /* REG_LIST                 MI      */
 	GFX_FW_TYPE_MAX
 };
@@ -333,11 +333,16 @@ struct psp_gfx_uresp_fwar_db_info
     uint32_t fwar_db_addr_hi;
 };
 
+/* Command-specific response for boot config. */
+struct psp_gfx_uresp_bootcfg {
+	uint32_t boot_cfg;	/* boot config data */
+};
+
 /* Union of command-specific responses for GPCOM ring. */
-union psp_gfx_uresp
-{
-    struct psp_gfx_uresp_reserved reserved;
-    struct psp_gfx_uresp_fwar_db_info fwar_db_info;
+union psp_gfx_uresp {
+	struct psp_gfx_uresp_reserved		reserved;
+	struct psp_gfx_uresp_bootcfg		boot_cfg;
+	struct psp_gfx_uresp_fwar_db_info	fwar_db_info;
 };
 
 /* Structure of GFX Response buffer.

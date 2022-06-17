@@ -32,7 +32,6 @@
 #include "core_status.h"
 #include "resource.h"
 #include "dm_helpers.h"
-#include "dce110_hw_sequencer.h"
 #include "dce110_timing_generator.h"
 #include "dce/dce_hwseq.h"
 #include "gpio_service_interface.h"
@@ -47,21 +46,28 @@
 #include "transform.h"
 #include "stream_encoder.h"
 #include "link_encoder.h"
+#include "link_enc_cfg.h"
 #include "link_hwss.h"
 #include "dc_link_dp.h"
+#include "dccg.h"
 #include "clock_source.h"
 #include "clk_mgr.h"
 #include "abm.h"
 #include "audio.h"
 #include "reg_helper.h"
 #include "panel_cntl.h"
-
+#include "inc/link_dpcd.h"
+#include "dpcd_defs.h"
 /* include DCE11 register header files */
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "custom_float.h"
 
 #include "atomfirmware.h"
+
+#include "dcn10/dcn10_hw_sequencer.h"
+
+#include "dce110_hw_sequencer.h"
 
 #define GAMMA_HW_POINTS_NUM 256
 
@@ -264,6 +270,7 @@ static void build_prescale_params(struct ipp_prescale_params *prescale_params,
 		prescale_params->scale = 0x2008;
 		break;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+	case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
 		prescale_params->scale = 0x2000;
 		break;
@@ -786,7 +793,7 @@ void dce110_edp_wait_for_hpd_ready(
 	dal_gpio_destroy_irq(&hpd);
 
 	if (false == edp_hpd_high) {
-		DC_LOG_ERROR(
+		DC_LOG_WARNING(
 				"%s: wait timed out!\n", __func__);
 	}
 }
@@ -1017,8 +1024,20 @@ void dce110_edp_backlight_control(
 	/* dc_service_sleep_in_milliseconds(50); */
 		/*edp 1.2*/
 	panel_instance = link->panel_cntl->inst;
-	if (cntl.action == TRANSMITTER_CONTROL_BACKLIGHT_ON)
-		edp_receiver_ready_T7(link);
+
+	if (cntl.action == TRANSMITTER_CONTROL_BACKLIGHT_ON) {
+		if (!link->dc->config.edp_no_power_sequencing)
+		/*
+		 * Sometimes, DP receiver chip power-controlled externally by an
+		 * Embedded Controller could be treated and used as eDP,
+		 * if it drives mobile display. In this case,
+		 * we shouldn't be doing power-sequencing, hence we can skip
+		 * waiting for T7-ready.
+		 */
+			edp_receiver_ready_T7(link);
+		else
+			DC_LOG_DC("edp_receiver_ready_T7 skipped\n");
+	}
 
 	if (ctx->dc->ctx->dmub_srv &&
 			ctx->dc->debug.dmub_command_table) {
@@ -1043,8 +1062,19 @@ void dce110_edp_backlight_control(
 		dc_link_backlight_enable_aux(link, enable);
 
 	/*edp 1.2*/
-	if (cntl.action == TRANSMITTER_CONTROL_BACKLIGHT_OFF)
-		edp_add_delay_for_T9(link);
+	if (cntl.action == TRANSMITTER_CONTROL_BACKLIGHT_OFF) {
+		if (!link->dc->config.edp_no_power_sequencing)
+		/*
+		 * Sometimes, DP receiver chip power-controlled externally by an
+		 * Embedded Controller could be treated and used as eDP,
+		 * if it drives mobile display. In this case,
+		 * we shouldn't be doing power-sequencing, hence we can skip
+		 * waiting for T9-ready.
+		 */
+			edp_add_delay_for_T9(link);
+		else
+			DC_LOG_DC("edp_receiver_ready_T9 skipped\n");
+	}
 
 	if (!enable && link->dpcd_sink_ext_caps.bits.oled)
 		msleep(OLED_PRE_T11_DELAY);
@@ -1080,11 +1110,18 @@ void dce110_enable_audio_stream(struct pipe_ctx *pipe_ctx)
 			clk_mgr->funcs->enable_pme_wa(clk_mgr);
 		/* un-mute audio */
 		/* TODO: audio should be per stream rather than per link */
-		pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
+		if (is_dp_128b_132b_signal(pipe_ctx))
+			pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->audio_mute_control(
+					pipe_ctx->stream_res.hpo_dp_stream_enc, false);
+		else
+			pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
 					pipe_ctx->stream_res.stream_enc, false);
 		if (pipe_ctx->stream_res.audio)
 			pipe_ctx->stream_res.audio->enabled = true;
 	}
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		dp_source_sequence_trace(pipe_ctx->stream->link, DPCD_SOURCE_SEQ_AFTER_ENABLE_AUDIO_STREAM);
 }
 
 void dce110_disable_audio_stream(struct pipe_ctx *pipe_ctx)
@@ -1101,14 +1138,22 @@ void dce110_disable_audio_stream(struct pipe_ctx *pipe_ctx)
 	if (pipe_ctx->stream_res.audio && pipe_ctx->stream_res.audio->enabled == false)
 		return;
 
-	pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
-			pipe_ctx->stream_res.stream_enc, true);
+	if (is_dp_128b_132b_signal(pipe_ctx))
+		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->audio_mute_control(
+				pipe_ctx->stream_res.hpo_dp_stream_enc, true);
+	else
+		pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
+				pipe_ctx->stream_res.stream_enc, true);
 	if (pipe_ctx->stream_res.audio) {
 		pipe_ctx->stream_res.audio->enabled = false;
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
-			pipe_ctx->stream_res.stream_enc->funcs->dp_audio_disable(
-					pipe_ctx->stream_res.stream_enc);
+			if (is_dp_128b_132b_signal(pipe_ctx))
+				pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_audio_disable(
+						pipe_ctx->stream_res.hpo_dp_stream_enc);
+			else
+				pipe_ctx->stream_res.stream_enc->funcs->dp_audio_disable(
+						pipe_ctx->stream_res.stream_enc);
 		else
 			pipe_ctx->stream_res.stream_enc->funcs->hdmi_audio_disable(
 					pipe_ctx->stream_res.stream_enc);
@@ -1123,6 +1168,9 @@ void dce110_disable_audio_stream(struct pipe_ctx *pipe_ctx)
 		 * stream->stream_engine_id);
 		 */
 	}
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		dp_source_sequence_trace(pipe_ctx->stream->link, DPCD_SOURCE_SEQ_AFTER_DISABLE_AUDIO_STREAM);
 }
 
 void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
@@ -1130,6 +1178,7 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->link;
 	struct dc *dc = pipe_ctx->stream->ctx->dc;
+	struct link_encoder *link_enc = NULL;
 
 	if (dc_is_hdmi_tmds_signal(pipe_ctx->stream->signal)) {
 		pipe_ctx->stream_res.stream_enc->funcs->stop_hdmi_info_packets(
@@ -1138,16 +1187,42 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream_res.stream_enc);
 	}
 
-	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+	if (is_dp_128b_132b_signal(pipe_ctx)) {
+		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->stop_dp_info_packets(
+					pipe_ctx->stream_res.hpo_dp_stream_enc);
+	} else if (dc_is_dp_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_res.stream_enc->funcs->stop_dp_info_packets(
 			pipe_ctx->stream_res.stream_enc);
 
 	dc->hwss.disable_audio_stream(pipe_ctx);
 
-	link->link_enc->funcs->connect_dig_be_to_fe(
-			link->link_enc,
-			pipe_ctx->stream_res.stream_enc->id,
-			false);
+	/* Link encoder may have been dynamically assigned to non-physical display endpoint. */
+	if (link->ep_type == DISPLAY_ENDPOINT_PHY)
+		link_enc = link->link_enc;
+	else if (dc->res_pool->funcs->link_encs_assign)
+		link_enc = link_enc_cfg_get_link_enc_used_by_link(link->ctx->dc, link);
+	ASSERT(link_enc);
+
+	if (is_dp_128b_132b_signal(pipe_ctx)) {
+		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->disable(
+				pipe_ctx->stream_res.hpo_dp_stream_enc);
+		setup_dp_hpo_stream(pipe_ctx, false);
+	/* TODO - DP2.0 HW: unmap stream from link encoder here */
+	} else {
+		if (link_enc)
+			link_enc->funcs->connect_dig_be_to_fe(
+				link_enc,
+				pipe_ctx->stream_res.stream_enc->id,
+				false);
+	}
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_DISCONNECT_DIG_FE_BE);
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	if (dc->hwseq->funcs.setup_hpo_hw_control && is_dp_128b_132b_signal(pipe_ctx))
+		dc->hwseq->funcs.setup_hpo_hw_control(dc->hwseq, false);
+#endif
 
 }
 
@@ -1164,7 +1239,7 @@ void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 	params.link_settings.link_rate = link_settings->link_rate;
 
 	if (dc_is_dp_signal(pipe_ctx->stream->signal))
-		pipe_ctx->stream_res.stream_enc->funcs->dp_unblank(pipe_ctx->stream_res.stream_enc, &params);
+		pipe_ctx->stream_res.stream_enc->funcs->dp_unblank(link, pipe_ctx->stream_res.stream_enc, &params);
 
 	if (link->local_sink && link->local_sink->sink_signal == SIGNAL_TYPE_EDP) {
 		hws->funcs.edp_backlight_control(link, true);
@@ -1182,8 +1257,12 @@ void dce110_blank_stream(struct pipe_ctx *pipe_ctx)
 		link->dc->hwss.set_abm_immediate_disable(pipe_ctx);
 	}
 
-	if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
-		pipe_ctx->stream_res.stream_enc->funcs->dp_blank(pipe_ctx->stream_res.stream_enc);
+	if (is_dp_128b_132b_signal(pipe_ctx)) {
+		/* TODO - DP2.0 HW: Set ODM mode in dp hpo encoder here */
+		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_blank(
+				pipe_ctx->stream_res.hpo_dp_stream_enc);
+	} else if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
+		pipe_ctx->stream_res.stream_enc->funcs->dp_blank(link, pipe_ctx->stream_res.stream_enc);
 
 		if (!dc_is_embedded_signal(pipe_ctx->stream->signal)) {
 			/*
@@ -1191,8 +1270,18 @@ void dce110_blank_stream(struct pipe_ctx *pipe_ctx)
 			 * has changed or they enter protection state and hang.
 			 */
 			msleep(60);
-		} else if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP)
-			edp_receiver_ready_T9(link);
+		} else if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP) {
+			if (!link->dc->config.edp_no_power_sequencing) {
+				/*
+				 * Sometimes, DP receiver chip power-controlled externally by an
+				 * Embedded Controller could be treated and used as eDP,
+				 * if it drives mobile display. In this case,
+				 * we shouldn't be doing power-sequencing, hence we can skip
+				 * waiting for T9-ready.
+				 */
+				edp_receiver_ready_T9(link);
+			}
+		}
 	}
 
 }
@@ -1306,41 +1395,6 @@ static void build_audio_output(
 			pipe_ctx->pll_settings.ss_percentage;
 }
 
-static void get_surface_visual_confirm_color(const struct pipe_ctx *pipe_ctx,
-		struct tg_color *color)
-{
-	uint32_t color_value = MAX_TG_COLOR_VALUE * (4 - pipe_ctx->stream_res.tg->inst) / 4;
-
-	switch (pipe_ctx->plane_res.scl_data.format) {
-	case PIXEL_FORMAT_ARGB8888:
-		/* set boarder color to red */
-		color->color_r_cr = color_value;
-		break;
-
-	case PIXEL_FORMAT_ARGB2101010:
-		/* set boarder color to blue */
-		color->color_b_cb = color_value;
-		break;
-	case PIXEL_FORMAT_420BPP8:
-		/* set boarder color to green */
-		color->color_g_y = color_value;
-		break;
-	case PIXEL_FORMAT_420BPP10:
-		/* set boarder color to yellow */
-		color->color_g_y = color_value;
-		color->color_r_cr = color_value;
-		break;
-	case PIXEL_FORMAT_FP16:
-		/* set boarder color to white */
-		color->color_r_cr = color_value;
-		color->color_b_cb = color_value;
-		color->color_g_y = color_value;
-		break;
-	default:
-		break;
-	}
-}
-
 static void program_scaler(const struct dc *dc,
 		const struct pipe_ctx *pipe_ctx)
 {
@@ -1443,6 +1497,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		struct dc *dc)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
+	struct dc_link *link = stream->link;
 	struct drr_params params = {0};
 	unsigned int event_triggers = 0;
 	struct pipe_ctx *odm_pipe = pipe_ctx->next_odm_pipe;
@@ -1458,10 +1513,16 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		build_audio_output(context, pipe_ctx, &audio_output);
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
-			pipe_ctx->stream_res.stream_enc->funcs->dp_audio_setup(
-					pipe_ctx->stream_res.stream_enc,
-					pipe_ctx->stream_res.audio->inst,
-					&pipe_ctx->stream->audio_info);
+			if (is_dp_128b_132b_signal(pipe_ctx))
+				pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_audio_setup(
+						pipe_ctx->stream_res.hpo_dp_stream_enc,
+						pipe_ctx->stream_res.audio->inst,
+						&pipe_ctx->stream->audio_info);
+			else
+				pipe_ctx->stream_res.stream_enc->funcs->dp_audio_setup(
+						pipe_ctx->stream_res.stream_enc,
+						pipe_ctx->stream_res.audio->inst,
+						&pipe_ctx->stream->audio_info);
 		else
 			pipe_ctx->stream_res.stream_enc->funcs->hdmi_audio_setup(
 					pipe_ctx->stream_res.stream_enc,
@@ -1476,10 +1537,20 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 				&pipe_ctx->stream->audio_info);
 	}
 
-	/*  */
-	/* Do not touch stream timing on seamless boot optimization. */
-	if (!pipe_ctx->stream->apply_seamless_boot_optimization)
-		hws->funcs.enable_stream_timing(pipe_ctx, context, dc);
+	/* make sure no pipes syncd to the pipe being enabled */
+	if (!pipe_ctx->stream->apply_seamless_boot_optimization && dc->config.use_pipe_ctx_sync_logic)
+		check_syncd_pipes_for_disabled_master_pipe(dc, context, pipe_ctx->pipe_idx);
+
+	/* DCN3.1 FPGA Workaround
+	 * Need to enable HPO DP Stream Encoder before setting OTG master enable.
+	 * To do so, move calling function enable_stream_timing to only be done AFTER calling
+	 * function core_link_enable_stream
+	 */
+	if (!(hws->wa.dp_hpo_and_otg_sequence && is_dp_128b_132b_signal(pipe_ctx)))
+		/*  */
+		/* Do not touch stream timing on seamless boot optimization. */
+		if (!pipe_ctx->stream->apply_seamless_boot_optimization)
+			hws->funcs.enable_stream_timing(pipe_ctx, context, dc);
 
 	if (hws->funcs.setup_vupdate_interrupt)
 		hws->funcs.setup_vupdate_interrupt(dc, pipe_ctx);
@@ -1505,6 +1576,15 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		pipe_ctx->stream_res.stream_enc->funcs->dig_connect_to_otg(
 			pipe_ctx->stream_res.stream_enc,
 			pipe_ctx->stream_res.tg->inst);
+
+	/* FIXME: blank display in gamescope session */
+	/*if (dc_is_embedded_signal(pipe_ctx->stream->signal) &&
+		pipe_ctx->stream_res.stream_enc->funcs->reset_fifo)
+		pipe_ctx->stream_res.stream_enc->funcs->reset_fifo(
+			pipe_ctx->stream_res.stream_enc);*/
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_CONNECT_DIG_FE_OTG);
 
 	pipe_ctx->stream_res.opp->funcs->opp_set_dyn_expansion(
 			pipe_ctx->stream_res.opp,
@@ -1533,6 +1613,16 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	if (!stream->dpms_off)
 		core_link_enable_stream(context, pipe_ctx);
 
+	/* DCN3.1 FPGA Workaround
+	 * Need to enable HPO DP Stream Encoder before setting OTG master enable.
+	 * To do so, move calling function enable_stream_timing to only be done AFTER calling
+	 * function core_link_enable_stream
+	 */
+	if (hws->wa.dp_hpo_and_otg_sequence && is_dp_128b_132b_signal(pipe_ctx)) {
+		if (!pipe_ctx->stream->apply_seamless_boot_optimization)
+			hws->funcs.enable_stream_timing(pipe_ctx, context, dc);
+	}
+
 	pipe_ctx->plane_res.scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 
 	pipe_ctx->stream->link->psr_settings.psr_feature_enabled = false;
@@ -1546,27 +1636,17 @@ static void power_down_encoders(struct dc *dc)
 {
 	int i;
 
-	/* do not know BIOS back-front mapping, simply blank all. It will not
-	 * hurt for non-DP
-	 */
-	for (i = 0; i < dc->res_pool->stream_enc_count; i++) {
-		dc->res_pool->stream_enc[i]->funcs->dp_blank(
-					dc->res_pool->stream_enc[i]);
-	}
-
 	for (i = 0; i < dc->link_count; i++) {
 		enum signal_type signal = dc->links[i]->connector_signal;
 
-		if ((signal == SIGNAL_TYPE_EDP) ||
-			(signal == SIGNAL_TYPE_DISPLAY_PORT))
-			if (!dc->links[i]->wa_flags.dp_keep_receiver_powered)
-				dp_receiver_power_ctrl(dc->links[i], false);
+		dc_link_blank_dp_stream(dc->links[i], false);
 
 		if (signal != SIGNAL_TYPE_EDP)
 			signal = SIGNAL_TYPE_NONE;
 
-		dc->links[i]->link_enc->funcs->disable_output(
-				dc->links[i]->link_enc, signal);
+		if (dc->links[i]->ep_type == DISPLAY_ENDPOINT_PHY)
+			dc->links[i]->link_enc->funcs->disable_output(
+					dc->links[i]->link_enc, signal);
 
 		dc->links[i]->link_status.link_active = false;
 		memset(&dc->links[i]->cur_link_settings, 0,
@@ -1686,7 +1766,6 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 	struct dc_stream_state *edp_streams[MAX_NUM_EDP];
 	struct dc_link *edp_link_with_sink = NULL;
 	struct dc_link *edp_link = NULL;
-	struct dc_stream_state *edp_stream = NULL;
 	struct dce_hwseq *hws = dc->hwseq;
 	int edp_with_sink_num;
 	int edp_num;
@@ -1707,28 +1786,50 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 	get_edp_streams(context, edp_streams, &edp_stream_num);
 
 	// Check fastboot support, disable on DCE8 because of blank screens
-	if (edp_num && dc->ctx->dce_version != DCE_VERSION_8_0 &&
+	if (edp_num && edp_stream_num && dc->ctx->dce_version != DCE_VERSION_8_0 &&
 		    dc->ctx->dce_version != DCE_VERSION_8_1 &&
 		    dc->ctx->dce_version != DCE_VERSION_8_3) {
 		for (i = 0; i < edp_num; i++) {
 			edp_link = edp_links[i];
+			if (edp_link != edp_streams[0]->link)
+				continue;
 			// enable fastboot if backend is enabled on eDP
-			if (edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc)) {
-				/* Set optimization flag on eDP stream*/
-				if (edp_stream_num && edp_link->link_status.link_active) {
-					edp_stream = edp_streams[0];
-					can_apply_edp_fast_boot = !is_edp_ilr_optimization_required(edp_stream->link, &edp_stream->timing);
-					edp_stream->apply_edp_fast_boot_optimization = can_apply_edp_fast_boot;
-					if (can_apply_edp_fast_boot)
-						DC_LOG_EVENT_LINK_TRAINING("eDP fast boot disabled to optimize link rate\n");
+			if (edp_link->link_enc->funcs->is_dig_enabled &&
+			    edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc) &&
+			    edp_link->link_status.link_active) {
+				struct dc_stream_state *edp_stream = edp_streams[0];
 
-					break;
-				}
+				can_apply_edp_fast_boot = !is_edp_ilr_optimization_required(edp_stream->link, &edp_stream->timing);
+				edp_stream->apply_edp_fast_boot_optimization = can_apply_edp_fast_boot;
+				if (can_apply_edp_fast_boot)
+					DC_LOG_EVENT_LINK_TRAINING("eDP fast boot disabled to optimize link rate\n");
+
+				break;
 			}
 		}
-		// We are trying to enable eDP, don't power down VDD
-		if (edp_stream_num)
+
+		/*
+		 * TO-DO: So far the code logic below only addresses single eDP case.
+		 * For dual eDP case, there are a few things that need to be
+		 * implemented first:
+		 *
+		 * 1. Change the fastboot logic above, so eDP link[0 or 1]'s
+		 * stream[0 or 1] will all be checked.
+		 *
+		 * 2. Change keep_edp_vdd_on to an array, and maintain keep_edp_vdd_on
+		 * for each eDP.
+		 *
+		 * Once above 2 things are completed, we can then change the logic below
+		 * correspondingly, so dual eDP case will be fully covered.
+		 */
+
+		// We are trying to enable eDP, don't power down VDD if eDP stream is existing
+		if ((edp_stream_num == 1 && edp_streams[0] != NULL) || can_apply_edp_fast_boot) {
 			keep_edp_vdd_on = true;
+			DC_LOG_EVENT_LINK_TRAINING("Keep eDP Vdd on\n");
+		} else {
+			DC_LOG_EVENT_LINK_TRAINING("No eDP stream enabled, turn eDP Vdd off\n");
+		}
 	}
 
 	// Check seamless boot support
@@ -2120,11 +2221,22 @@ static void dce110_setup_audio_dto(
 
 			build_audio_output(context, pipe_ctx, &audio_output);
 
-			pipe_ctx->stream_res.audio->funcs->wall_dto_setup(
-				pipe_ctx->stream_res.audio,
-				pipe_ctx->stream->signal,
-				&audio_output.crtc_info,
-				&audio_output.pll_info);
+			if (dc->res_pool->dccg && dc->res_pool->dccg->funcs->set_audio_dtbclk_dto) {
+				/* disable audio DTBCLK DTO */
+				dc->res_pool->dccg->funcs->set_audio_dtbclk_dto(
+					dc->res_pool->dccg, 0);
+
+				pipe_ctx->stream_res.audio->funcs->wall_dto_setup(
+						pipe_ctx->stream_res.audio,
+						pipe_ctx->stream->signal,
+						&audio_output.crtc_info,
+						&audio_output.pll_info);
+			} else
+				pipe_ctx->stream_res.audio->funcs->wall_dto_setup(
+					pipe_ctx->stream_res.audio,
+					pipe_ctx->stream->signal,
+					&audio_output.crtc_info,
+					&audio_output.pll_info);
 			break;
 		}
 	}
@@ -2167,6 +2279,10 @@ enum dc_status dce110_apply_ctx_to_hw(
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	enum dc_status status;
 	int i;
+
+	/* reset syncd pipes from disabled pipes */
+	if (dc->config.use_pipe_ctx_sync_logic)
+		reset_syncd_pipes_from_disabled_pipes(dc, context);
 
 	/* Reset old context */
 	/* look up the targets that have been removed since last commit */
