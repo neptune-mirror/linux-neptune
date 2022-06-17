@@ -60,6 +60,7 @@
 #include <drm/amdgpu_drm.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_ioctl.h>
+#include <drm/drm_sysfs.h>
 #include <drm/gpu_scheduler.h>
 
 #include <kgd_kfd_interface.h>
@@ -1058,6 +1059,7 @@ struct amdgpu_device {
 
 	int asic_reset_res;
 	struct work_struct		xgmi_reset_work;
+	struct work_struct		gpu_reset_event_work;
 	struct list_head		reset_list;
 
 	long				gfx_timeout;
@@ -1092,11 +1094,16 @@ struct amdgpu_device {
 	pci_channel_state_t		pci_channel_state;
 
 	struct amdgpu_reset_control     *reset_cntl;
+	struct drm_reset_event		reset_event_info;
 	uint32_t                        ip_versions[MAX_HWIP][HWIP_MAX_INSTANCE];
 
 	bool				ram_is_direct_mapped;
 
 	struct list_head                ras_list;
+
+	/* reset dump register */
+	uint32_t                        *reset_dump_reg_list;
+	int                             num_regs;
 };
 
 static inline struct amdgpu_device *drm_to_adev(struct drm_device *ddev)
