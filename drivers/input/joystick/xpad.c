@@ -2025,18 +2025,16 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 		/* Some third-party controllers Xbox 360-style controllers
 		 * require this message to finish initialization */
 		uint8_t dummy[20];
-		int ret;
-
-		usb_control_msg_recv(udev, 0,
-				     /* bRequest */ 0x01,
-				     /* bmRequestType */
-				     USB_TYPE_VENDOR | USB_DIR_IN |
-				     USB_RECIP_INTERFACE,
-				     /* wValue */ 0x100,
-				     /* wIndex */ 0x00,
-				     dummy, sizeof(dummy),
-				     25,
-				     GFP_KERNEL);
+		int ret = usb_control_msg_recv(udev, 0,
+					       /* bRequest */ 0x01,
+					       /* bmRequestType */
+					       USB_TYPE_VENDOR | USB_DIR_IN |
+					       USB_RECIP_INTERFACE,
+					       /* wValue */ 0x100,
+					       /* wIndex */ 0x00,
+					       dummy, sizeof(dummy),
+					       25,
+					       GFP_KERNEL);
 		if (ret)
 			dev_warn(&xpad->dev->dev,
 				 "unable to receive magic message: %d\n", ret);
