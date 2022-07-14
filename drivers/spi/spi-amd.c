@@ -200,8 +200,10 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 	u32 i = 0;
 	u32 tx_len = 0, rx_len = 0;
 
+	printk(KERN_DEBUG "Inside amd_spi_fifi_xfer\n");
 	list_for_each_entry(xfer, &message->transfers,
 			    transfer_list) {
+		printk(KERN_DEBUG "Inside LOOP\n");
 		if (xfer->rx_buf)
 			m_cmd = AMD_SPI_XFER_RX;
 		if (xfer->tx_buf)
@@ -216,6 +218,7 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 
 			/* Write data into the FIFO. */
 			for (i = 0; i < tx_len; i++) {
+				printk(KERN_DEBUG "TX BUF = %d, FIFO = %d\n", buf[i], AMD_SPI_FIFO_BASE + i);
 				iowrite8(buf[i], ((u8 __iomem *)amd_spi->io_remap_addr +
 					 AMD_SPI_FIFO_BASE + i));
 			}
@@ -238,10 +241,14 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 			amd_spi_execute_opcode(amd_spi);
 			amd_spi_busy_wait(amd_spi);
 			/* Read data from FIFO to receive buffer  */
-			for (i = 0; i < rx_len; i++)
+			for (i = 0; i < rx_len; i++) {
 				buf[i] = amd_spi_readreg8(amd_spi, AMD_SPI_FIFO_BASE + tx_len + i);
+				printk(KERN_DEBUG "RX BUF = %d, FIFO = %d\n", buf[i], AMD_SPI_FIFO_BASE + tx_len + i);
+			}
 		}
 	}
+
+	printk(KERN_DEBUG "Outside LOOP\n");
 
 	/* Update statistics */
 	message->actual_length = tx_len + rx_len + 1;
@@ -258,6 +265,7 @@ static inline int amd_spi_fifo_xfer(struct amd_spi *amd_spi,
 		return -ENODEV;
 	}
 
+	printk(KERN_DEBUG "Finalize current message\n");
 	spi_finalize_current_message(master);
 
 	return 0;
