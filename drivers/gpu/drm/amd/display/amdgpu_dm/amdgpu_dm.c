@@ -2307,6 +2307,7 @@ static int detect_mst_link_for_all_connectors(struct drm_device *dev)
 			ret = drm_dp_mst_topology_mgr_set_mst(&aconnector->mst_mgr, true);
 			if (ret < 0) {
 				DRM_ERROR("DM_MST: Failed to start MST\n");
+				aconnector->mst_mgr.mst_state = false;
 				aconnector->dc_link->type =
 					dc_connection_single;
 				ret = dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
@@ -2853,6 +2854,7 @@ static int dm_resume(void *handle)
 	struct dc_state *dc_state;
 	int i, r, j, ret;
 	bool need_hotplug = false;
+	bool is_dp_alt_mode = false;
 
 	if (dm->dc->caps.ips_support) {
 		dc_dmub_srv_apply_idle_power_optimizations(dm->dc, false);
@@ -3031,9 +3033,24 @@ static int dm_resume(void *handle)
 		ret = drm_dp_mst_topology_mgr_resume(&aconnector->mst_mgr, true);
 
 		if (ret < 0) {
-			dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
-					aconnector->dc_link);
-			need_hotplug = true;
+			struct drm_dp_mst_topology_mgr *mgr = &aconnector->mst_mgr;
+
+			mutex_lock(&aconnector->hpd_lock);
+			aconnector->dc_link->mst_dpcd_fail_on_resume = true;
+			is_dp_alt_mode = wait_for_entering_dp_alt_mode(aconnector->dc_link);
+			if (is_dp_alt_mode) {
+				do {
+					ret = drm_dp_dpcd_read(mgr->aux, DP_DPCD_REV, mgr->dpcd, 1);
+				} while (ret != 1);
+				ret = drm_dp_mst_topology_mgr_resume(mgr, true);
+			}
+
+			if (!is_dp_alt_mode || ret < 0) {
+				dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
+				aconnector->dc_link);
+				need_hotplug = true;
+			}
+			mutex_unlock(&aconnector->hpd_lock);
 		}
 	}
 	drm_connector_list_iter_end(&iter);
