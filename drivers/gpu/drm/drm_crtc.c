@@ -478,7 +478,7 @@ int drm_mode_getcrtc(struct drm_device *dev,
 
 	crtc = drm_crtc_find(dev, file_priv, crtc_resp->crtc_id);
 	if (!crtc) {
-		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", crtc_req->crtc_id);
+		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", crtc_resp->crtc_id);
 		return -ENOENT;
 	}
 
