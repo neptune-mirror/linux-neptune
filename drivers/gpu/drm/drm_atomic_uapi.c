@@ -1365,7 +1365,7 @@ retry:
 		if (!obj->properties) {
 			drm_mode_object_put(obj);
 			drm_dbg_atomic(dev,
-					"commit failed: no object properties\n");
+					"commit failed: no object properties: object number %d, object id: %u\n", i, obj_id);
 			ret = -ENOENT;
 			goto out;
 		}
