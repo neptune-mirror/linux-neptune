@@ -1357,7 +1357,7 @@ retry:
 		obj = drm_mode_object_find(dev, file_priv, obj_id, DRM_MODE_OBJECT_ANY);
 		if (!obj) {
 			drm_dbg_atomic(dev,
-					"commit failed: no object\n");
+					"commit failed: no object: object number %d, object id: %u\n", i, obj_id);
 			ret = -ENOENT;
 			goto out;
 		}
