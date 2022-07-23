@@ -436,8 +436,11 @@ int drm_mode_rmfb(struct drm_device *dev, u32 fb_id,
 		return -EOPNOTSUPP;
 
 	fb = drm_framebuffer_lookup(dev, file_priv, fb_id);
-	if (!fb)
+	if (!fb) {
+		drm_dbg_kms(dev, "Could not find fb: %d",
+				fb_id);
 		return -ENOENT;
+	}
 
 	mutex_lock(&file_priv->fbs_lock);
 	list_for_each_entry(fbl, &file_priv->fbs, filp_head)
@@ -477,6 +480,8 @@ int drm_mode_rmfb(struct drm_device *dev, u32 fb_id,
 	return 0;
 
 fail_unref:
+	drm_dbg_kms(dev, "Failed and unreferenced fb: %d",
+			fb_id);
 	drm_framebuffer_put(fb);
 	return -ENOENT;
 }
@@ -513,8 +518,11 @@ int drm_mode_getfb(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	fb = drm_framebuffer_lookup(dev, file_priv, r->fb_id);
-	if (!fb)
+	if (!fb) {
+		drm_dbg_kms(dev, "Could not find fb: %d",
+				r->fb_id);
 		return -ENOENT;
+	}
 
 	/* Multi-planar framebuffers need getfb2. */
 	if (fb->format->num_planes > 1) {
@@ -576,8 +584,11 @@ int drm_mode_getfb2_ioctl(struct drm_device *dev,
 		return -EINVAL;
 
 	fb = drm_framebuffer_lookup(dev, file_priv, r->fb_id);
-	if (!fb)
+	if (!fb) {
+		drm_dbg_kms(dev, "Could not find fb: %d",
+				r->fb_id);
 		return -ENOENT;
+	}
 
 	/* For multi-plane framebuffers, we require the driver to place the
 	 * GEM objects directly in the drm_framebuffer. For single-plane
@@ -707,8 +718,11 @@ int drm_mode_dirtyfb_ioctl(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	fb = drm_framebuffer_lookup(dev, file_priv, r->fb_id);
-	if (!fb)
+	if (!fb) {
+		drm_dbg_kms(dev, "Could not find fb: %d",
+				r->fb_id);
 		return -ENOENT;
+	}
 
 	num_clips = r->num_clips;
 	clips_ptr = (struct drm_clip_rect __user *)(unsigned long)r->clips_ptr;

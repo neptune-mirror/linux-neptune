@@ -2593,8 +2593,10 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 	memset(&u_mode, 0, sizeof(struct drm_mode_modeinfo));
 
 	connector = drm_connector_lookup(dev, file_priv, out_resp->connector_id);
-	if (!connector)
+	if (!connector) {
+		drm_dbg_kms(dev, "drm_mode_getconnector: no connector\n");
 		return -ENOENT;
+	}
 
 	encoders_count = hweight32(connector->possible_encoders);
 

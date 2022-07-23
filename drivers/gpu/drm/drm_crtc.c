@@ -477,8 +477,10 @@ int drm_mode_getcrtc(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	crtc = drm_crtc_find(dev, file_priv, crtc_resp->crtc_id);
-	if (!crtc)
+	if (!crtc) {
+		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", crtc_req->crtc_id);
 		return -ENOENT;
+	}
 
 	plane = crtc->primary;
 

@@ -275,6 +275,7 @@ drm_client_buffer_create(struct drm_client_dev *client, u32 width, u32 height, u
 	obj = drm_gem_object_lookup(client->file, dumb_args.handle);
 	if (!obj)  {
 		ret = -ENOENT;
+		drm_dbg_kms(dev, "%s: ret=%d\n", client->name, ret);
 		goto err_delete;
 	}
 

@@ -445,6 +445,7 @@ int drm_mode_obj_get_properties_ioctl(struct drm_device *dev, void *data,
 
 	obj = drm_mode_object_find(dev, file_priv, arg->obj_id, arg->obj_type);
 	if (!obj) {
+		DRM_DEBUG("No mode object with id %d\n", arg->obj_id);
 		ret = -ENOENT;
 		goto out;
 	}
@@ -568,8 +569,10 @@ int drm_mode_obj_set_property_ioctl(struct drm_device *dev, void *data,
 		return -EOPNOTSUPP;
 
 	arg_obj = drm_mode_object_find(dev, file_priv, arg->obj_id, arg->obj_type);
-	if (!arg_obj)
+	if (!arg_obj) {
+		DRM_DEBUG("No mode object with id %d\n", arg->obj_id);
 		return -ENOENT;
+	}
 
 	if (!arg_obj->properties)
 		goto out_unref;

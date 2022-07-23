@@ -690,8 +690,11 @@ int drm_mode_getplane(struct drm_device *dev, void *data,
 		return -EOPNOTSUPP;
 
 	plane = drm_plane_find(dev, file_priv, plane_resp->plane_id);
-	if (!plane)
+	if (!plane) {
+		DRM_DEBUG_KMS("Unknown plane ID %d\n",
+			      plane_resp->plane_id);
 		return -ENOENT;
+	}
 
 	drm_modeset_lock(&plane->mutex, NULL);
 	if (plane->state && plane->state->crtc && drm_lease_held(file_priv, plane->state->crtc->base.id))
@@ -1228,8 +1231,10 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		return -EINVAL;
 
 	crtc = drm_crtc_find(dev, file_priv, page_flip->crtc_id);
-	if (!crtc)
+	if (!crtc) {
+		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", req->crtc_id);
 		return -ENOENT;
+	}
 
 	plane = crtc->primary;
 
@@ -1300,6 +1305,8 @@ retry:
 
 	fb = drm_framebuffer_lookup(dev, file_priv, page_flip->fb_id);
 	if (!fb) {
+		DRM_DEBUG_KMS("Unknown framebuffer ID %d\n",
+					plane_req->fb_id);
 		ret = -ENOENT;
 		goto out;
 	}

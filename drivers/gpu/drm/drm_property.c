@@ -470,8 +470,11 @@ int drm_mode_getproperty_ioctl(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	property = drm_property_find(dev, file_priv, out_resp->prop_id);
-	if (!property)
+	if (!property) {
+		DRM_DEBUG_KMS("Unknown property %d\n",
+			out_resp->prop_id);
 		return -ENOENT;
+	}
 
 	strscpy_pad(out_resp->name, property->name, DRM_PROP_NAME_LEN);
 	out_resp->flags = property->flags;
@@ -762,8 +765,11 @@ int drm_mode_getblob_ioctl(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	blob = drm_property_lookup_blob(dev, out_resp->blob_id);
-	if (!blob)
+	if (!blob) {
+		DRM_DEBUG_KMS("Unknown property blob %d\n",
+			out_resp->blob_id);
 		return -ENOENT;
+	}
 
 	if (out_resp->length == blob->length) {
 		if (copy_to_user(u64_to_user_ptr(out_resp->data),
@@ -828,8 +834,11 @@ int drm_mode_destroyblob_ioctl(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	blob = drm_property_lookup_blob(dev, out_resp->blob_id);
-	if (!blob)
+	if (!blob) {
+		DRM_DEBUG_KMS("Unknown property blob %d\n",
+			out_resp->blob_id);
 		return -ENOENT;
+	}
 
 	mutex_lock(&dev->mode_config.blob_lock);
 	/* Ensure the property was actually created by this user. */

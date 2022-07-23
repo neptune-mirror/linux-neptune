@@ -1356,12 +1356,16 @@ retry:
 
 		obj = drm_mode_object_find(dev, file_priv, obj_id, DRM_MODE_OBJECT_ANY);
 		if (!obj) {
+			drm_dbg_atomic(dev,
+					"commit failed: no object\n");
 			ret = -ENOENT;
 			goto out;
 		}
 
 		if (!obj->properties) {
 			drm_mode_object_put(obj);
+			drm_dbg_atomic(dev,
+					"commit failed: no object properties\n");
 			ret = -ENOENT;
 			goto out;
 		}
@@ -1388,6 +1392,8 @@ retry:
 			prop = drm_mode_obj_find_prop_id(obj, prop_id);
 			if (!prop) {
 				drm_mode_object_put(obj);
+				drm_dbg_atomic(dev,
+						"commit failed: object has no property with id %u\n", prop_id);
 				ret = -ENOENT;
 				goto out;
 			}
