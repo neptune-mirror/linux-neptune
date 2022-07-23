@@ -1232,7 +1232,7 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 
 	crtc = drm_crtc_find(dev, file_priv, page_flip->crtc_id);
 	if (!crtc) {
-		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", req->crtc_id);
+		DRM_DEBUG_KMS("Unknown CRTC ID %d\n", page_flip->crtc_id);
 		return -ENOENT;
 	}
 
@@ -1306,7 +1306,7 @@ retry:
 	fb = drm_framebuffer_lookup(dev, file_priv, page_flip->fb_id);
 	if (!fb) {
 		DRM_DEBUG_KMS("Unknown framebuffer ID %d\n",
-					plane_req->fb_id);
+					page_flip->fb_id);
 		ret = -ENOENT;
 		goto out;
 	}
