@@ -28,6 +28,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_property.h>
+#include <drm/drm_print.h>
 
 #include "drm_crtc_internal.h"
 
