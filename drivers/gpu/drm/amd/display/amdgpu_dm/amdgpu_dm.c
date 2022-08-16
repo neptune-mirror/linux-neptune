@@ -4347,7 +4347,8 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	 * TODO: Fix vblank control helpers to delay PSR entry to allow this when PSR
 	 * is also supported.
 	 */
-	adev_to_drm(adev)->vblank_disable_immediate = !psr_feature_enabled;
+	// reverting for deck, see a775e4e4941bf2f326aa36c58f67bd6c96cac717 upstream
+	//adev_to_drm(adev)->vblank_disable_immediate = !psr_feature_enabled;
 
 	/* Software is initialized. Now we can register interrupt handlers. */
 	switch (adev->asic_type) {
