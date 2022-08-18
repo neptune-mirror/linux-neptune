@@ -367,6 +367,9 @@ static int dm_crtc_helper_atomic_check(struct drm_crtc *crtc,
 	struct dm_crtc_state *dm_crtc_state = to_dm_crtc_state(crtc_state);
 	int ret = -EINVAL;
 
+	if (state->async_flip)
+		crtc_state->async_flip = 1;
+
 	trace_amdgpu_dm_crtc_atomic_check(crtc_state);
 
 	dm_update_crtc_active_planes(crtc, crtc_state);
