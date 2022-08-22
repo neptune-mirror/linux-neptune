@@ -442,15 +442,26 @@ static int __set_input_tf(struct dc_transfer_func *func,
 	return res ? 0 : -ENOMEM;
 }
 
-static int amdgpu_dm_atomic_shaper_lut(struct dc_transfer_func *func_shaper)
+static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
+				       uint32_t shaper_size,
+				       struct dc_transfer_func *func_shaper)
 {
-	/* We don't get DRM shaper LUT yet. We assume the input color space is already
-	 * delinearized, so we don't need a shaper LUT and we can just BYPASS
-	 */
-	func_shaper->type = TF_TYPE_BYPASS;
-	func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
+	int ret = 0;
 
-	return 0;
+	if (shaper_size) {
+		/* If DRM shaper LUT is set, we assume a linear color space
+		 * (linearized by DRM degamma 1D LUT or not)
+		 */
+		func_shaper->type = TF_TYPE_DISTRIBUTED_POINTS;
+		func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
+
+		ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, false);
+	} else {
+		func_shaper->type = TF_TYPE_BYPASS;
+		func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	return ret;
 }
 
 /* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
@@ -498,7 +509,8 @@ static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
 
 	amdgpu_dm_atomic_lut3d(drm_lut3d, drm_lut3d_size, lut3d_func);
 
-	return amdgpu_dm_atomic_shaper_lut(func_shaper);
+	return amdgpu_dm_atomic_shaper_lut(drm_shaper_lut,
+					   drm_shaper_size, func_shaper);
 }
 
 /**
@@ -530,11 +542,21 @@ static uint32_t amdgpu_dm_get_lut3d_size(struct amdgpu_device *adev,
 int amdgpu_dm_verify_lut3d_size(struct amdgpu_device *adev,
 				const struct drm_crtc_state *crtc_state)
 {
-	const struct drm_color_lut *lut3d = NULL;
+	const struct drm_color_lut *shaper = NULL, *lut3d = NULL;
 	uint32_t exp_size, size;
 
-	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_3DLUT_ENTRIES);
+	/* shaper LUT is only available if 3D LUT color caps*/
+	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_LUT_ENTRIES);
+	shaper = __extract_blob_lut(crtc_state->shaper_lut, &size);
 
+	if (shaper && size != exp_size) {
+		DRM_DEBUG_DRIVER(
+			"Invalid Shaper LUT size. Should be %u but got %u.\n",
+			exp_size, size);
+		return -EINVAL;
+	}
+
+	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_3DLUT_ENTRIES);
 	lut3d = __extract_blob_lut(crtc_state->lut3d, &size);
 
 	if (lut3d && size != exp_size) {
@@ -613,9 +635,9 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
 	bool has_rom = adev->asic_type <= CHIP_RAVEN;
 	struct drm_color_ctm *ctm = NULL;
 	const struct drm_color_lut *degamma_lut, *regamma_lut;
-	const struct drm_color_lut *lut3d;
+	const struct drm_color_lut *shaper_lut, *lut3d;
 	uint32_t degamma_size, regamma_size;
-	uint32_t lut3d_size;
+	uint32_t lut3d_size, shaper_size;
 	bool has_regamma, has_degamma;
 	bool is_legacy;
 	int r;
@@ -629,6 +651,7 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
 		return r;
 
 	degamma_lut = __extract_blob_lut(crtc->base.degamma_lut, &degamma_size);
+	shaper_lut = __extract_blob_lut(crtc->base.shaper_lut, &shaper_size);
 	lut3d = __extract_blob_lut(crtc->base.lut3d, &lut3d_size);
 	regamma_lut = __extract_blob_lut(crtc->base.gamma_lut, &regamma_size);
 
@@ -673,11 +696,14 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
 			return r;
 	} else {
 		lut3d_size = lut3d != NULL ? lut3d_size : 0;
+		shaper_size = shaper_lut != NULL ? shaper_size : 0;
 		r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, ctx, stream,
-						  NULL, 0,
+						  shaper_lut, shaper_size,
 						  lut3d, lut3d_size);
-		if (r)
+		if (r) {
+			DRM_DEBUG_DRIVER("Failed on shaper/3D LUTs setup\n");
 			return r;
+		}
 		/* Note: OGAM is disabled if 3D LUT is successfully programmed.
 		 * See params and set_output_gamma in
 		 * dcn30_set_output_transfer_func()
