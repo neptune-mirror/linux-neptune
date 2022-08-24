@@ -8508,11 +8508,35 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 
 	PIPE_CONF_CHECK_X(output_types);
 
-	PIPE_CONF_CHECK_I(framestart_delay);
-	PIPE_CONF_CHECK_I(msa_timing_delay);
+	/* FIXME do the readout properly and get rid of this quirk */
+	if (!PIPE_CONF_QUIRK(PIPE_CONFIG_QUIRK_BIGJOINER_SLAVE)) {
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_hdisplay);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_htotal);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_hblank_start);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_hblank_end);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_hsync_start);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_hsync_end);
 
-	PIPE_CONF_CHECK_TIMINGS(hw.pipe_mode);
-	PIPE_CONF_CHECK_TIMINGS(hw.adjusted_mode);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vdisplay);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vtotal);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vblank_start);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vblank_end);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vsync_start);
+		PIPE_CONF_CHECK_I(hw.pipe_mode.crtc_vsync_end);
+
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_hdisplay);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_htotal);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_hblank_start);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_hblank_end);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_hsync_start);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_hsync_end);
+
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vdisplay);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vtotal);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vblank_start);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vblank_end);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vsync_start);
+		PIPE_CONF_CHECK_I(hw.adjusted_mode.crtc_vsync_end);
 
 		PIPE_CONF_CHECK_I(pixel_multiplier);
 
@@ -8590,12 +8614,10 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 		if (bp_gamma)
 			PIPE_CONF_CHECK_COLOR_LUT(gamma_mode, hw.gamma_lut, bp_gamma);
 
-		if (current_config->active_planes) {
-			PIPE_CONF_CHECK_BOOL(has_psr);
-			PIPE_CONF_CHECK_BOOL(has_psr2);
-			PIPE_CONF_CHECK_BOOL(enable_psr2_sel_fetch);
-			PIPE_CONF_CHECK_I(dc3co_exitline);
-		}
+		PIPE_CONF_CHECK_BOOL(has_psr);
+		PIPE_CONF_CHECK_BOOL(has_psr2);
+		PIPE_CONF_CHECK_BOOL(enable_psr2_sel_fetch);
+		PIPE_CONF_CHECK_I(dc3co_exitline);
 	}
 
 	PIPE_CONF_CHECK_BOOL(double_wide);
@@ -11238,8 +11260,10 @@ static u32 intel_encoder_possible_crtcs(struct intel_encoder *encoder)
 	struct intel_crtc *crtc;
 	u32 possible_crtcs = 0;
 
-	for_each_intel_crtc_in_pipe_mask(dev, crtc, encoder->pipe_mask)
-		possible_crtcs |= drm_crtc_mask(&crtc->base);
+	for_each_intel_crtc(dev, crtc) {
+		if (encoder->pipe_mask & BIT(crtc->pipe))
+			possible_crtcs |= drm_crtc_mask(&crtc->base);
+	}
 
 	return possible_crtcs;
 }
@@ -12188,7 +12212,7 @@ static void intel_mode_config_init(struct drm_i915_private *i915)
 
 	mode_config->funcs = &intel_mode_funcs;
 
-	mode_config->async_page_flip = HAS_ASYNC_FLIPS(i915);
+	mode_config->async_page_flip = has_async_flips(i915);
 
 	/*
 	 * Maximum framebuffer dimensions, chosen to match
