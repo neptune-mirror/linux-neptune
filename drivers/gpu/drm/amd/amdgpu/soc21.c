@@ -169,7 +169,6 @@ static u32 soc21_get_xclk(struct amdgpu_device *adev)
 	return adev->clock.spll.reference_freq;
 }
 
-
 void soc21_grbm_select(struct amdgpu_device *adev,
 		     u32 me, u32 pipe, u32 queue, u32 vmid)
 {
@@ -709,10 +708,6 @@ static int soc21_common_set_clockgating_state(void *handle,
 				state == AMD_CG_STATE_GATE);
 		adev->nbio.funcs->update_medium_grain_light_sleep(adev,
 				state == AMD_CG_STATE_GATE);
-		adev->hdp.funcs->update_clock_gating(adev,
-				state == AMD_CG_STATE_GATE);
-		break;
-	case IP_VERSION(7, 7, 0):
 		adev->hdp.funcs->update_clock_gating(adev,
 				state == AMD_CG_STATE_GATE);
 		break;
