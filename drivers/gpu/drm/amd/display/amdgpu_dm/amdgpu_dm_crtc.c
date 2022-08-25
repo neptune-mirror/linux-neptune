@@ -412,7 +412,7 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 {
 	struct amdgpu_crtc *acrtc = NULL;
 	struct drm_plane *cursor_plane;
-	bool is_dcn;
+	bool is_dcn, has_3dlut;
 	int res = -ENOMEM;
 
 	cursor_plane = kzalloc(sizeof(*cursor_plane), GFP_KERNEL);
@@ -457,6 +457,20 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	is_dcn = dm->adev->dm.dc->caps.color.dpp.dcn_arch;
 	drm_crtc_enable_color_mgmt(&acrtc->base, is_dcn ? MAX_COLOR_LUT_ENTRIES : 0,
 				   true, MAX_COLOR_LUT_ENTRIES);
+
+	/* According to struct mpc_color_caps:
+	 * @num_3dluts: MPC 3D LUT; always assumes a preceding shaper LUT
+	 *
+	 * We use OGAM_RAM for regamma TF support. Even if there is OGAM_ROM
+	 * (TF_TYPE_PREDEFINED) in the HW, it usually only supports sRGB (and
+	 * BT2020) not all range of predefined TF, therefore, we don't
+	 * advertise regamma TF when OGAM_RAM is not supported.
+	 */
+	has_3dlut = dm->dc->caps.color.mpc.num_3dluts;
+	drm_crtc_additional_color_mgmt(&acrtc->base,
+				       has_3dlut ? MAX_COLOR_LUT_ENTRIES : 0,
+				       has_3dlut ? MAX_COLOR_3DLUT_ENTRIES : 0,
+				       dm->dc->caps.color.mpc.ogam_ram);
 
 	drm_mode_crtc_set_gamma_size(&acrtc->base, MAX_COLOR_LEGACY_LUT_ENTRIES);
 
