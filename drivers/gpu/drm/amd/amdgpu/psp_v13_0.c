@@ -21,7 +21,6 @@
  *
  */
 #include <drm/drm_drv.h>
-#include <linux/vmalloc.h>
 #include "amdgpu.h"
 #include "amdgpu_psp.h"
 #include "amdgpu_ucode.h"
