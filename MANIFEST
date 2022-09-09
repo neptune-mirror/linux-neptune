@@ -1,0 +1,32 @@
+6.0/features/acpi:
+    cc9a4d2f899b3d7ddcee9d3e10a9528bf719ee4f ("acpi: Bump ACPI_MAX_HANDLES to 16")
+6.0/features/amd-extra:
+    bdcdfa6a61c3fe270cde8891bb0fd022258b5e3f ("drm/amd/display: Attempt to fix DC crashes on external display use.")
+6.0/features/amd-staging-drm-next:
+    5fec38e4bd9eddeb3a37aaa95f3f4f05417be71c ("drm/amdgpu: Drop left-over from previous merge conflicts")
+6.0/features/backlight-notif:
+    7c3c30ff58f4c28de3c458d2d722fa256e08679a ("drivers: video: backlight: Disable backlight notification events.")
+6.0/features/backlight-precision:
+    8d08caeb076c5cba04a0263fb001a4ba0fbd6f27 ("amd/drm : override backlight min value from 12 -> 0")
+6.0/features/futex-waitv:
+    8aca01bc058bd06be7986aab66762ad142caedef ("futex: Add entry point for FUTEX_WAIT_MULTIPLE (opcode 31)")
+6.0/features/gpu-reset:
+    fef68ffaa8182dc4876d08ee0aaed7a6b7658372 ("drm/amdgpu: schedule GPU reset event work function")
+6.0/features/linux-next:
+    d0470e01e9c26bda88098993621bd610e077ab37 ("ASoC: wm_adsp: Handle optional legacy support")
+6.0/features/mm-soft-dirty-file:
+    9f051c89c57007643ec489c6ee5d2047de451433 ("mm: Support soft dirty flag read with reset.")
+6.0/features/platform:
+    487730bb1d3bb07f257854760e2ba89cd39af73d ("platform: jupiter: Add support for PD voltage/current readings")
+6.0/features/setup-gitlabci:
+    dc76eca378ab8e64964db1b06ff6a8befd429098 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
+6.0/features/spi-config-timeout-quirk:
+    0becd2676a1dee87dedb7d8294e89442b91aa6a0 ("pinctrl-amd: Add quirk to timeout irq pin reconfiguration")
+6.0/features/tcp-timewait:
+    7222561d85ab9af88454b13cd55920cbfd5bb294 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.0/features/tsc:
+    2cc3372e27f02292b72299a58a655b4239e1ae6d ("x86: don't check for random warps if using direct sync")
+6.0/features/usb:
+    e1d44764e38d54bfc96a1227f224d6dfd9c7418c ("usb: dwc3: Bump USB gadget wakeup timeout")
+6.0/features/valve-extra:
+    bb6332219258178858f45b4a05df426a7eda79e6 ("USB: gadget: f_hid: Add Get-Feature report")
