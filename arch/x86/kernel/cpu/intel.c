@@ -44,6 +44,7 @@
 enum split_lock_detect_state {
 	sld_off = 0,
 	sld_warn,
+	sld_seq,
 	sld_fatal,
 	sld_ratelimit,
 };
@@ -1028,6 +1029,7 @@ static const struct {
 } sld_options[] __initconst = {
 	{ "off",	sld_off   },
 	{ "warn",	sld_warn  },
+	{ "seq",	sld_seq	},
 	{ "fatal",	sld_fatal },
 	{ "ratelimit:", sld_ratelimit },
 };
@@ -1075,7 +1077,7 @@ static bool split_lock_verify_msr(bool on)
 
 static void __init sld_state_setup(void)
 {
-	enum split_lock_detect_state state = sld_warn;
+	enum split_lock_detect_state state = CONFIG_X86_SPLIT_LOCK_MODE;
 	char arg[20];
 	int i, ret;
 
@@ -1149,7 +1151,9 @@ static void split_lock_init(void)
 static void __split_lock_reenable(struct work_struct *work)
 {
 	sld_update_msr(true);
-	up(&buslock_sem);
+
+	if (sld_state == sld_seq)
+		up(&buslock_sem);
 }
 
 /*
@@ -1178,14 +1182,18 @@ static void split_lock_warn(unsigned long ip)
 	if (!current->reported_split_lock)
 		pr_warn_ratelimited("#AC: %s/%d took a split_lock trap at address: 0x%lx\n",
 				    current->comm, current->pid, ip);
+
 	current->reported_split_lock = 1;
 
-	/* misery factor #1, sleep 10ms before trying to execute split lock */
-	if (msleep_interruptible(10) > 0)
-		return;
-	/* Misery factor #2, only allow one buslocked disabled core at a time */
-	if (down_interruptible(&buslock_sem) == -EINTR)
-		return;
+	if (sld_state == sld_seq) {
+		/* misery factor #1, sleep 10ms before trying to execute split lock */
+		if (msleep_interruptible(10) > 0)
+			return;
+		/* Misery factor #2, only allow one buslocked disabled core at a time */
+		if (down_interruptible(&buslock_sem) == -EINTR)
+			return;
+	}
+
 	cpu = get_cpu();
 	schedule_delayed_work_on(cpu, &split_lock_reenable, 2);
 
@@ -1196,7 +1204,7 @@ static void split_lock_warn(unsigned long ip)
 
 bool handle_guest_split_lock(unsigned long ip)
 {
-	if (sld_state == sld_warn) {
+	if (sld_state == sld_warn || sld_state == sld_seq) {
 		split_lock_warn(ip);
 		return true;
 	}
@@ -1256,6 +1264,7 @@ void handle_bus_lock(struct pt_regs *regs)
 		/* Warn on the bus lock. */
 		fallthrough;
 	case sld_warn:
+	case sld_seq:
 		pr_warn_ratelimited("#DB: %s/%d took a bus_lock trap at address: 0x%lx\n",
 				    current->comm, current->pid, regs->ip);
 		break;
@@ -1335,8 +1344,13 @@ static void sld_state_show(void)
 		pr_info("disabled\n");
 		break;
 	case sld_warn:
+	case sld_seq:
 		if (boot_cpu_has(X86_FEATURE_SPLIT_LOCK_DETECT)) {
-			pr_info("#AC: crashing the kernel on kernel split_locks and warning on user-space split_locks\n");
+			if (sld_state == sld_warn)
+				pr_info("#AC: crashing the kernel on kernel split_locks and warning on user-space split_locks\n");
+			else
+				pr_info("#AC: crashing the kernel on kernel split_locks and intentionally slowdown the task on user-space split_locks\n");
+
 			if (cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 					      "x86/splitlock", NULL, splitlock_cpu_offline) < 0)
 				pr_warn("No splitlock CPU offline handler\n");

@@ -398,6 +398,16 @@ config CC_HAS_SANE_STACKPROTECTOR
 	  the compiler produces broken code or if it does not let us control
 	  the segment on 32-bit kernels.
 
+config X86_SPLIT_LOCK_MODE
+	int "Default mode of split lock detector for supporting CPUs (0/off - 3/fatal)"
+	range 0 3
+	default 1
+	help
+	  Select the default mode for split lock detector on supporting CPUs.
+	  Possible modes are: 0 ("off"), 1 ("warn"), 2 ("seq") and 3 ("fatal");
+	  details are well described in the kernel parameters documentation.
+	  Users can always override this using the cmdline "split_lock_detect=".
+
 menu "Processor type and features"
 
 config SMP

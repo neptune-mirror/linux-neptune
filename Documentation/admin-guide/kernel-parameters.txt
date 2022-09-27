@@ -5788,7 +5788,9 @@
 			instructions that access data across cache line
 			boundaries will result in an alignment check exception
 			for split lock detection or a debug exception for
-			bus lock detection.
+			bus lock detection. The default is set by the kernel
+			config X86_SPLIT_LOCK_MODE; defconfig sets it to warn.
+
 
 			off	- not enabled
 
@@ -5799,6 +5801,13 @@
 				  detection or bus lock detection. Default
 				  behavior is by #AC if both features are
 				  enabled in hardware.
+
+			seq	- kernel will emit the same rate-limited warns
+				  than the "warn" mode, but will also introduce
+				  an intentional delay (through serialization
+				  and a small sleeping) in such processes, in
+				  order to call the attention of users/devs to
+				  properly fix their applications.
 
 			fatal	- the kernel will send SIGBUS to applications
 				  that trigger the #AC exception or the #DB

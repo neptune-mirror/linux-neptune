@@ -58,6 +58,17 @@ parameter "split_lock_detect". Here is a summary of different options:
 |		   |When both features are	|			|
 |		   |supported, warn in #AC	|			|
 +------------------+----------------------------+-----------------------+
+|seq		   |Kernel OOPs			|Warn once per task and |
+|		   |Same output as the "warn"	|and continues to run.  |
+|		   |option above, but also	|			|
+|		   |intentionally introduce a	|			|
+|		   |delay by serializing and	|			|
+|		   |quickly sleeping - this	|			|
+|		   |greatly affects application	|			|
+|		   |performance but may improve	|			|
+|		   |overall system perf in the	|			|
+|		   |case of many split locks.	|			|
++------------------+----------------------------+-----------------------+
 |fatal		   |Kernel OOPs			|Send SIGBUS to user.	|
 |		   |Send SIGBUS to user		|			|
 |		   |When both features are	|			|
@@ -102,6 +113,14 @@ warn
 
 A warning is emitted when a bus lock is detected which allows to identify
 the offending application. This is the default behavior.
+
+seq
+----
+
+A warning is emitted when a bus lock is detected which allows to identify
+the offending application, but also introduces a delay by serializing and
+quickly sleeping - this greatly affects application performance but might
+improve overall system performance in case of many unligned accesses.
 
 fatal
 -----
