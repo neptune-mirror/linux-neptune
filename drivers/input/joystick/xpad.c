@@ -1511,6 +1511,13 @@ static int xpad_start_input(struct usb_xpad *xpad)
 		return -EIO;
 
 	if (xpad->xtype == XTYPE_XBOXONE) {
+		/* Explicitly disable the audio interface. This is needed for some
+		 * controllers, such as the PowerA Enhanced Wired Controller
+		 * for Series X|S (0x20d6:0x200e) to report the guide button */
+		error = usb_set_interface(xpad->udev, 1, 0);
+		if (error)
+			return error;
+
 		error = xpad_start_xbox_one(xpad);
 		if (error) {
 			usb_kill_urb(xpad->irq_in);
