@@ -3035,13 +3035,13 @@ static int dm_resume(void *handle)
 		if (ret < 0) {
 			struct drm_dp_mst_topology_mgr *mgr = &aconnector->mst_mgr;
 
-			mutex_lock(&aconnector->hpd_lock);
 			aconnector->dc_link->mst_dpcd_fail_on_resume = true;
 			is_dp_alt_mode = wait_for_entering_dp_alt_mode(aconnector->dc_link);
 			if (is_dp_alt_mode) {
 				do {
 					ret = drm_dp_dpcd_read(mgr->aux, DP_DPCD_REV, mgr->dpcd, 1);
 				} while (ret != 1);
+				msleep(50);
 				ret = drm_dp_mst_topology_mgr_resume(mgr, true);
 			}
 
@@ -3050,7 +3050,6 @@ static int dm_resume(void *handle)
 				aconnector->dc_link);
 				need_hotplug = true;
 			}
-			mutex_unlock(&aconnector->hpd_lock);
 		}
 	}
 	drm_connector_list_iter_end(&iter);
