@@ -27,6 +27,7 @@
 #define COLOR_MOD_COLOR_GAMMA_H_
 
 #include "color_table.h"
+#include <drm/drm_fourcc.h>
 
 struct dc_transfer_func;
 struct dc_gamma;
@@ -34,6 +35,17 @@ struct dc_transfer_func_distributed_points;
 struct dc_rgb_fixed;
 struct dc_color_caps;
 enum dc_transfer_func_predefined;
+
+/*
+ * 3D LUT mode for 17x17x17 LUT and 12 bits of color depth
+ */
+static const struct drm_mode_lut3d_mode lut3d_mode_17_12bit = {
+	.lut_size = 17,
+	.lut_stride = {17, 17, 18},
+	.bit_depth = 12,
+	.color_format = DRM_FORMAT_XRGB16161616,
+	.flags = 0,
+};
 
 /* For SetRegamma ADL interface support
  * Must match escape type
