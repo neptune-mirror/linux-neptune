@@ -290,6 +290,26 @@ config JOYSTICK_JOYDUMP
 	  To compile this driver as a module, choose M here: the
 	  module will be called joydump.
 
+config JOYSTICK_XONE_GIP
+	tristate "X-Box One accessory support"
+	depends on INPUT && SND
+	select INPUT_FF_MEMLESS
+	help
+	  Say Y here if you want to use the X-Box One pad with your computer.
+
+config JOYSTICK_XONE_DONGLE
+	tristate "X-Box One wireless dongle support"
+	depends on JOYSTICK_XONE_GIP
+	select CFG80211
+	help
+	  Say Y here if you want to use the X-Box One pad with your computer.
+
+config JOYSTICK_XONE_WIRED
+	tristate "X-Box One wired accessory support"
+	depends on JOYSTICK_XONE_GIP
+	help
+	  Say Y here if you want to use the X-Box One pad with your computer.
+
 config JOYSTICK_XPAD
 	tristate "X-Box gamepad support"
 	depends on USB_ARCH_HAS_HCD
@@ -311,6 +331,12 @@ config JOYSTICK_XPAD_FF
 	select INPUT_FF_MEMLESS
 	help
 	  Say Y here if you want to take advantage of xbox 360 rumble features.
+
+config JOYSTICK_XPAD_XBOXONE
+	bool "Xbox One gamepad support in xpad"
+	depends on JOYSTICK_XPAD && INPUT
+	help
+	  Say Y here if you want the xpad driver to support xbox one controllers.
 
 config JOYSTICK_XPAD_LEDS
 	bool "LED Support for Xbox360 controller 'BigX' LED"
