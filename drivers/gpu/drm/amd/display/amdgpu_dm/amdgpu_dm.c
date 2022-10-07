@@ -4187,12 +4187,16 @@ static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	struct amdgpu_dm_backlight_caps caps;
 	struct dc_link *link;
 	u32 brightness;
+	u32 prev_brightness;
 	bool rc;
 
 	amdgpu_dm_update_backlight_caps(dm, bl_idx);
 	caps = dm->backlight_caps[bl_idx];
 
+	prev_brightness = dm->brightness[bl_idx];
 	dm->brightness[bl_idx] = user_brightness;
+	dm->actual_brightness[bl_idx] = user_brightness;
+
 	/* update scratch register */
 	if (bl_idx == 0)
 		amdgpu_atombios_scratch_regs_set_backlight_level(dm->adev, dm->brightness[bl_idx]);
@@ -4211,8 +4215,8 @@ static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 			DRM_DEBUG("DM: Failed to update backlight on eDP[%d]\n", bl_idx);
 	}
 
-	if (rc)
-		dm->actual_brightness[bl_idx] = user_brightness;
+	if (!rc)
+		dm->actual_brightness[bl_idx] = prev_brightness;
 }
 
 static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
@@ -4375,6 +4379,7 @@ static void setup_backlight_device(struct amdgpu_display_manager *dm,
 
 	amdgpu_dm_update_backlight_caps(dm, bl_idx);
 	dm->brightness[bl_idx] = AMDGPU_MAX_BL_LEVEL;
+	dm->actual_brightness[bl_idx] = AMDGPU_MAX_BL_LEVEL;
 	dm->backlight_link[bl_idx] = link;
 	dm->num_of_edps++;
 
