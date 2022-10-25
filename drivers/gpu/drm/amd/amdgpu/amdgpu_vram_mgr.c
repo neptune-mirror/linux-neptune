@@ -395,11 +395,11 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 	unsigned long pages_per_block;
 	int r;
 
-	lpfn = (u64)place->lpfn << PAGE_SHIFT;
+	lpfn = place->lpfn << PAGE_SHIFT;
 	if (!lpfn)
 		lpfn = man->size;
 
-	fpfn = (u64)place->fpfn << PAGE_SHIFT;
+	fpfn = place->fpfn << PAGE_SHIFT;
 
 	max_bytes = adev->gmc.mc_vram_size;
 	if (tbo->type != ttm_bo_type_kernel)
@@ -439,12 +439,12 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 		/* Allocate blocks in desired range */
 		vres->flags |= DRM_BUDDY_RANGE_ALLOCATION;
 
-	remaining_size = (u64)vres->base.num_pages << PAGE_SHIFT;
+	remaining_size = vres->base.num_pages << PAGE_SHIFT;
 
 	mutex_lock(&mgr->lock);
 	while (remaining_size) {
 		if (tbo->page_alignment)
-			min_block_size = (u64)tbo->page_alignment << PAGE_SHIFT;
+			min_block_size = tbo->page_alignment << PAGE_SHIFT;
 		else
 			min_block_size = mgr->default_page_size;
 
@@ -453,12 +453,12 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 		/* Limit maximum size to 2GiB due to SG table limitations */
 		size = min(remaining_size, 2ULL << 30);
 
-		if (size >= (u64)pages_per_block << PAGE_SHIFT)
-			min_block_size = (u64)pages_per_block << PAGE_SHIFT;
+		if (size >= pages_per_block << PAGE_SHIFT)
+			min_block_size = pages_per_block << PAGE_SHIFT;
 
 		cur_size = size;
 
-		if (fpfn + size != (u64)place->lpfn << PAGE_SHIFT) {
+		if (fpfn + size != place->lpfn << PAGE_SHIFT) {
 			/*
 			 * Except for actual range allocation, modify the size and
 			 * min_block_size conforming to continuous flag enablement
@@ -498,7 +498,7 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 		LIST_HEAD(temp);
 
 		trim_list = &vres->blocks;
-		original_size = (u64)vres->base.num_pages << PAGE_SHIFT;
+		original_size = vres->base.num_pages << PAGE_SHIFT;
 
 		/*
 		 * If size value is rounded up to min_block_size, trim the last
@@ -525,22 +525,16 @@ static int amdgpu_vram_mgr_new(struct ttm_resource_manager *man,
 			list_splice_tail(trim_list, &vres->blocks);
 	}
 
-	vres->base.start = 0;
-	list_for_each_entry(block, &vres->blocks, link) {
-		unsigned long start;
-
-		start = amdgpu_vram_mgr_block_start(block) +
-			amdgpu_vram_mgr_block_size(block);
-		start >>= PAGE_SHIFT;
-
-		if (start > vres->base.num_pages)
-			start -= vres->base.num_pages;
-		else
-			start = 0;
-		vres->base.start = max(vres->base.start, start);
-
+	list_for_each_entry(block, &vres->blocks, link)
 		vis_usage += amdgpu_vram_mgr_vis_size(adev, block);
+
+	block = amdgpu_vram_mgr_first_block(&vres->blocks);
+	if (!block) {
+		r = -EINVAL;
+		goto error_fini;
 	}
+
+	vres->base.start = amdgpu_vram_mgr_block_start(block) >> PAGE_SHIFT;
 
 	if (amdgpu_is_vram_mgr_blocks_contiguous(&vres->blocks))
 		vres->base.placement |= TTM_PL_FLAG_CONTIGUOUS;

@@ -169,7 +169,6 @@ static u32 soc21_get_xclk(struct amdgpu_device *adev)
 	return adev->clock.spll.reference_freq;
 }
 
-
 void soc21_grbm_select(struct amdgpu_device *adev,
 		     u32 me, u32 pipe, u32 queue, u32 vmid)
 {
