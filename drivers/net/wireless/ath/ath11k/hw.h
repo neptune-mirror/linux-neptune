@@ -160,11 +160,6 @@ struct ath11k_hw_params {
 	u32 svc_to_ce_map_len;
 
 	bool single_pdev_only;
-	
-	u32 rfkill_pin;
-	u32 rfkill_cfg;
-	u32 rfkill_on_level;
-
 
 	bool rxdma1_enable;
 	int num_rxmda_per_pdev;
@@ -205,7 +200,6 @@ struct ath11k_hw_params {
 	bool fw_wmi_diag_event;
 	bool current_cc_support;
 	bool dbr_debug_support;
-	bool coex_isolation;
 	bool global_reset;
 	const struct cfg80211_sar_capa *bios_sar_capa;
 	bool m3_fw_support;
@@ -216,7 +210,6 @@ struct ath11k_hw_params {
 	bool fixed_fw_mem;
 	bool support_off_channel_tx;
 	bool supports_multi_bssid;
-	bool wakeup_mhi;
 
 	struct {
 		u32 start;
@@ -226,6 +219,12 @@ struct ath11k_hw_params {
 	bool tcl_ring_retry;
 	u32 tx_ring_size;
 	bool smp2p_wow_exit;
+	bool wakeup_mhi;
+        u32 rfkill_pin;
+        u32 rfkill_cfg;
+        u32 rfkill_on_level;
+	bool coex_isolation;
+	bool support_fw_mac_sequence;
 };
 
 struct ath11k_hw_ops {
