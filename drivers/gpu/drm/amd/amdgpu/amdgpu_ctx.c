@@ -213,35 +213,6 @@ error_free_entity:
 	return r;
 }
 
-static int amdgpu_ctx_init(struct amdgpu_device *adev,
-			   int32_t priority,
-			   struct drm_file *filp,
-			   struct amdgpu_ctx *ctx)
-{
-	int r;
-
-	r = amdgpu_ctx_priority_permit(filp, priority);
-	if (r)
-		return r;
-
-	memset(ctx, 0, sizeof(*ctx));
-
-	ctx->adev = adev;
-
-	kref_init(&ctx->refcount);
-	spin_lock_init(&ctx->ring_lock);
-	mutex_init(&ctx->lock);
-
-	ctx->reset_counter = atomic_read(&adev->gpu_reset_counter);
-	ctx->reset_counter_query = ctx->reset_counter;
-	ctx->vram_lost_counter = atomic_read(&adev->vram_lost_counter);
-	ctx->init_priority = priority;
-	ctx->override_priority = AMDGPU_CTX_PRIORITY_UNSET;
-	ctx->stable_pstate = AMDGPU_CTX_STABLE_PSTATE_NONE;
-
-	return 0;
-}
-
 static void amdgpu_ctx_fini_entity(struct amdgpu_ctx_entity *entity)
 {
 
@@ -287,11 +258,48 @@ static int amdgpu_ctx_get_stable_pstate(struct amdgpu_ctx *ctx,
 	return 0;
 }
 
+static int amdgpu_ctx_init(struct amdgpu_device *adev,
+			   int32_t priority,
+			   struct drm_file *filp,
+			   struct amdgpu_ctx *ctx)
+{
+	u32 current_stable_pstate;
+	int r;
+
+	r = amdgpu_ctx_priority_permit(filp, priority);
+	if (r)
+		return r;
+
+	memset(ctx, 0, sizeof(*ctx));
+
+	ctx->adev = adev;
+
+	kref_init(&ctx->refcount);
+	spin_lock_init(&ctx->ring_lock);
+	mutex_init(&ctx->lock);
+
+	ctx->reset_counter = atomic_read(&adev->gpu_reset_counter);
+	ctx->reset_counter_query = ctx->reset_counter;
+	ctx->vram_lost_counter = atomic_read(&adev->vram_lost_counter);
+	ctx->init_priority = priority;
+	ctx->override_priority = AMDGPU_CTX_PRIORITY_UNSET;
+
+	r = amdgpu_ctx_get_stable_pstate(ctx, &current_stable_pstate);
+	if (r)
+		return r;
+
+	ctx->stable_pstate = current_stable_pstate;
+
+	return 0;
+}
+
+
 static int amdgpu_ctx_set_stable_pstate(struct amdgpu_ctx *ctx,
 					u32 stable_pstate)
 {
 	struct amdgpu_device *adev = ctx->adev;
 	enum amd_dpm_forced_level level;
+	u32 current_stable_pstate;
 	int r;
 
 	if (!ctx)
@@ -302,6 +310,10 @@ static int amdgpu_ctx_set_stable_pstate(struct amdgpu_ctx *ctx,
 		r = -EBUSY;
 		goto done;
 	}
+
+	r = amdgpu_ctx_get_stable_pstate(ctx, &current_stable_pstate);
+	if (r || (stable_pstate == current_stable_pstate))
+		goto done;
 
 	switch (stable_pstate) {
 	case AMDGPU_CTX_STABLE_PSTATE_NONE:
@@ -351,7 +363,7 @@ static void amdgpu_ctx_fini(struct kref *ref)
 			ctx->entities[i][j] = NULL;
 		}
 	}
-	amdgpu_ctx_set_stable_pstate(ctx, AMDGPU_CTX_STABLE_PSTATE_NONE);
+	amdgpu_ctx_set_stable_pstate(ctx, ctx->stable_pstate);
 	mutex_destroy(&ctx->lock);
 	kfree(ctx);
 }
