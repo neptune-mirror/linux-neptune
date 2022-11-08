@@ -176,4 +176,6 @@ static inline void mmc_fixup_device(struct mmc_card *card,
 			f->vendor_fixup(card, f->data);
 		}
 	}
+
+	card->safe_trim_quirk_version = 2;
 }
