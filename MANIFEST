@@ -1,0 +1,36 @@
+6.0/features/stable-updates:
+    be8b93b5cc7d533eb8c9b0590cdac055ecafe13a ("Linux 6.0.9")
+6.0/features/acpi:
+    a2a23f08cfcd22f8cae7ca381553630959d3e163 ("acpi: Bump ACPI_MAX_HANDLES to 16")
+6.0/features/amd-extra:
+    12a4a256ac4e3c04ea1bab6d4620e2ffbd76aacc ("drm/amd/display: Attempt to fix DC crashes on external display use.")
+6.0/features/amd-staging-drm-next:
+    e4b11d6de8ddbf9fca2dfe238e966764f854f194 ("Merge the 6.0-rc2 based branch 'amd-staging-drm-next'")
+6.0/features/backlight-notif:
+    de3e7684a1abc4046a7731b11485f6f7056783da ("drivers: video: backlight: Disable backlight notification events.")
+6.0/features/backlight-precision:
+    c8da5e4cd1b369d1a6a2e9ebe117c4d3854e205c ("amd/drm : override backlight min value from 12 -> 0")
+6.0/features/futex-waitv:
+    f3d98c6191206361ef4be9911968dda53104fad8 ("futex: Add entry point for FUTEX_WAIT_MULTIPLE (opcode 31)")
+6.0/features/gpu-reset:
+    7c7f37f7cc7d315c3e8f01afeac33f2bb3342573 ("drm/amdgpu: schedule GPU reset event work function")
+6.0/features/linux-next:
+    68882f5aa9c455b214a8d957e89cfc8e4768ef6f ("drm/amdgpu/psp: don't free PSP buffers on suspend")
+6.0/features/mm-soft-dirty-file:
+    769e3b709fbf23c0916610888c088ddc42e1631e ("mm: Support soft dirty flag read with reset.")
+6.0/features/platform:
+    77ba213e9bd167025a407f8bc9c6a5e14aa0e0df ("platform: jupiter: Add support for PD voltage/current readings")
+6.0/features/quirks:
+    21cb5b1f6388c3dcd7bdd713a4f25176b06263bb ("mmc: core: add safe_trim_quirk attribute")
+6.0/features/setup-gitlabci:
+    3322004f9fbde48d4aa797abd959a5ddf7b49fd3 ("gitlab-ci: Enable Steam Deck MFD driver")
+6.0/features/steamdeck-mfd:
+    e47d5ebc14d1fc01e4d71eabc6ed80437d313ccc ("extcon: Add driver for Steam Deck")
+6.0/features/tcp-timewait:
+    f2540273295dfea406ba3428f7ce51e071a2e1dc ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.0/features/tsc:
+    025724af8148ecdea5cbb616bc02edcc37cb9680 ("x86: don't check for random warps if using direct sync")
+6.0/features/usb:
+    1d1b79f9c3d6a3dff5a3109f4516eadc0e4f1229 ("usb: dwc3: Fix "linux,extcon-name"")
+6.0/features/valve-extra:
+    31546595683e624048bff94236a27cddb3dfd8a5 ("HID: hid-steam: More Lizard Mode fixes")
