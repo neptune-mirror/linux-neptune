@@ -164,6 +164,8 @@ void dm_set_dcn_clocks(
 void dm_helpers_enable_periodic_detection(struct dc_context *ctx, bool enable);
 #endif
 
+enum adaptive_sync_type dm_get_adaptive_sync_support_type(struct dc_link *link);
+
 void dm_set_phyd32clk(struct dc_context *ctx, int freq_khz);
 
 bool dm_helpers_dmub_outbox_interrupt_control(struct dc_context *ctx, bool enable);

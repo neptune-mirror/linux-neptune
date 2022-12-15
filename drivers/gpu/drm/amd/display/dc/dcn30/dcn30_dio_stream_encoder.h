@@ -283,4 +283,8 @@ void dcn30_dio_stream_encoder_construct(
 	const struct dcn10_stream_encoder_shift *se_shift,
 	const struct dcn10_stream_encoder_mask *se_mask);
 
+void enc3_stream_encoder_update_dp_info_packets_sdp_line_num(
+		struct stream_encoder *enc,
+		struct encoder_info_frame *info_frame);
+
 #endif /* __DC_DIO_STREAM_ENCODER_DCN30_H__ */
