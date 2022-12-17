@@ -497,6 +497,19 @@ static void amdgpu_dm_atomic_lut3d(struct dc_stream_state *stream,
 	stream->lut3d_func = lut;
 }
 
+static int amdgpu_dm_atomic_shaper_lut(struct dc_stream_state *stream,
+				       struct dc_transfer_func *func_shaper_new)
+{
+	/* We don't get DRM shaper LUT yet. We assume the input color space is already
+	 * delinearized, so we don't need a shaper LUT and we can just BYPASS
+	 */
+	func_shaper_new->type = TF_TYPE_BYPASS;
+	func_shaper_new->tf = TRANSFER_FUNCTION_LINEAR;
+	stream->func_shaper = func_shaper_new;
+
+	return 0;
+}
+
 /* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
  * interface
  * @dc: Display Core control structure
@@ -519,18 +532,11 @@ static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
 	lut3d_func_new = (struct dc_3dlut *) stream->lut3d_func;
 	func_shaper_new = (struct dc_transfer_func *) stream->func_shaper;
 
-	/* We don't get DRM shaper LUT yet. We assume the input color space is
-	 * already delinearized, so we don't need a shaper LUT and we can just
-	 * BYPASS.
-	 */
-	func_shaper_new->type = TF_TYPE_BYPASS;
-	func_shaper_new->tf = TRANSFER_FUNCTION_LINEAR;
-	stream->func_shaper = func_shaper_new;
 
 	amdgpu_dm_atomic_lut3d(stream, drm_lut3d, drm_lut3d_size,
 			       mode, lut3d_func_new);
 
-	return 0;
+	return amdgpu_dm_atomic_shaper_lut(stream, func_shaper_new);
 }
 
 static const struct drm_mode_lut3d_mode *
