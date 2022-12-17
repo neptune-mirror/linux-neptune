@@ -411,6 +411,48 @@ static void amdgpu_dm_atomic_lut3d(const struct drm_color_lut *drm_lut,
 	}
 }
 
+/**
+ * __set_input_tf - calculates the input transfer function based on expected
+ * input space.
+ * @func: transfer function
+ * @lut: lookup table that defines the color space
+ * @lut_size: size of respective lut.
+ *
+ * Returns:
+ * 0 in case of success. -ENOMEM if fails.
+ */
+static int __set_input_tf(struct dc_transfer_func *func,
+			  const struct drm_color_lut *lut, uint32_t lut_size)
+{
+	struct dc_gamma *gamma = NULL;
+	bool res;
+
+	gamma = dc_create_gamma();
+	if (!gamma)
+		return -ENOMEM;
+
+	gamma->type = GAMMA_CUSTOM;
+	gamma->num_entries = lut_size;
+
+	__drm_lut_to_dc_gamma(lut, gamma, false);
+
+	res = mod_color_calculate_degamma_params(NULL, func, gamma, true);
+	dc_gamma_release(&gamma);
+
+	return res ? 0 : -ENOMEM;
+}
+
+static int amdgpu_dm_atomic_shaper_lut(struct dc_transfer_func *func_shaper)
+{
+	/* We don't get DRM shaper LUT yet. We assume the input color space is already
+	 * delinearized, so we don't need a shaper LUT and we can just BYPASS
+	 */
+	func_shaper->type = TF_TYPE_BYPASS;
+	func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
+
+	return 0;
+}
+
 /* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
  * interface
  * @dc: Display Core control structure
@@ -454,15 +496,23 @@ static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
 	if (!acquire)
 		return 0;
 
-	/* We don't get DRM shaper LUT yet. We assume the input color
-	 * space is already delinearized, so we don't need a shaper LUT
-	 * and we can just BYPASS.
-	 */
-	func_shaper->type = TF_TYPE_BYPASS;
-	func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
 	amdgpu_dm_atomic_lut3d(drm_lut3d, drm_lut3d_size, lut3d_func);
 
-	return 0;
+	return amdgpu_dm_atomic_shaper_lut(func_shaper);
+}
+
+/**
+ * amdgpu_dm_lut3d_size - get expected size according to hw color caps
+ * @adev: amdgpu device
+ * @lut_size: default size
+ *
+ * Return:
+ * lut_size if DC 3D LUT is supported, zero otherwise.
+ */
+static uint32_t amdgpu_dm_get_lut3d_size(struct amdgpu_device *adev,
+					 uint32_t lut_size)
+{
+	return adev->dm.dc->caps.color.mpc.num_3dluts ? lut_size : 0;
 }
 
 /**
@@ -483,8 +533,7 @@ int amdgpu_dm_verify_lut3d_size(struct amdgpu_device *adev,
 	const struct drm_color_lut *lut3d = NULL;
 	uint32_t exp_size, size;
 
-	exp_size = adev->dm.dc->caps.color.mpc.num_3dluts ?
-		   MAX_COLOR_3DLUT_ENTRIES : 0;
+	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_3DLUT_ENTRIES);
 
 	lut3d = __extract_blob_lut(crtc_state->lut3d, &size);
 
@@ -495,37 +544,6 @@ int amdgpu_dm_verify_lut3d_size(struct amdgpu_device *adev,
 	}
 
 	return 0;
-}
-
-/**
- * __set_input_tf - calculates the input transfer function based on expected
- * input space.
- * @func: transfer function
- * @lut: lookup table that defines the color space
- * @lut_size: size of respective lut.
- *
- * Returns:
- * 0 in case of success. -ENOMEM if fails.
- */
-static int __set_input_tf(struct dc_transfer_func *func,
-			  const struct drm_color_lut *lut, uint32_t lut_size)
-{
-	struct dc_gamma *gamma = NULL;
-	bool res;
-
-	gamma = dc_create_gamma();
-	if (!gamma)
-		return -ENOMEM;
-
-	gamma->type = GAMMA_CUSTOM;
-	gamma->num_entries = lut_size;
-
-	__drm_lut_to_dc_gamma(lut, gamma, false);
-
-	res = mod_color_calculate_degamma_params(NULL, func, gamma, true);
-	dc_gamma_release(&gamma);
-
-	return res ? 0 : -ENOMEM;
 }
 
 /**
