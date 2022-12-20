@@ -187,9 +187,9 @@ static void umc_v6_7_ecc_info_query_ras_error_count(struct amdgpu_device *adev,
 	}
 }
 
-static void umc_v6_7_convert_error_address(struct amdgpu_device *adev,
-					struct ras_err_data *err_data, uint64_t err_addr,
-					uint32_t ch_inst, uint32_t umc_inst)
+void umc_v6_7_convert_error_address(struct amdgpu_device *adev,
+				    struct ras_err_data *err_data, uint64_t err_addr,
+				    uint32_t ch_inst, uint32_t umc_inst)
 {
 	uint32_t channel_index;
 	uint64_t soc_pa, retired_page, column;
