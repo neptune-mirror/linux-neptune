@@ -849,6 +849,7 @@ static inline bool vma_soft_dirty_enabled(struct vm_area_struct *vma)
 	if (!IS_ENABLED(CONFIG_MEM_SOFT_DIRTY))
 		return false;
 
+	return true;
 	/*
 	 * Soft-dirty is kind of special: its tracking is enabled when the
 	 * vma flags not set.
