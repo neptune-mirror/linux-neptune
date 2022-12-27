@@ -388,6 +388,31 @@ int amdgpu_dm_verify_lut_sizes(const struct drm_crtc_state *crtc_state)
 	return 0;
 }
 
+static bool has_mpc_lut3d_caps(struct amdgpu_display_manager *dm)
+{
+	return dm->dc->caps.color.mpc.num_3dluts ? true : false;
+}
+
+/**
+ * amdgpu_dm_enable_lut3d_prop - enable 3D LUT DRM props if HW supports
+ * @crtc: DRM crtc
+ * @dm: amdgpu display manager
+ */
+void amdgpu_dm_enable_lut3d_prop(struct amdgpu_display_manager *dm, struct drm_crtc *crtc)
+{
+	int res;
+
+	if (!has_mpc_lut3d_caps(dm))
+		return;
+
+	res = drm_crtc_create_lut3d_mode_property(crtc, amdgpu_lut3d_modes,
+						  ARRAY_SIZE(amdgpu_lut3d_modes));
+	if (res)
+		drm_dbg(crtc->dev, "CRTC init: Failed to create LUT 3D mode properties\n");
+
+	drm_crtc_enable_lut3d(crtc, MAX_COLOR_LUT_ENTRIES, true);
+}
+
 /**
  * amdgpu_dm_update_crtc_color_mgmt: Maps DRM color management to DC stream.
  * @crtc: amdgpu_dm crtc state
