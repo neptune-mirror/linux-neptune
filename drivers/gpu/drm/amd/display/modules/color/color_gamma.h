@@ -47,6 +47,37 @@ static const struct drm_mode_lut3d_mode lut3d_mode_17_12bit = {
 	.flags = 0,
 };
 
+static const struct drm_mode_lut3d_mode amdgpu_lut3d_modes[] = {
+	{
+		.lut_size = 17,
+		.lut_stride = {17, 17, 18},
+		.bit_depth = 12,
+		.color_format = DRM_FORMAT_XRGB16161616,
+		.flags = 0,
+	},
+	{
+		.lut_size = 17,
+		.lut_stride = {17, 17, 18},
+		.bit_depth = 10,
+		.color_format = DRM_FORMAT_XRGB16161616,
+		.flags = 0,
+	},
+	{
+		.lut_size = 9,
+		.lut_stride = {9, 9, 10},
+		.bit_depth = 12,
+		.color_format = DRM_FORMAT_XRGB16161616,
+		.flags = 0,
+	},
+	{
+		.lut_size = 9,
+		.lut_stride = {9, 9, 10},
+		.bit_depth = 10,
+		.color_format = DRM_FORMAT_XRGB16161616,
+		.flags = 0,
+	},
+};
+
 /* For SetRegamma ADL interface support
  * Must match escape type
  */
