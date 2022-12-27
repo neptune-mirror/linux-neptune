@@ -104,7 +104,7 @@
  *	LUT3D property. A mode specifies size, stride, bit depth and color
  *	format and depends on the underlying hardware). If drivers support
  *	multiple 3D LUT modes, they should be declared in a array of
- *	drm_color_lut3d_mode and they will be advertised as an enum.
+ *	drm_mode_lut3d_mode and they will be advertised as an enum.
  *
  * “GAMMA_LUT”:
  *	Blob property to set the gamma lookup table (LUT) mapping pixel data
@@ -227,6 +227,47 @@ void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 	}
 }
 EXPORT_SYMBOL(drm_crtc_enable_color_mgmt);
+
+int drm_crtc_create_lut3d_mode_property(struct drm_crtc *crtc,
+					const struct drm_mode_lut3d_mode modes[],
+					unsigned int num_modes)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_property_blob *blob;
+	struct drm_property *prop;
+	char *name;
+	int ret;
+
+	if (dev->mode_config.lut3d_mode_property)
+		return 0;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_ENUM, "LUT3D_MODE", num_modes);
+	if (!prop)
+		return -EINVAL;
+
+	for (int i = 0; i < num_modes; i++) {
+		blob = drm_property_create_blob(dev, sizeof(modes[i]), &modes[i]);
+		if (IS_ERR(blob))
+			return PTR_ERR(blob);
+
+		name = kasprintf(GFP_KERNEL, "lut3d_%d_%dbit",
+				 modes[i].lut_size, modes[i].bit_depth);
+		if (!name)
+			return -ENOMEM;
+
+		ret = drm_property_add_enum(prop, blob->base.id, name);
+		if (ret) {
+			drm_property_blob_put(blob);
+			kfree(name);
+			return ret;
+		}
+		kfree(name);
+	}
+	dev->mode_config.lut3d_mode_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_crtc_create_lut3d_mode_property);
 
 /**
  * drm_mode_crtc_set_gamma_size - set the gamma table size
