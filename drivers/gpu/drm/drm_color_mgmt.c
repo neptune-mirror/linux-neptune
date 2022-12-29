@@ -87,6 +87,25 @@
  *	publish the largest size, and sub-sample smaller sized LUTs
  *	appropriately.
  *
+ * “LUT3D”:
+ *	Blob property to set the 3D LUT mapping pixel data after the color
+ *	transformation matrix and before gamma 1D lut correction. The
+ *	data is interpreted as an array of &struct drm_color_lut elements.
+ *	Hardware might choose not to use the full precision of the LUT
+ *	elements.
+ *
+ *	Setting this to NULL (blob property value set to 0) means a the output
+ *	color is identical to the input color. This is generally the driver
+ *	boot-up state too. Drivers can access this blob through
+ *	&drm_crtc_state.gamma_lut.
+ *
+ * “LUT3D_MODE”:
+ *	Enum property to give the mode of the 3D lookup table to be set on the
+ *	LUT3D property. A mode specifies size, stride, bit depth and color
+ *	format and depends on the underlying hardware). If drivers support
+ *	multiple 3D LUT modes, they should be declared in a array of
+ *	drm_color_lut3d_mode and they will be advertised as an enum.
+ *
  * “GAMMA_LUT”:
  *	Blob property to set the gamma lookup table (LUT) mapping pixel data
  *	after the transformation matrix to data sent to the connector. The
