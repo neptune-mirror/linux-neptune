@@ -280,18 +280,32 @@ EXPORT_SYMBOL(drm_crtc_create_lut3d_mode_property);
  * therefore optional.
  */
 void drm_crtc_enable_lut3d(struct drm_crtc *crtc,
-			   uint shaper_lut_size)
+			   uint shaper_lut_size,
+			   bool first_value_as_default)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_property_enum *prop;
+	uint init_value = 0;
 
 	if (!config->lut3d_mode_property)
 		return;
 
 	drm_object_attach_property(&crtc->base,
 				   config->lut3d_property, 0);
+
+	if (first_value_as_default) {
+		prop = list_first_entry_or_null(&config->lut3d_mode_property->enum_list,
+						typeof(*prop), head);
+		init_value = prop ? prop->value : 0;
+	}
+
 	drm_object_attach_property(&crtc->base,
-				   config->lut3d_mode_property, 0);
+				   config->lut3d_mode_property,
+				   init_value);
+
+	if (crtc->state && prop)
+		crtc->state->lut3d_mode = init_value;
 
 	if (!shaper_lut_size)
 		return;

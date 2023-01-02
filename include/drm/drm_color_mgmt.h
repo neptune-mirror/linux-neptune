@@ -64,7 +64,8 @@ int drm_crtc_create_lut3d_mode_property(struct drm_crtc *crtc,
 					unsigned int num_modes);
 
 void drm_crtc_enable_lut3d(struct drm_crtc *crtc,
-			   uint shaper_lut_size);
+			   uint shaper_lut_size,
+			   bool first_value_as_default);
 
 int drm_mode_crtc_set_gamma_size(struct drm_crtc *crtc,
 				 int gamma_size);
