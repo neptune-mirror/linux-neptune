@@ -642,15 +642,18 @@ static void set_dsc_configs_from_fairness_vars(struct dsc_mst_fairness_params *p
 		int count,
 		int k)
 {
+	struct drm_connector *drm_connector;
 	int i;
 
 	for (i = 0; i < count; i++) {
+		drm_connector = &params[i].aconnector->base;
+
 		memset(&params[i].timing->dsc_cfg, 0, sizeof(params[i].timing->dsc_cfg));
 		if (vars[i + k].dsc_enabled && dc_dsc_compute_config(
 					params[i].sink->ctx->dc->res_pool->dscs[0],
 					&params[i].sink->dsc_caps.dsc_dec_caps,
 					params[i].sink->ctx->dc->debug.dsc_min_slice_height_override,
-					params[i].sink->edid_caps.panel_patch.max_dsc_target_bpp_limit,
+					drm_connector->display_info.max_dsc_bpp,
 					0,
 					params[i].timing,
 					&params[i].timing->dsc_cfg)) {
@@ -692,12 +695,16 @@ static int bpp_x16_from_pbn(struct dsc_mst_fairness_params param, int pbn)
 	struct dc_dsc_config dsc_config;
 	u64 kbps;
 
+	struct drm_connector *drm_connector = &param.aconnector->base;
+	uint32_t max_dsc_target_bpp_limit_override =
+		drm_connector->display_info.max_dsc_bpp;
+
 	kbps = div_u64((u64)pbn * 994 * 8 * 54, 64);
 	dc_dsc_compute_config(
 			param.sink->ctx->dc->res_pool->dscs[0],
 			&param.sink->dsc_caps.dsc_dec_caps,
 			param.sink->ctx->dc->debug.dsc_min_slice_height_override,
-			param.sink->edid_caps.panel_patch.max_dsc_target_bpp_limit,
+			max_dsc_target_bpp_limit_override,
 			(int) kbps, param.timing, &dsc_config);
 
 	return dsc_config.bits_per_pixel;
@@ -1372,6 +1379,8 @@ clean_exit:
 	return ret;
 }
 
+#endif
+
 static unsigned int kbps_from_pbn(unsigned int pbn)
 {
 	unsigned int kbps = pbn;
@@ -1399,19 +1408,17 @@ static bool is_dsc_common_config_possible(struct dc_stream_state *stream,
 
 	return bw_range->max_target_bpp_x16 && bw_range->min_target_bpp_x16;
 }
-#endif /* CONFIG_DRM_AMD_DC_DCN */
 
 enum dc_status dm_dp_mst_is_port_support_mode(
 	struct amdgpu_dm_connector *aconnector,
 	struct dc_stream_state *stream)
 {
-	int bpp, pbn, branch_max_throughput_mps = 0;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 	struct dc_link_settings cur_link_settings;
 	unsigned int end_to_end_bw_in_kbps = 0;
 	unsigned int upper_link_bw_in_kbps = 0, down_link_bw_in_kbps = 0;
 	unsigned int max_compressed_bw_in_kbps = 0;
 	struct dc_dsc_bw_range bw_range = {0};
+	int bpp, pbn, branch_max_throughput_mps = 0;
 	struct drm_dp_mst_topology_mgr *mst_mgr;
 
 	/*
@@ -1448,16 +1455,13 @@ enum dc_status dm_dp_mst_is_port_support_mode(
 			return DC_FAIL_BANDWIDTH_VALIDATE;
 		}
 	} else {
-#endif
 		/* check if mode could be supported within full_pbn */
 		bpp = convert_dc_color_depth_into_bpc(stream->timing.display_color_depth) * 3;
 		pbn = drm_dp_calc_pbn_mode(stream->timing.pix_clk_100hz / 10, bpp, false);
 
 		if (pbn > aconnector->port->full_pbn)
 			return DC_FAIL_BANDWIDTH_VALIDATE;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 	}
-#endif
 
 	/* check is mst dsc output bandwidth branch_overall_throughput_0_mps */
 	switch (stream->timing.pixel_encoding) {
