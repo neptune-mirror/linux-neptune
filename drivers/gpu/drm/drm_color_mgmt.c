@@ -725,7 +725,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 	};
 
 	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
-				   "DEGAMMA_LUT", 0);
+				   "VALVE1_PLANE_DEGAMMA_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 
@@ -733,7 +733,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_range(dev,
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "DEGAMMA_LUT_SIZE",
+					 "VALVE1_PLANE_DEGAMMA_LUT_SIZE",
 					 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
@@ -742,7 +742,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_enum(dev,
 					DRM_MODE_PROP_ENUM,
-					"DEGAMMA_TF",
+					"VALVE1_PLANE_DEGAMMA_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
@@ -751,12 +751,12 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_range(dev,
 			0,
-			"HDR_MULT", 0, U64_MAX);
+			"VALVE1_PLANE_HDR_MULT", 0, U64_MAX);
 	if (!prop)
 		return -ENOMEM;
 	plane->hdr_mult = prop;
 
-	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB, "LUT3D", 0);
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB, "VALVE1_PLANE_LUT3D", 0);
 	if (!prop)
 		return -ENOMEM;
 
@@ -764,14 +764,14 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_range(dev,
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "LUT3D_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_LUT3D_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 
 	plane->lut3d_size_property = prop;
 
 	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
-				   "SHAPER_LUT", 0);
+				   "VALVE1_PLANE_SHAPER_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 
@@ -779,7 +779,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_range(dev,
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "SHAPER_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_SHAPER_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 
@@ -787,7 +787,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_enum(dev,
 					DRM_MODE_PROP_ENUM,
-					"SHAPER_TF",
+					"VALVE1_PLANE_SHAPER_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
@@ -796,7 +796,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 	plane->shaper_tf_property = prop;
 
 	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
-				   "BLEND_LUT", 0);
+				   "VALVE1_PLANE_BLEND_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 
@@ -804,7 +804,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_range(dev,
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "BLEND_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 
@@ -812,7 +812,7 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	prop = drm_property_create_enum(dev,
 					DRM_MODE_PROP_ENUM,
-					"BLEND_TF",
+					"VALVE1_PLANE_BLEND_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)

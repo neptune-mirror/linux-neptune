@@ -367,28 +367,28 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
-			"SHAPER_LUT", 0);
+			"VALVE1_SHAPER_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	dev->mode_config.shaper_lut_property = prop;
 
 	prop = drm_property_create_range(dev,
 			DRM_MODE_PROP_IMMUTABLE,
-			"SHAPER_LUT_SIZE", 0, UINT_MAX);
+			"VALVE1_SHAPER_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	dev->mode_config.shaper_lut_size_property = prop;
 
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
-			"LUT3D", 0);
+			"VALVE1_LUT3D", 0);
 	if (!prop)
 		return -ENOMEM;
 	dev->mode_config.lut3d_property = prop;
 
 	prop = drm_property_create_range(dev,
 			DRM_MODE_PROP_IMMUTABLE,
-			"LUT3D_SIZE", 0, UINT_MAX);
+			"VALVE1_LUT3D_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	dev->mode_config.lut3d_size_property = prop;
@@ -409,7 +409,7 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 
 	prop = drm_property_create_enum(dev,
 					DRM_MODE_PROP_ENUM,
-					"GAMMA_TF",
+					"VALVE1_CRTC_REGAMMA_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
