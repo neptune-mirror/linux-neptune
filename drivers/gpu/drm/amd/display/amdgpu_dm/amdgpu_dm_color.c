@@ -650,11 +650,9 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 	has_degamma =
 		degamma_lut && !__is_lut_linear(degamma_lut, degamma_size);
 
-	has_shaper_lut =
-		shaper_lut && !__is_lut_linear(shaper_lut, shaper_size);
+	has_shaper_lut = shaper_lut;
 
-	has_lut3d =
-		lut3d && !__is_lut_linear(lut3d, lut3d_size);
+	has_lut3d = lut3d;
 
 	has_regamma =
 		regamma_lut && !__is_lut_linear(regamma_lut, regamma_size);
