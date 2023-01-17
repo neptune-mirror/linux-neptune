@@ -222,17 +222,9 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.supports_monitor = false,
 		.supports_shadow_regs = true,
 		.idle_ps = true,
-		.supports_sta_ps = true,
 		.cold_boot_calib = false,
 		.supports_suspend = true,
 		.hal_desc_sz = sizeof(struct hal_rx_desc_wcn6855),
-		.fix_l1ss = false,
-		.credit_flow = true,
-		.max_tx_ring = DP_TCL_NUM_RING_MAX_QCA6390,
-		.hal_params = &ath11k_hw_hal_params_qca6390,
-		.supports_dynamic_smps_6ghz = false,
-		.alloc_cacheable_memory = false,
-		.wakeup_mhi = true,
 	},
 	{
 		.name = "wcn6855 hw2.1",
@@ -261,14 +253,8 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.rx_mac_buf_ring = true,
 		.vdev_start_delay = true,
 		.htt_peer_map_v2 = false,
-
-		.spectral = {
-			.fft_sz = 0,
-			.fft_pad_sz = 0,
-			.summary_pad_sz = 0,
-			.fft_hdr_len = 0,
-			.max_fft_bins = 0,
-		},
+		.tcl_0_only = true,
+		.spectral_fft_sz = 0,
 
 		.interface_modes = BIT(NL80211_IFTYPE_STATION) |
 					BIT(NL80211_IFTYPE_AP),
