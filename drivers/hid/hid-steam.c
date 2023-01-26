@@ -357,7 +357,8 @@ static void steam_set_lizard_mode(struct steam_device *steam, bool enable)
 			 * The Steam Deck has a watchdog that automatically enables
 			 * lizard mode if it doesn't see any traffic for too long
 			 */
-			schedule_delayed_work(&steam->heartbeat, 5 * HZ);
+			if (!work_busy(&steam->heartbeat.work))
+				schedule_delayed_work(&steam->heartbeat, 5 * HZ);
 		} else {
 			steam_write_registers(steam,
 				STEAM_REG_RPAD_MARGIN, 0x00, /* disable margin */
@@ -742,7 +743,7 @@ static void steam_lizard_mode_heartbeat(struct work_struct *work)
 							heartbeat.work);
 
 	mutex_lock(&steam->mutex);
-	if (!steam->client_opened) {
+	if (!steam->client_opened && steam->client_hdev) {
 		steam_send_report_byte(steam, STEAM_CMD_CLEAR_MAPPINGS);
 		steam_write_registers(steam,
 			STEAM_REG_RPAD_MODE, 0x07, /* disable mouse */
@@ -965,9 +966,12 @@ static void steam_remove(struct hid_device *hdev)
 	}
 
 	hid_destroy_device(steam->client_hdev);
+	mutex_lock(&steam->mutex);
+	steam->client_hdev = NULL;
 	steam->client_opened = false;
-	cancel_work_sync(&steam->work_connect);
 	cancel_delayed_work_sync(&steam->heartbeat);
+	mutex_unlock(&steam->mutex);
+	cancel_work_sync(&steam->work_connect);
 	if (steam->quirks & STEAM_QUIRK_WIRELESS) {
 		hid_info(hdev, "Steam wireless receiver disconnected");
 	}
