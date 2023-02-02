@@ -25,7 +25,7 @@
 #define WINDOW_RANGE_MASK		GENMASK(18, 0)
 
 #define TCSR_SOC_HW_VERSION		0x0224
-#define TCSR_SOC_HW_VERSION_MAJOR_MASK	GENMASK(11, 8)
+#define TCSR_SOC_HW_VERSION_MAJOR_MASK	GENMASK(16, 8)
 #define TCSR_SOC_HW_VERSION_MINOR_MASK	GENMASK(7, 0)
 
 /* BAR0 + 4k is always accessible, and no
@@ -36,11 +36,9 @@
 
 #define QCA6390_DEVICE_ID		0x1101
 #define QCN9074_DEVICE_ID		0x1104
-#define WCN6855_DEVICE_ID		0x1103
 
 static const struct pci_device_id ath11k_pci_id_table[] = {
 	{ PCI_VDEVICE(QCOM, QCA6390_DEVICE_ID) },
-	{ PCI_VDEVICE(QCOM, WCN6855_DEVICE_ID) },
 	/* TODO: add QCN9074_DEVICE_ID) once firmware issues are resolved */
 	{0}
 };
@@ -1178,26 +1176,12 @@ static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
 	.get_ce_msi_idx = ath11k_pci_get_ce_msi_idx,
 };
 
-static void ath11k_pci_read_hw_version(struct ath11k_base *ab, u32 *major, u32 *minor)
-{
-	u32 soc_hw_version;
-
-	soc_hw_version = ath11k_pci_read32(ab, TCSR_SOC_HW_VERSION);
-	*major = FIELD_GET(TCSR_SOC_HW_VERSION_MAJOR_MASK,
-			   soc_hw_version);
-	*minor = FIELD_GET(TCSR_SOC_HW_VERSION_MINOR_MASK,
-			   soc_hw_version);
-
-	ath11k_dbg(ab, ATH11K_DBG_PCI, "pci tcsr_soc_hw_version major %d minor %d\n",
-		   *major, *minor);
-}
-
 static int ath11k_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *pci_dev)
 {
 	struct ath11k_base *ab;
 	struct ath11k_pci *ab_pci;
-	u32 soc_hw_version_major, soc_hw_version_minor;
+	u32 soc_hw_version, soc_hw_version_major, soc_hw_version_minor;
 	int ret;
 
 	ab = ath11k_core_alloc(&pdev->dev, sizeof(*ab_pci), ATH11K_BUS_PCI,
@@ -1225,8 +1209,15 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 
 	switch (pci_dev->device) {
 	case QCA6390_DEVICE_ID:
-		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
-					   &soc_hw_version_minor);
+		soc_hw_version = ath11k_pci_read32(ab, TCSR_SOC_HW_VERSION);
+		soc_hw_version_major = FIELD_GET(TCSR_SOC_HW_VERSION_MAJOR_MASK,
+						 soc_hw_version);
+		soc_hw_version_minor = FIELD_GET(TCSR_SOC_HW_VERSION_MINOR_MASK,
+						 soc_hw_version);
+
+		ath11k_dbg(ab, ATH11K_DBG_PCI, "pci tcsr_soc_hw_version major %d minor %d\n",
+			   soc_hw_version_major, soc_hw_version_minor);
+
 		switch (soc_hw_version_major) {
 		case 2:
 			ab->hw_rev = ATH11K_HW_QCA6390_HW20;
@@ -1243,33 +1234,6 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		ab_pci->msi_config = &ath11k_msi_config[1];
 		ab->bus_params.static_window_map = true;
 		ab->hw_rev = ATH11K_HW_QCN9074_HW10;
-		break;
-	case WCN6855_DEVICE_ID:
-		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
-					   &soc_hw_version_minor);
-		switch (soc_hw_version_major) {
-		case 2:
-			switch (soc_hw_version_minor) {
-			case 0x00:
-			case 0x01:
-				ab->hw_rev = ATH11K_HW_WCN6855_HW20;
-				break;
-			case 0x10:
-			case 0x11:
-				ab->hw_rev = ATH11K_HW_WCN6855_HW21;
-				break;
-			default:
-				goto unsupported_wcn6855_soc;
-			}
-			break;
-		default:
-unsupported_wcn6855_soc:
-			dev_err(&pdev->dev, "Unsupported WCN6855 SOC hardware version: %d %d\n",
-				soc_hw_version_major, soc_hw_version_minor);
-			ret = -EOPNOTSUPP;
-			goto err_pci_free_region;
-		}
-		ab_pci->msi_config = &ath11k_msi_config[0];
 		break;
 	default:
 		dev_err(&pdev->dev, "Unknown PCI device found: 0x%x\n",
