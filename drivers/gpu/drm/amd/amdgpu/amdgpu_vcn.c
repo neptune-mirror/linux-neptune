@@ -26,6 +26,7 @@
 
 #include <linux/firmware.h>
 #include <linux/module.h>
+#include <linux/dmi.h>
 #include <linux/pci.h>
 #include <linux/debugfs.h>
 #include <drm/drm_drv.h>
@@ -139,6 +140,20 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 
 	if (amdgpu_indirect_sram >= 0)
 		adev->vcn.indirect_sram = (bool)amdgpu_indirect_sram;
+	else {
+		/*
+		 * Steam Deck workaround - force indirect SRAM off if the BIOS
+		 * version doesn't support it. See jupiter/linux-integration#21
+		 * for more information.
+		 */
+		const char *bios_ver = dmi_get_system_info(DMI_BIOS_VERSION);
+
+		if (bios_ver && !strncmp("F7A0113", bios_ver, 7)) {
+			adev->vcn.indirect_sram = false;
+			amdgpu_indirect_sram = 0;
+			pr_warn("Steam Deck WORKAROUND: indirect SRAM disabled on BIOS %s\n", bios_ver);
+		}
+	}
 
 	hdr = (const struct common_firmware_header *)adev->vcn.fw->data;
 	adev->vcn.fw_version = le32_to_cpu(hdr->ucode_version);
