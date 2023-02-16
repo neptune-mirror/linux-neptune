@@ -251,7 +251,7 @@ static struct snd_soc_codec_conf cs35l41_conf[] = {
 SND_SOC_DAILINK_DEF(cs35l41, DAILINK_COMP_ARRAY(COMP_CODEC(CS35L41_LNAME, CS35L41_DAI),
 						COMP_CODEC(CS35L41_RNAME, CS35L41_DAI)));
 
-static struct snd_soc_dai_link acp5x_dai[] = {
+static struct snd_soc_dai_link acp5x_8821_35l41_dai[] = {
 	{
 		.name = "acp5x-8821-play",
 		.stream_name = "Playback/Capture",
@@ -273,7 +273,7 @@ static struct snd_soc_dai_link acp5x_dai[] = {
 	},
 };
 
-static const struct snd_soc_dapm_widget acp5x_8821_widgets[] = {
+static const struct snd_soc_dapm_widget acp5x_8821_35l41_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Int Mic", NULL),
@@ -281,7 +281,7 @@ static const struct snd_soc_dapm_widget acp5x_8821_widgets[] = {
 			    platform_clock_control, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 };
 
-static const struct snd_soc_dapm_route acp5x_8821_audio_route[] = {
+static const struct snd_soc_dapm_route acp5x_8821_35l41_audio_route[] = {
 	/* HP jack connectors - unknown if we have jack detection */
 	{ "Headphone", NULL, "HPOL" },
 	{ "Headphone", NULL, "HPOR" },
@@ -294,15 +294,15 @@ static const struct snd_soc_dapm_route acp5x_8821_audio_route[] = {
 	{ "Int Mic", NULL, "Platform Clock" },
 };
 
-static struct snd_soc_card acp5x_card = {
+static struct snd_soc_card acp5x_8821_35l41_card = {
 	.name = "acp5x",
 	.owner = THIS_MODULE,
-	.dai_link = acp5x_dai,
-	.num_links = ARRAY_SIZE(acp5x_dai),
-	.dapm_widgets = acp5x_8821_widgets,
-	.num_dapm_widgets = ARRAY_SIZE(acp5x_8821_widgets),
-	.dapm_routes = acp5x_8821_audio_route,
-	.num_dapm_routes = ARRAY_SIZE(acp5x_8821_audio_route),
+	.dai_link = acp5x_8821_35l41_dai,
+	.num_links = ARRAY_SIZE(acp5x_8821_35l41_dai),
+	.dapm_widgets = acp5x_8821_35l41_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(acp5x_8821_35l41_widgets),
+	.dapm_routes = acp5x_8821_35l41_audio_route,
+	.num_dapm_routes = ARRAY_SIZE(acp5x_8821_35l41_audio_route),
 	.codec_conf = cs35l41_conf,
 	.num_configs = ARRAY_SIZE(cs35l41_conf),
 	.controls = acp5x_8821_controls,
@@ -341,7 +341,7 @@ static int acp5x_probe(struct platform_device *pdev)
 	dmi_check_system(acp5x_vg_quirk_table);
 	switch (acp5x_machine_id) {
 	case VG_JUPITER:
-		card = &acp5x_card;
+		card = &acp5x_8821_35l41_card;
 		break;
 	default:
 		return -ENODEV;
