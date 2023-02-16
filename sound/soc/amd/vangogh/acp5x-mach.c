@@ -17,19 +17,30 @@
 #include <linux/clk.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
+#include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/io.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
 
 #include "../../codecs/nau8821.h"
+
+#define USE_MAX98388 /* Enable this to use two max98396 amplifiers */
+#ifdef USE_MAX98388
+#undef USE_CS35L41
+#include "../../codecs/max98388.h"
+#else
+#undef USE_MAX98388
+#define USE_CS35L41
 #include "../../codecs/cs35l41.h"
+#endif
 
 #include "acp5x.h"
 
 #define DRV_NAME "acp5x_mach"
 #define DUAL_CHANNEL		2
-#define ACP5X_NUVOTON_CODEC_DAI	"nau8821-hifi"
+
 #define VG_JUPITER 1
 #define ACP5X_NUVOTON_BCLK 3072000
 #define ACP5X_NAU8821_FREQ_OUT 12288000
@@ -73,10 +84,22 @@ static int acp5x_8821_init(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
+#define ACP5X_NUVOTON_CODEC_DAI	"nau8821-hifi"
+#ifdef USE_MAX98388
+#define ACP5X_ADI_CODEC_DAI	"max98388-aif1"
+
+static int acp5x_max98388_init(struct snd_soc_pcm_runtime *rtd)
+{
+	int ret = 0;
+
+	return ret;
+}
+#else
 static int acp5x_cs35l41_init(struct snd_soc_pcm_runtime *rtd)
 {
 	return 0;
 }
+#endif
 
 static const unsigned int rates[] = {
 	48000,
@@ -108,7 +131,7 @@ static struct snd_pcm_hw_constraint_list constraints_sample_bits = {
 static int acp5x_8821_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct acp5x_platform_info *machine = snd_soc_card_get_drvdata(card);
 
@@ -129,7 +152,7 @@ static int acp5x_8821_startup(struct snd_pcm_substream *substream)
 static int acp5x_nau8821_hw_params(struct snd_pcm_substream *substream,
 				   struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct snd_soc_dai *codec_dai =
 			snd_soc_card_get_codec_dai(card,
@@ -148,10 +171,47 @@ static int acp5x_nau8821_hw_params(struct snd_pcm_substream *substream,
 	return ret;
 }
 
+#ifdef USE_MAX98388
+static int acp5x_max98388_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct acp5x_platform_info *machine = snd_soc_card_get_drvdata(card);
+
+	machine->play_i2s_instance = I2S_HS_INSTANCE;
+
+	runtime->hw.channels_max = DUAL_CHANNEL;
+	snd_pcm_hw_constraint_list(runtime, 0, SNDRV_PCM_HW_PARAM_CHANNELS,
+				   &constraints_channels);
+	snd_pcm_hw_constraint_list(runtime, 0, SNDRV_PCM_HW_PARAM_RATE,
+				   &constraints_rates);
+	return 0;
+}
+
+static int acp5x_max98388_hw_params(struct snd_pcm_substream *substream,
+				    struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *codec_dai =
+			snd_soc_card_get_codec_dai(card,
+						   ACP5X_ADI_CODEC_DAI);
+	int ret;
+
+	ret = snd_soc_dai_set_fmt(codec_dai,
+				  SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_I2S |
+				  SND_SOC_DAIFMT_NB_NF);
+	if (ret < 0)
+		return ret;
+
+	return ret;
+}
+#else
 static int acp5x_cs35l41_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct acp5x_platform_info *machine = snd_soc_card_get_drvdata(card);
 
@@ -168,7 +228,7 @@ static int acp5x_cs35l41_startup(struct snd_pcm_substream *substream)
 static int acp5x_cs35l41_hw_params(struct snd_pcm_substream *substream,
 				   struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
 	struct snd_soc_dai *codec_dai;
 	int ret, i;
@@ -178,7 +238,8 @@ static int acp5x_cs35l41_hw_params(struct snd_pcm_substream *substream,
 	ret = 0;
 	for (i = 0; i < num_codecs; i++) {
 		codec_dai = asoc_rtd_to_codec(rtd, i);
-		if (strcmp(codec_dai->name, "cs35l41-pcm") == 0) {
+		if ((strcmp(codec_dai->name, "spi-VLV1776:00") == 0) ||
+		    (strcmp(codec_dai->name, "spi-VLV1776:01") == 0)) {
 			switch (params_rate(params)) {
 			case 48000:
 				bclk_val = 1536000;
@@ -199,17 +260,33 @@ static int acp5x_cs35l41_hw_params(struct snd_pcm_substream *substream,
 
 	return ret;
 }
+#endif
 
 static const struct snd_soc_ops acp5x_8821_ops = {
 	.startup = acp5x_8821_startup,
 	.hw_params = acp5x_nau8821_hw_params,
 };
 
+#ifdef USE_MAX98388
+static const struct snd_soc_ops acp5x_max98388_ops = {
+	.startup = acp5x_max98388_startup,
+	.hw_params = acp5x_max98388_hw_params,
+};
+static struct snd_soc_codec_conf max98388_conf[] = {
+	{
+		.dlc = COMP_CODEC_CONF("i2c-ADS8388:00"),
+		.name_prefix = "Left",
+	},
+	{
+		.dlc = COMP_CODEC_CONF("i2c-ADS8388:01"),
+		.name_prefix = "Right",
+	},
+};
+#else
 static const struct snd_soc_ops acp5x_cs35l41_play_ops = {
 	.startup = acp5x_cs35l41_startup,
 	.hw_params = acp5x_cs35l41_hw_params,
 };
-
 static struct snd_soc_codec_conf cs35l41_conf[] = {
 	{
 		.dlc = COMP_CODEC_CONF("spi-VLV1776:00"),
@@ -220,27 +297,34 @@ static struct snd_soc_codec_conf cs35l41_conf[] = {
 		.name_prefix = "Right",
 	},
 };
+#endif
 
 SND_SOC_DAILINK_DEF(acp5x_i2s,
 		    DAILINK_COMP_ARRAY(COMP_CPU("acp5x_i2s_playcap.0")));
 
+#ifdef USE_MAX98388
 SND_SOC_DAILINK_DEF(acp5x_bt,
 		    DAILINK_COMP_ARRAY(COMP_CPU("acp5x_i2s_playcap.1")));
+SND_SOC_DAILINK_DEF(max98388,
+		    DAILINK_COMP_ARRAY(COMP_CODEC("i2c-ADS8388:00", "max98388-aif1"),
+				       COMP_CODEC("i2c-ADS8388:01", "max98388-aif1")));
+#else
+SND_SOC_DAILINK_DEF(acp5x_bt,
+		    DAILINK_COMP_ARRAY(COMP_CPU("acp5x_i2s_playcap.1")));
+SND_SOC_DAILINK_DEF(cs35l41,
+		    DAILINK_COMP_ARRAY(COMP_CODEC("spi-VLV1776:00", "cs35l41-pcm"),
+				       COMP_CODEC("spi-VLV1776:01", "cs35l41-pcm")));
+#endif
 
 SND_SOC_DAILINK_DEF(nau8821,
 		    DAILINK_COMP_ARRAY(COMP_CODEC("i2c-NVTN2020:00",
 						  "nau8821-hifi")));
-
-SND_SOC_DAILINK_DEF(cs35l41,
-		    DAILINK_COMP_ARRAY(COMP_CODEC("spi-VLV1776:00", "cs35l41-pcm"),
-				       COMP_CODEC("spi-VLV1776:01", "cs35l41-pcm")));
-
 SND_SOC_DAILINK_DEF(platform,
 		    DAILINK_COMP_ARRAY(COMP_PLATFORM("acp5x_i2s_dma.0")));
 
 static struct snd_soc_dai_link acp5x_dai[] = {
 	{
-		.name = "acp5x-8821-play",
+		.name = "acp5x-8825-play",
 		.stream_name = "Playback/Capture",
 		.dai_fmt = SND_SOC_DAIFMT_I2S  | SND_SOC_DAIFMT_NB_NF |
 			   SND_SOC_DAIFMT_CBC_CFC,
@@ -250,6 +334,19 @@ static struct snd_soc_dai_link acp5x_dai[] = {
 		.init = acp5x_8821_init,
 		SND_SOC_DAILINK_REG(acp5x_i2s, nau8821, platform),
 	},
+#ifdef USE_MAX98388
+	{
+		.name = "acp5x-max98388-play",
+		.stream_name = "MAX98388 Playback",
+		.dai_fmt = SND_SOC_DAIFMT_I2S  | SND_SOC_DAIFMT_NB_NF |
+			   SND_SOC_DAIFMT_CBC_CFC,
+		.dpcm_playback = 1,
+		.playback_only = 1,
+		.ops = &acp5x_max98388_ops,
+		.init = acp5x_max98388_init,
+		SND_SOC_DAILINK_REG(acp5x_bt, max98388, platform),
+	},
+#else
 	{
 		.name = "acp5x-CS35L41-Stereo",
 		.stream_name = "CS35L41 Stereo Playback",
@@ -261,6 +358,7 @@ static struct snd_soc_dai_link acp5x_dai[] = {
 		.init = acp5x_cs35l41_init,
 		SND_SOC_DAILINK_REG(acp5x_bt, cs35l41, platform),
 	},
+#endif
 };
 
 static int platform_clock_control(struct snd_soc_dapm_widget *w,
@@ -309,6 +407,9 @@ static const struct snd_soc_dapm_widget acp5x_8821_widgets[] = {
 	SND_SOC_DAPM_MIC("Int Mic", NULL),
 	SND_SOC_DAPM_SUPPLY("Platform Clock", SND_SOC_NOPM, 0, 0,
 			    platform_clock_control, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+#ifdef USE_MAX98388
+	SND_SOC_DAPM_SPK("SPK", NULL),
+#endif
 };
 
 static const struct snd_soc_dapm_route acp5x_8821_audio_route[] = {
@@ -322,6 +423,9 @@ static const struct snd_soc_dapm_route acp5x_8821_audio_route[] = {
 	{ "Headphone", NULL, "Platform Clock" },
 	{ "Headset Mic", NULL, "Platform Clock" },
 	{ "Int Mic", NULL, "Platform Clock" },
+
+	{ "SPK", NULL, "Left BE_OUT" },
+	{ "SPK", NULL, "Right BE_OUT" },
 };
 
 static struct snd_soc_card acp5x_card = {
@@ -333,8 +437,13 @@ static struct snd_soc_card acp5x_card = {
 	.num_dapm_widgets = ARRAY_SIZE(acp5x_8821_widgets),
 	.dapm_routes = acp5x_8821_audio_route,
 	.num_dapm_routes = ARRAY_SIZE(acp5x_8821_audio_route),
+#ifdef USE_MAX98388
+	.codec_conf = max98388_conf,
+	.num_configs = ARRAY_SIZE(max98388_conf),
+#else
 	.codec_conf = cs35l41_conf,
 	.num_configs = ARRAY_SIZE(cs35l41_conf),
+#endif
 	.controls = acp5x_8821_controls,
 	.num_controls = ARRAY_SIZE(acp5x_8821_controls),
 };
