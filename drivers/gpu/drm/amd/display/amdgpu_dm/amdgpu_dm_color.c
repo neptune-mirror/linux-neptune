@@ -398,6 +398,8 @@ static void __drm_3dlut_to_dc_3dlut(const struct drm_color_lut *lut,
 {
 	int lut_i, i;
 
+	ASSERT(lut3d && lut_size == MAX_COLOR_3DLUT_ENTRIES);
+
 	for (lut_i = 0, i = 0; i < lut_size - 4; lut_i++, i += 4) {
 		/* We should consider the 3dlut RGB values are distributed
 		 * along four arrays lut0-3 where the first sizes 1229 and the
@@ -430,16 +432,19 @@ static void amdgpu_dm_atomic_lut3d(struct dc_stream_state *stream,
 				   uint32_t lut_size,
 				   struct dc_3dlut *lut3d)
 {
-	ASSERT(lut3d && lut_size == MAX_COLOR_3DLUT_ENTRIES);
+	if (!lut_size) {
+		lut3d->state.bits.initialized = 0;
+	} else {
+		__drm_3dlut_to_dc_3dlut(lut, lut_size, lut3d);
 
-	__drm_3dlut_to_dc_3dlut(lut, lut_size, lut3d);
+		/* Stride and bit depth is not programmable by API so far.
+		 * Therefore, only supports 17x17x17 3D LUT with 12-bit.
+		 */
 
-	/* Stride and bit depth is not programmable by API so far. Therefore,
-	 * only supports 17x17x17 3D LUT with 12-bit.
-	 */
-	lut3d->lut_3d.use_tetrahedral_9 = false;
-	lut3d->lut_3d.use_12bits = true;
-	lut3d->state.bits.initialized = 1;
+		lut3d->lut_3d.use_tetrahedral_9 = false;
+		lut3d->lut_3d.use_12bits = true;
+		lut3d->state.bits.initialized = 1;
+	}
 
 	stream->lut3d_func = lut3d;
 }
@@ -691,19 +696,17 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 		if (r)
 			return r;
 	} else {
-		if (has_lut3d) {
-			/* enable 3D LUT only for DRM atomic regamma */
-			shaper_size = has_shaper_lut ? shaper_size : 0;
+		/* enable 3D LUT only for DRM atomic regamma */
+		shaper_size = has_shaper_lut ? shaper_size : 0;
 
-			r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, stream,
-							  shaper_lut, shaper_size,
-							  lut3d, lut3d_size);
-
-			if (r) {
-				DRM_DEBUG_DRIVER("Failed to set shaper and 3D LUT\n");
-				return r;
-			}
+		r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, stream,
+						  shaper_lut, shaper_size,
+						  lut3d, lut3d_size);
+		if (r) {
+			DRM_DEBUG_DRIVER("Failed to set shaper and 3D LUT\n");
+			return r;
 		}
+
 		/* Note: OGAM is disabled if 3D LUT is successfully programmed.
 		 * See params and set_output_gamma in
 		 * dcn30_set_output_transfer_func()
