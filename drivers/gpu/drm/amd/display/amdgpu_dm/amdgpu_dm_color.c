@@ -407,13 +407,13 @@ static void __drm_3dlut_to_dc_3dlut(const struct drm_color_lut *lut,
 		 * TODO: improve color pipeline API to enable the userspace set
 		 * bit depth and 3D LUT size/stride, as specified by VA-API.
 		 */
-		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut0[lut_i], lut[i], 10);
-		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut1[lut_i], lut[i + 1], 10);
-		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut2[lut_i], lut[i + 2], 10);
-		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut3[lut_i], lut[i + 3], 10);
+		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut0[lut_i], lut[i], 12);
+		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut1[lut_i], lut[i + 1], 12);
+		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut2[lut_i], lut[i + 2], 12);
+		__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut3[lut_i], lut[i + 3], 12);
 	}
 	/* lut0 has 1229 points (lut_size/4 + 1) */
-	__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut0[lut_i], lut[i], 10);
+	__to_dc_lut3d_color(&lut3d->lut_3d.tetrahedral_17.lut0[lut_i], lut[i], 12);
 }
 
 /* amdgpu_dm_atomic_lut3d - set DRM 3D LUT to DC stream
@@ -438,7 +438,7 @@ static void amdgpu_dm_atomic_lut3d(struct dc_stream_state *stream,
 	 * only supports 17x17x17 3D LUT with 12-bit.
 	 */
 	lut3d->lut_3d.use_tetrahedral_9 = false;
-	lut3d->lut_3d.use_12bits = false;
+	lut3d->lut_3d.use_12bits = true;
 	lut3d->state.bits.initialized = 1;
 
 	stream->lut3d_func = lut3d;
