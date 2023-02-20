@@ -332,14 +332,35 @@ bool cm_helper_translate_curve_to_hw_format(
 	memset(lut_params, 0, sizeof(struct pwl_params));
 	memset(seg_distr, 0, sizeof(seg_distr));
 
-	/* 32 segments
-		* segments are from 2^-25 to 2^7
-		*/
-	for (i = 0; i < NUMBER_REGIONS ; i++)
-		seg_distr[i] = 3;
+	if (output_tf->tf == TRANSFER_FUNCTION_PQ || output_tf->tf == TRANSFER_FUNCTION_GAMMA22) {
+		/* 32 segments
+		 * segments are from 2^-25 to 2^7
+		 */
+		for (i = 0; i < NUMBER_REGIONS ; i++)
+			seg_distr[i] = 3;
 
-	region_start = -MAX_LOW_POINT;
-	region_end   = NUMBER_REGIONS - MAX_LOW_POINT;
+		region_start = -MAX_LOW_POINT;
+		region_end   = NUMBER_REGIONS - MAX_LOW_POINT;
+	} else {
+		/* 11 segments
+		 * segment is from 2^-10 to 2^1
+		 * There are less than 256 points, for optimization
+		 */
+		seg_distr[0] = 3;
+		seg_distr[1] = 4;
+		seg_distr[2] = 4;
+		seg_distr[3] = 4;
+		seg_distr[4] = 4;
+		seg_distr[5] = 4;
+		seg_distr[6] = 4;
+		seg_distr[7] = 4;
+		seg_distr[8] = 4;
+		seg_distr[9] = 4;
+		seg_distr[10] = 1;
+
+		region_start = -10;
+		region_end = 1;
+	}
 
 	for (i = region_end - region_start; i < MAX_REGIONS_NUMBER ; i++)
 		seg_distr[i] = -1;
