@@ -376,7 +376,7 @@ static int __set_func_shaper(struct dc_transfer_func *shaper_func,
 	 * instead to simulate this.
 	 */
 	gamma->type = GAMMA_RGB_256;
-	res = mod_color_calculate_degamma_params(NULL, shaper_func, gamma, true);
+	res = mod_color_calculate_degamma_params(NULL, shaper_func, gamma, false);
 
 	dc_gamma_release(&gamma);
 
