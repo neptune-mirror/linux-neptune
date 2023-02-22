@@ -1969,7 +1969,7 @@ static void acpi_scan_init_hotplug(struct acpi_device *adev)
 
 static u32 acpi_scan_check_dep(acpi_handle handle, bool check_dep)
 {
-	struct acpi_handle_list dep_devices;
+	struct acpi_handle_list *dep_devices;
 	acpi_status status;
 	u32 count;
 	int i;
@@ -1990,12 +1990,12 @@ static u32 acpi_scan_check_dep(acpi_handle handle, bool check_dep)
 		return 0;
 	}
 
-	for (count = 0, i = 0; i < dep_devices.count; i++) {
+	for (count = 0, i = 0; i < dep_devices->count; i++) {
 		struct acpi_device_info *info;
 		struct acpi_dep_data *dep;
 		bool skip, honor_dep;
 
-		status = acpi_get_object_info(dep_devices.handles[i], &info);
+		status = acpi_get_object_info(dep_devices->handles[i], &info);
 		if (ACPI_FAILURE(status)) {
 			acpi_handle_debug(handle, "Error reading _DEP device info\n");
 			continue;
@@ -2014,7 +2014,7 @@ static u32 acpi_scan_check_dep(acpi_handle handle, bool check_dep)
 
 		count++;
 
-		dep->supplier = dep_devices.handles[i];
+		dep->supplier = dep_devices->handles[i];
 		dep->consumer = handle;
 		dep->honor_dep = honor_dep;
 
@@ -2023,6 +2023,7 @@ static u32 acpi_scan_check_dep(acpi_handle handle, bool check_dep)
 		mutex_unlock(&acpi_dep_list_lock);
 	}
 
+	kfree(dep_devices);
 	return count;
 }
 
