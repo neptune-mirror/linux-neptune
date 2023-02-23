@@ -110,9 +110,7 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 	for (i = 0; i < adev->vcn.num_vcn_inst; i++)
 		atomic_set(&adev->vcn.inst[i].dpg_enc_submission_cnt, 0);
 
-	if ((adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) &&
-	    (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG))
-		adev->vcn.indirect_sram = true;
+	adev->vcn.indirect_sram = false;
 
 	hdr = (const struct common_firmware_header *)adev->vcn.fw->data;
 	adev->vcn.fw_version = le32_to_cpu(hdr->ucode_version);
