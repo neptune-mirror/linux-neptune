@@ -147,7 +147,7 @@ MODULE_FIRMWARE(FIRMWARE_NAVI12_DMCU);
 #define PSP_FOOTER_BYTES 0x100
 
 /* Maximum backlight level. */
-#define AMDGPU_MAX_BL_LEVEL 0xFFFF
+#define AMDGPU_MAX_BL_LEVEL 0xFFF
 
 /**
  * DOC: overview
@@ -4103,9 +4103,12 @@ static u32 convert_brightness_from_user(const struct amdgpu_dm_backlight_caps *c
 {
 	unsigned min, max;
 
-	if (!get_brightness_range(caps, &min, &max))
-		return brightness;
+	//if (!get_brightness_range(caps, &min, &max))
+	//	return brightness;
+        min = 0;
+	max = 500000;
 
+	DRM_INFO("[%s, %d] brightness range %d - %d", __func__, __LINE__, min, max);
 	// Rescale 0..AMDGPU_MAX_BL_LEVEL to min..max
 	return min + DIV_ROUND_CLOSEST((max - min) * brightness,
 				       AMDGPU_MAX_BL_LEVEL);
