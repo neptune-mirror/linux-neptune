@@ -15,31 +15,6 @@ echo -e "\t\t\t\t Starting syscall_user_dispatch:sud_benchmark Tests"
 ./sud_benchmark 
 echo -e "\t\t\t\t Completed syscall_user_dispatch:sud_benchmark Tests"
 echo "========================================================================" 
-echo -e "\t\t\t\t Build Perf benchmark"
-echo "========================================================================" 
-cd /mnt
-make headers_install INSTALL_HDR_PATH=/usr
-echo "grep FUTEX_32"
-grep FUTEX_32 /usr/include/linux/futex.h
-cd /mnt/tools/perf/ && make
-
-echo -e "\t\t\t\t Completed perf benchmark build" 
-echo "========================================================================" 
-echo -e "\t\t\t\t Run Perf benchmark"
-echo "========================================================================" 
-
-./perf bench futex2 hash -s
-./perf bench futex2 hash -s -S
-./perf bench -r 50 futex2 wake -s
-./perf bench -r 50 futex2 wake -s -S
-./perf bench -r 50 futex2 wake-parallel -s
-./perf bench -r 50 futex2 wake-parallel -s -S
-./perf bench -r 50 futex2 wake -s -t 1000
-./perf bench -r 50 futex2 wake -s -S  -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -t 1000
-./perf bench -r 50 futex2 wake-parallel -s -S -t 1000
-
-echo -e "\t\t\t\t Completed perf run" 
 }
 
 start_test 2>&1 | tee -a /mnt/kernel_results.log
