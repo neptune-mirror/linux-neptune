@@ -1266,19 +1266,10 @@ dcn301_add_stream_to_ctx(struct dc *dc,
 			 struct dc_stream_state *dc_stream)
 {
 	enum dc_status result = DC_ERROR_UNEXPECTED;
-	struct dc_3dlut *lut3d_func_new = NULL;
-	struct dc_transfer_func *func_shaper_new = NULL;
 
 	result = dcn20_add_stream_to_ctx(dc, new_ctx, dc_stream);
 	if (result != DC_OK)
 		return result;
-
-	if (!dc_acquire_release_mpc_3dlut_for_ctx(dc, true, new_ctx, dc_stream,
-						  &lut3d_func_new, &func_shaper_new))
-		return DC_ERROR_UNEXPECTED;
-
-	dc_stream->lut3d_func = lut3d_func_new;
-	dc_stream->func_shaper = func_shaper_new;
 
 	return DC_OK;
 }
@@ -1294,9 +1285,13 @@ dcn301_remove_stream_from_ctx(struct dc *dc,
 	lut3d_func = (struct dc_3dlut *)dc_stream->lut3d_func;
 	func_shaper = (struct dc_transfer_func *)dc_stream->func_shaper;
 
-	if (!dc_acquire_release_mpc_3dlut_for_ctx(dc, false, new_ctx, dc_stream,
-						  &lut3d_func, &func_shaper))
-		return DC_ERROR_UNEXPECTED;
+	ASSERT((lut3d_func && func_shaper) || (!lut3d_func && !func_shaper));
+	if (lut3d_func && func_shaper)
+	{
+		if (!dc_acquire_release_mpc_3dlut_for_ctx(dc, false, new_ctx, dc_stream,
+							&lut3d_func, &func_shaper))
+			return DC_ERROR_UNEXPECTED;
+	}
 
 	dc_stream->lut3d_func = lut3d_func;
 	dc_stream->func_shaper = func_shaper;

@@ -488,22 +488,39 @@ static int amdgpu_dm_atomic_shaper_lut(struct dc_stream_state *stream,
  * 0 on success.
  */
 static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
+					 struct dc_state *ctx,
 					 struct dc_stream_state *stream,
 					 const struct drm_color_lut *drm_shaper_lut,
 					 uint32_t drm_shaper_size,
 					 const struct drm_color_lut *drm_lut3d,
 					 uint32_t drm_lut3d_size)
 {
-	struct dc_3dlut *lut3d_func_new;
-	struct dc_transfer_func *func_shaper_new;
+	struct dc_3dlut *lut3d_func;
+	struct dc_transfer_func *func_shaper;
+	bool acquire = drm_shaper_size && drm_lut3d_size;
 
-	lut3d_func_new = (struct dc_3dlut *) stream->lut3d_func;
-	func_shaper_new = (struct dc_transfer_func *) stream->func_shaper;
+	lut3d_func = (struct dc_3dlut *)stream->lut3d_func;
+	func_shaper = (struct dc_transfer_func *)stream->func_shaper;
 
-	amdgpu_dm_atomic_lut3d(stream, drm_lut3d, drm_lut3d_size, lut3d_func_new);
+	ASSERT((lut3d_func && func_shaper) || (!lut3d_func && !func_shaper));
+	if ((acquire && !lut3d_func && !func_shaper) ||
+		(!acquire && lut3d_func && func_shaper))
+	{
+		if (!dc_acquire_release_mpc_3dlut_for_ctx(dc, acquire, ctx, stream,
+							&lut3d_func, &func_shaper))
+			return DC_ERROR_UNEXPECTED;
+	}
+
+	stream->lut3d_func = lut3d_func;
+	stream->func_shaper = func_shaper;
+
+	if (!acquire)
+		return 0;
+
+	amdgpu_dm_atomic_lut3d(stream, drm_lut3d, drm_lut3d_size, lut3d_func);
 
 	return amdgpu_dm_atomic_shaper_lut(stream, drm_shaper_lut,
-					   drm_shaper_size, func_shaper_new);
+					   drm_shaper_size, func_shaper);
 }
 
 /**
@@ -619,7 +636,7 @@ int amdgpu_dm_verify_lut_sizes(const struct drm_crtc_state *crtc_state)
  * Returns:
  * 0 on success. Error code if setup fails.
  */
-int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
+int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state *crtc)
 {
 	struct dc_stream_state *stream = crtc->stream;
 	struct amdgpu_device *adev = drm_to_adev(crtc->base.state->dev);
@@ -695,12 +712,21 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 			/* enable 3D LUT only for DRM atomic regamma */
 			shaper_size = has_shaper_lut ? shaper_size : 0;
 
-			r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, stream,
+			r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, ctx, stream,
 							  shaper_lut, shaper_size,
 							  lut3d, lut3d_size);
 
 			if (r) {
 				DRM_DEBUG_DRIVER("Failed to set shaper and 3D LUT\n");
+				return r;
+			}
+		} else {
+			r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, ctx, stream,
+							  NULL, 0,
+							  NULL, 0);
+
+			if (r) {
+				DRM_DEBUG_DRIVER("Failed to unset shaper and 3D LUT\n");
 				return r;
 			}
 		}
