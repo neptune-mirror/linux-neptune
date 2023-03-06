@@ -22,7 +22,6 @@
 
 #define DRV_NAME			"acp5x_mach"
 #define DUAL_CHANNEL			2
-#define VG_JUPITER			1
 #define ACP5X_NAU8821_BCLK		3072000
 #define ACP5X_NAU8821_FREQ_OUT		12288000
 #define ACP5X_NAU8821_COMP_NAME 	"i2c-NVTN2020:00"
@@ -31,7 +30,6 @@
 #define ACP5X_CS35L41_COMP_RNAME	"spi-VLV1776:01"
 #define ACP5X_CS35L41_DAI_NAME		"cs35l41-pcm"
 
-static unsigned long acp5x_machine_id;
 static struct snd_soc_jack vg_headset;
 
 SND_SOC_DAILINK_DEF(platform,  DAILINK_COMP_ARRAY(COMP_PLATFORM("acp5x_i2s_dma.0")));
@@ -331,43 +329,23 @@ static struct snd_soc_card acp5x_8821_35l41_card = {
 	.num_controls = ARRAY_SIZE(acp5x_8821_controls),
 };
 
-static int acp5x_vg_quirk_cb(const struct dmi_system_id *id)
-{
-	acp5x_machine_id = VG_JUPITER;
-
-	return 1;
-}
-
-static const struct dmi_system_id acp5x_vg_quirk_table[] = {
-	{
-		.callback = acp5x_vg_quirk_cb,
-		.matches = {
-			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Valve"),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Jupiter"),
-		}
-	},
-	{}
-};
-
 static int acp5x_probe(struct platform_device *pdev)
 {
 	struct acp5x_platform_info *machine;
 	struct device *dev = &pdev->dev;
 	struct snd_soc_card *card;
+	const struct acpi_device_id *acpi_id;
 	int ret;
 
 	machine = devm_kzalloc(dev, sizeof(*machine), GFP_KERNEL);
 	if (!machine)
 		return -ENOMEM;
 
-	dmi_check_system(acp5x_vg_quirk_table);
-	switch (acp5x_machine_id) {
-	case VG_JUPITER:
-		card = &acp5x_8821_35l41_card;
-		break;
-	default:
+	acpi_id = acpi_match_device(dev->driver->acpi_match_table, dev);
+	if (!acpi_id)
 		return -ENODEV;
-	}
+	card = (struct snd_soc_card *)acpi_id->driver_data;
+
 	card->dev = dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, machine);
@@ -379,10 +357,17 @@ static int acp5x_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct acpi_device_id acp5x_acpi_match[] = {
+	{ "AMDI3541", (kernel_ulong_t)&acp5x_8821_35l41_card },
+	{},
+};
+MODULE_DEVICE_TABLE(acpi, acp5x_acpi_match);
+
 static struct platform_driver acp5x_mach_driver = {
 	.driver = {
 		.name = "acp5x_mach",
 		.pm = &snd_soc_pm_ops,
+		.acpi_match_table = ACPI_PTR(acp5x_acpi_match),
 	},
 	.probe = acp5x_probe,
 };
