@@ -40,6 +40,61 @@ MODULE_PARM_DESC(disable_lps_deep, "Set Y to disable Deep PS");
 MODULE_PARM_DESC(support_bf, "Set Y to enable beamformee support");
 MODULE_PARM_DESC(debug_mask, "Debugging mask");
 
+static void rtw_fw_code_dump(struct rtw_dev *rtwdev)
+{
+	u32 v32;
+	printk("========CoreDump========\n");
+	printk("EPC %x\n", rtw_read32(rtwdev, 0x48c));
+	printk("BADADDR %x\n", rtw_read32(rtwdev, 0x490));
+	v32 = rtw_read32(rtwdev, 0x494);
+	printk("CAUSE %x ExcCode %x\n", v32, (v32 & 0x7C) >> 2);
+	printk("Status %x\n", rtw_read32(rtwdev, 0x498));
+	printk("SP %x\n", rtw_read32(rtwdev, 0x49c));
+	printk("RA %x\n", rtw_read32(rtwdev, 0x4a0));
+	printk("10F8 %x\n", rtw_read32(rtwdev, 0x10f8));
+	printk("10FC %x\n", rtw_read32(rtwdev, 0x10fc));
+}
+
+void rtw_dump_fw_info(struct rtw_dev *rtwdev)
+{
+	u32 v32;
+	u8 v8;
+	int i;
+
+	v32 = rtw_read32(rtwdev, 0x130);
+	printk("REG_FWIMR 130 %x %s\n", v32, (v32 & BIT(4))?"enable":"disable");
+
+	v32 = rtw_read32(rtwdev, 0x134);
+	printk("REG_FWIMR 134 %x %s\n", v32, (v32 & BIT(4))?"enable":"disable");
+
+	v8 = rtw_read32(rtwdev, 0x1cc);
+	printk("REG_FWIMR 1cc %x\n", v8 & 0xf);
+
+	for (i = 0 ; i <4 ; i++)
+	{
+		printk("MSG %d %x%x\n", i, rtw_read32(rtwdev, 0x1d0 + i*4), rtw_read32(rtwdev, 0x1f0 + i * 4));
+	}
+
+	printk("========H2C PKT========\n");
+
+	v32 = rtw_read32(rtwdev, 0x1138);
+	printk("REG_FT1IMR 1138 %x %s\n", v32, (v32 & BIT(25))?"enable":"disable");
+	v32 = rtw_read32(rtwdev, 0x113c);
+	printk("REG_FT1ISR 113c %x %s\n", v32, (v32 & BIT(25))?"enable":"disable");
+
+
+	printk("========C2H========\n");
+	v32 = rtw_read32(rtwdev, 0x130);
+	printk("REG_FWIMR 130 %x CPWM %lx HRECV %lx\n", v32, v32 & BIT(4), v32 & BIT(5) );
+	v32 = rtw_read32(rtwdev, 0x134);
+	printk("REG_FWISR0 134 %x CPWM %lx HRECV %lx\n", v32, v32 & BIT(4), v32 & BIT(5) );
+
+	printk("REG_CPWM 12c %x\n", rtw_read32(rtwdev, 0x12c));
+
+	for (i = 0 ; i<10; i++)
+		rtw_fw_code_dump(rtwdev);
+}
+
 static struct ieee80211_channel rtw_channeltable_2g[] = {
 	{.center_freq = 2412, .hw_value = 1,},
 	{.center_freq = 2417, .hw_value = 2,},

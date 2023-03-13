@@ -381,6 +381,7 @@ static void rtw_fw_send_h2c_command(struct rtw_dev *rtwdev,
 
 	if (ret) {
 		rtw_err(rtwdev, "failed to send h2c command\n");
+		rtw_dump_fw_info(rtwdev);
 		goto out;
 	}
 
