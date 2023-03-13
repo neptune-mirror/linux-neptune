@@ -1910,6 +1910,8 @@ int rtw_core_init(struct rtw_dev *rtwdev)
 	struct rtw_coex *coex = &rtwdev->coex;
 	int ret;
 
+	printk("20230313 fw debug\n");
+
 	INIT_LIST_HEAD(&rtwdev->rsvd_page_list);
 	INIT_LIST_HEAD(&rtwdev->txqs);
 
