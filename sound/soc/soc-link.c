@@ -5,6 +5,7 @@
 // Copyright (C) 2019 Renesas Electronics Corp.
 // Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 //
+#define DEBUG
 #include <sound/soc.h>
 #include <sound/soc-link.h>
 
