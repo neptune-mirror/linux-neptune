@@ -191,6 +191,22 @@ struct drm_plane_state {
 	struct drm_property_blob *fb_damage_clips;
 
 	/**
+	 * @degamma_lut:
+	 *
+	 * LUT for converting plane pixel data before going into plane merger.
+	 * The blob (if not NULL) is an array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *degamma_lut;
+
+	/**
+	 * @degamma_tf:
+	 *
+	 * Pre-defined transfer function for converting plane pixel data before
+	 * going into plane merger.
+	 */
+	enum drm_transfer_function degamma_tf;
+
+	/**
 	 * @src:
 	 *
 	 * source coordinates of the plane (in 16.16).

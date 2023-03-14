@@ -748,9 +748,29 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
 	return 0;
 }
 
+static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_function drm_tf)
+{
+	switch (drm_tf)
+	{
+	default:
+	case DRM_TRANSFER_FUNCTION_DEFAULT: return TRANSFER_FUNCTION_LINEAR;
+	case DRM_TRANSFER_FUNCTION_SRGB:	return TRANSFER_FUNCTION_SRGB;
+
+	case DRM_TRANSFER_FUNCTION_BT709:	return TRANSFER_FUNCTION_BT709;
+	case DRM_TRANSFER_FUNCTION_PQ:		return TRANSFER_FUNCTION_PQ;
+	case DRM_TRANSFER_FUNCTION_LINEAR:	return TRANSFER_FUNCTION_LINEAR;
+	case DRM_TRANSFER_FUNCTION_UNITY:	return TRANSFER_FUNCTION_UNITY;
+	case DRM_TRANSFER_FUNCTION_HLG:		return TRANSFER_FUNCTION_HLG;
+	case DRM_TRANSFER_FUNCTION_GAMMA22:	return TRANSFER_FUNCTION_GAMMA22;
+	case DRM_TRANSFER_FUNCTION_GAMMA24:	return TRANSFER_FUNCTION_GAMMA24;
+	case DRM_TRANSFER_FUNCTION_GAMMA26:	return TRANSFER_FUNCTION_GAMMA26;
+	}
+}
+
 /**
  * amdgpu_dm_update_plane_color_mgmt: Maps DRM color management to DC plane.
  * @crtc: amdgpu_dm crtc state
+ * @plane_state: DRM plane
  * @dc_plane_state: target DC surface
  *
  * Update the underlying dc_stream_state's input transfer function (ITF) in
@@ -761,12 +781,22 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
+					  struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
 	const struct drm_color_lut *degamma_lut;
 	enum dc_transfer_func_predefined tf = TRANSFER_FUNCTION_SRGB;
+	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 	uint32_t degamma_size;
+	bool has_degamma;
 	int r;
+
+	degamma_lut = __extract_blob_lut(plane_state->degamma_lut, &degamma_size);
+
+	has_degamma =
+		degamma_lut && !__is_lut_linear(degamma_lut, degamma_size);
+
+	drm_tf = plane_state->degamma_tf;
 
 	/* Get the correct base transfer function for implicit degamma. */
 	switch (dc_plane_state->format) {
@@ -779,7 +809,30 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		break;
 	}
 
-	if (crtc->cm_has_degamma) {
+	if (has_degamma) {
+		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
+
+		dc_plane_state->in_transfer_func->type =
+			TF_TYPE_DISTRIBUTED_POINTS;
+
+		dc_plane_state->in_transfer_func->tf =
+			drm_tf_to_dc_tf(drm_tf);
+
+		r = __set_input_tf(dc_plane_state->in_transfer_func,
+				   degamma_lut, degamma_size);
+		if (r)
+			return r;
+	} else if (drm_tf != DRM_TRANSFER_FUNCTION_DEFAULT) {
+		dc_plane_state->in_transfer_func->type =
+			TF_TYPE_PREDEFINED;
+
+		dc_plane_state->in_transfer_func->tf =
+			drm_tf_to_dc_tf(drm_tf);
+
+		if (!mod_color_calculate_degamma_params(NULL,
+			    dc_plane_state->in_transfer_func, NULL, false))
+			return -ENOMEM;
+	} else if (crtc->cm_has_degamma) {
 		degamma_lut = __extract_blob_lut(crtc->base.degamma_lut,
 						 &degamma_size);
 		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
