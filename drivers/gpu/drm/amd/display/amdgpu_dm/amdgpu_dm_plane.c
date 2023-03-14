@@ -1548,6 +1548,7 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	int res = -EPERM;
 	unsigned int supported_rotations;
 	uint64_t *modifiers = NULL;
+	bool is_dcn;
 
 	num_formats = get_plane_formats(plane, plane_cap, formats,
 					ARRAY_SIZE(formats));
@@ -1605,6 +1606,11 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 
 	drm_plane_helper_add(plane, &dm_plane_helper_funcs);
 
+	/* Don't enable DRM CRTC degamma property for DCE since it doesn't
+	 * support programmable degamma anywhere.
+	 */
+	is_dcn = dm->adev->dm.dc->caps.color.dpp.dcn_arch;
+	drm_plane_enable_color_mgmt(plane, is_dcn ? MAX_COLOR_LUT_ENTRIES : 0);
 #ifdef CONFIG_DRM_AMD_DC_HDR
 	attach_color_mgmt_properties(dm, plane);
 #endif

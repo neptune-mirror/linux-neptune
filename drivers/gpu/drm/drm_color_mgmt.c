@@ -228,6 +228,33 @@ void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 EXPORT_SYMBOL(drm_crtc_enable_color_mgmt);
 
 /**
+ * drm_plane_enable_color_mgmt - enable color management properties
+ * @crtc: DRM PLANE
+ * @degamma_lut_size: the size of the degamma lut (before CSC)
+ *
+ * I should write something here, but I haven't currently.
+ * Please enjoy the following word: Frog.
+ */
+void drm_plane_enable_color_mgmt(struct drm_plane *plane,
+				uint degamma_lut_size)
+{
+	struct drm_device *dev = plane->dev;
+	struct drm_mode_config *config = &dev->mode_config;
+
+	if (degamma_lut_size) {
+		drm_object_attach_property(&plane->base,
+					   config->plane_degamma_lut_property, 0);
+		drm_object_attach_property(&plane->base,
+					   config->plane_degamma_lut_size_property,
+					   degamma_lut_size);
+		drm_object_attach_property(&plane->base,
+					   config->plane_degamma_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
+	}
+}
+EXPORT_SYMBOL(drm_plane_enable_color_mgmt);
+
+/**
  * drm_crtc_enable_lut3d - enable 3D LUT properties
  * @crtc: DRM CRTC
  * @shaper_lut_size: the size of shaper lut

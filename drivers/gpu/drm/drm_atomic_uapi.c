@@ -595,6 +595,15 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->degamma_lut,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		return ret;
+	} else if (property == config->plane_degamma_tf_property) {
+		state->degamma_tf = val;
 	} else {
 		drm_dbg_atomic(plane->dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -655,6 +664,10 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 		*val = state->scaling_filter;
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		*val = (state->degamma_lut) ? state->degamma_lut->base.id : 0;
+	} else if (property == config->plane_degamma_tf_property) {
+		*val = state->degamma_tf;
 	} else {
 		return -EINVAL;
 	}
