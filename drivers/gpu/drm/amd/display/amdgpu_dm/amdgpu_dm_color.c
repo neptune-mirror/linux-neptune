@@ -249,13 +249,14 @@ static int __set_legacy_tf(struct dc_transfer_func *func,
  * @func: transfer function
  * @lut: lookup table that defines the color space
  * @lut_size: size of respective lut
+ * @has_rom: if ROM can be used for hardcoded curve
  *
  * Returns:
  * 0 in case of success. -ENOMEM if fails.
  */
 static int __set_output_tf(struct dc_transfer_func *func,
-			   const struct drm_color_lut *lut,
-			   uint32_t lut_size)
+			   const struct drm_color_lut *lut, uint32_t lut_size,
+			   bool has_rom)
 {
 	struct dc_gamma *gamma = NULL;
 	struct calculate_buffer cal_buffer = {0};
@@ -272,13 +273,24 @@ static int __set_output_tf(struct dc_transfer_func *func,
 	gamma->num_entries = lut_size;
 	__drm_lut_to_dc_gamma(lut, gamma, false);
 
-	/*
-	 * Color module doesn't like calculating regamma params
-	 * on top of a linear input. But degamma params can be used
-	 * instead to simulate this.
-	 */
-	gamma->type = GAMMA_CUSTOM;
-	res = mod_color_calculate_degamma_params(NULL, func, gamma, true);
+	if (func->tf == TRANSFER_FUNCTION_LINEAR) {
+		/*
+		 * Color module doesn't like calculating regamma params
+		 * on top of a linear input. But degamma params can be used
+		 * instead to simulate this.
+		 */
+		gamma->type = GAMMA_CUSTOM;
+		res = mod_color_calculate_degamma_params(NULL, func,
+							gamma, true);
+	} else {
+		/*
+		 * Assume sRGB. The actual mapping will depend on whether the
+		 * input was legacy or not.
+		 */
+		gamma->type = GAMMA_CS_TFM_1D;
+		res = mod_color_calculate_regamma_params(func, gamma, false,
+							 has_rom, NULL, &cal_buffer);
+	}
 
 	dc_gamma_release(&gamma);
 
@@ -287,7 +299,7 @@ static int __set_output_tf(struct dc_transfer_func *func,
 
 static int amdgpu_dm_set_atomic_regamma(struct dc_stream_state *stream,
 					const struct drm_color_lut *regamma_lut,
-					uint32_t regamma_size)
+					uint32_t regamma_size, bool has_rom)
 {
 	int ret = 0;
 
@@ -302,7 +314,7 @@ static int amdgpu_dm_set_atomic_regamma(struct dc_stream_state *stream,
 		stream->out_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
 
 		ret = __set_output_tf(stream->out_transfer_func, regamma_lut,
-				      regamma_size);
+				      regamma_size, has_rom);
 	} else {
 		/*
 		 * No CRTC RGM means we can just put the block into bypass
@@ -729,7 +741,7 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state 
 		 * dcn30_set_output_transfer_func()
 		 */
 		regamma_size = has_regamma ? regamma_size : 0;
-		r = amdgpu_dm_set_atomic_regamma(stream, regamma_lut, regamma_size);
+		r = amdgpu_dm_set_atomic_regamma(stream, regamma_lut, regamma_size, has_rom);
 		if (r)
 			return r;
 	}
