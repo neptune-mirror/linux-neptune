@@ -9078,6 +9078,12 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 		    old_other_state->color_encoding != new_other_state->color_encoding)
 			return true;
 
+		/* HDR/Transfer Function changes. */
+		if (old_other_state->degamma_tf != new_other_state->degamma_tf ||
+			old_other_state->degamma_lut != new_other_state->degamma_lut ||
+			old_other_state->hdr_mult != new_other_state->hdr_mult)
+			return true;
+
 		/* Framebuffer checks fall at the end. */
 		if (!old_other_state->fb || !new_other_state->fb)
 			continue;
