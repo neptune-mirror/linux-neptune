@@ -211,6 +211,9 @@ void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 		drm_object_attach_property(&crtc->base,
 					   config->degamma_lut_size_property,
 					   degamma_lut_size);
+		drm_object_attach_property(&crtc->base,
+					   config->crtc_regamma_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 	}
 
 	if (has_ctm)

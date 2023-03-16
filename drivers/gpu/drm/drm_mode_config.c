@@ -422,6 +422,15 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 		return -ENOMEM;
 	dev->mode_config.lut3d_size_property = prop;
 
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"VALVE1_CRTC_REGAMMA_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.crtc_regamma_tf_property = prop;
+
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
 			"GAMMA_LUT", 0);
