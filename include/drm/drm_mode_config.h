@@ -812,6 +812,19 @@ struct drm_mode_config {
 	 */
 	struct drm_property *plane_degamma_tf_property;
 	/**
+	 * @plane_hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.
+	 * When PQ is decoded using the fixed func transfer function to the internal FP16 fb,
+	 * 1.0 -> 80 nits (on AMD at least)
+	 * When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.
+	 * So if you want, 203 nits for SDR content, pass in (203.0 / 80.0).
+	 *
+	 * Format is S31.32 sign-magnitude.
+	 */
+	struct drm_property *plane_hdr_mult;
+	/**
 	 * @ctm_property: Optional CRTC property to set the
 	 * matrix used to convert colors after the lookup in the
 	 * degamma LUT.
