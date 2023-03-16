@@ -825,6 +825,12 @@ struct drm_mode_config {
 	 */
 	struct drm_property *plane_hdr_mult;
 	/**
+	 * @crtc_regamma_tf_property:
+	 *
+	 * Transfer function for CRTC regamma.
+	 */
+	struct drm_property *crtc_regamma_tf_property;
+	/**
 	 * @ctm_property: Optional CRTC property to set the
 	 * matrix used to convert colors after the lookup in the
 	 * degamma LUT.
