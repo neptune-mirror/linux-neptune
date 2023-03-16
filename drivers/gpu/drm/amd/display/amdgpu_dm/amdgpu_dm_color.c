@@ -791,6 +791,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		degamma_lut && !__is_lut_linear(degamma_lut, degamma_size);
 
 	drm_tf = plane_state->degamma_tf;
+	dc_plane_state->hdr_mult = dc_fixpt_from_s3132(plane_state->hdr_mult);
 
 	/* Get the correct base transfer function for implicit degamma. */
 	switch (dc_plane_state->format) {

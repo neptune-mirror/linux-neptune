@@ -250,6 +250,9 @@ void drm_plane_enable_color_mgmt(struct drm_plane *plane,
 		drm_object_attach_property(&plane->base,
 					   config->plane_degamma_tf_property,
 					   DRM_TRANSFER_FUNCTION_DEFAULT);
+		drm_object_attach_property(&plane->base,
+					   config->plane_hdr_mult,
+					   DRM_HDR_MULT_DEFAULT);
 	}
 }
 EXPORT_SYMBOL(drm_plane_enable_color_mgmt);
