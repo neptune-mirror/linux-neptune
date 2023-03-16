@@ -380,6 +380,13 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 		return -ENOMEM;
 	dev->mode_config.plane_degamma_tf_property = prop;
 
+	prop = drm_property_create_range(dev,
+			0,
+			"VALVE1_PLANE_HDR_MULT", 0, U64_MAX);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.plane_hdr_mult = prop;
+
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
 			"CTM", 0);
