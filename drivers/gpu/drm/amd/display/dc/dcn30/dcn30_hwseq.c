@@ -108,7 +108,7 @@ static bool dcn30_set_mpc_shaper_3dlut(
 		else if (stream->func_shaper->type == TF_TYPE_DISTRIBUTED_POINTS) {
 			cm_helper_translate_curve_to_hw_format(
 					stream->func_shaper,
-					&dpp_base->shaper_params, true);
+					&dpp_base->shaper_params, false);
 			shaper_lut = &dpp_base->shaper_params;
 		}
 	}
