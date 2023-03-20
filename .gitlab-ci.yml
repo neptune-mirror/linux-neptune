@@ -17,6 +17,7 @@ stages:
 
 kernel build:
   stage: build
+  image: debian:buster-slim
   tags:
     - autoscaled
 
