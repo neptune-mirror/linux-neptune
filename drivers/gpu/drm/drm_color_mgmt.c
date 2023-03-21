@@ -695,6 +695,56 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 EXPORT_SYMBOL(drm_plane_create_color_properties);
 
 /**
+ * DOC: Plane Color Properties
+ *
+ * Plane Color management or color space adjustments is supported
+ * through a set of properties on the &drm_plane object.
+ *
+ */
+int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
+					   struct drm_plane *plane)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+				   "VALVE1_PLANE_LUT3D", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->lut3d_property = prop;
+
+	prop = drm_property_create_range(dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "VALVE1_PLANE_LUT3D_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->lut3d_size_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
+
+void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
+					    uint lut3d_size)
+{
+	if (!lut3d_size)
+		return;
+
+	if (!plane->lut3d_property)
+		return;
+	drm_object_attach_property(&plane->base,
+				   plane->lut3d_property, 0);
+
+	if (!plane->lut3d_size_property)
+		return;
+	drm_object_attach_property(&plane->base,
+				   plane->lut3d_size_property,
+				   lut3d_size);
+}
+EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
+
+/**
  * drm_color_lut_check - check validity of lookup table
  * @lut: property blob containing LUT to check
  * @tests: bitmask of tests to run
