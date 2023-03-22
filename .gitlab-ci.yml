@@ -2,11 +2,11 @@ variables:
   DOCKER_DRIVER: overlay2
   KERNEL: 'bzImage'
   ROOTFS_NAME: 'ubuntu-19.04-desktopV4-amd64.img.qcow2'
-  ROOTFS_IMAGE_URL: 'https://people.collabora.com/~laks/lava/kernel_test/ubuntu-19.04-desktopV4-amd64.img.qcow2.gz'
+  ROOTFS_IMAGE_URL: 'https://steamdeck-packages.steamos.cloud/archlinux-mirror/kernel-ci-image/ubuntu-19.04-desktopV4-amd64.img.qcow2.gz'
   GIT_AUTHOR_NAME: "Gitlab-ci"
   GIT_AUTHOR_EMAIL: "gitlab@gitlab.steamos.cloud"
   TAG: CI_${CI_PIPELINE_ID}_${CI_COMMIT_SHORT_SHA}
-  
+
 before_script:
    - apt-get update -y
 

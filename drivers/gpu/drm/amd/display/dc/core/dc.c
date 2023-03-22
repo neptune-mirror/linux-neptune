@@ -2652,6 +2652,9 @@ static void copy_stream_update_to_stream(struct dc *dc,
 	if (update->vsp_infopacket)
 		stream->vsp_infopacket = *update->vsp_infopacket;
 
+	if (update->adaptive_sync_infopacket)
+		stream->adaptive_sync_infopacket = *update->adaptive_sync_infopacket;
+
 	if (update->dither_option)
 		stream->dither_option = *update->dither_option;
 
@@ -2720,7 +2723,8 @@ static void commit_planes_do_stream_update(struct dc *dc,
 			if ((stream_update->hdr_static_metadata && !stream->use_dynamic_meta) ||
 					stream_update->vrr_infopacket ||
 					stream_update->vsc_infopacket ||
-					stream_update->vsp_infopacket) {
+					stream_update->vsp_infopacket ||
+					stream_update->adaptive_sync_infopacket) {
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);
 			}

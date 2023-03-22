@@ -654,10 +654,16 @@ void dce110_update_info_frame(struct pipe_ctx *pipe_ctx)
 		pipe_ctx->stream_res.stream_enc->funcs->update_hdmi_info_packets(
 			pipe_ctx->stream_res.stream_enc,
 			&pipe_ctx->stream_res.encoder_info_frame);
-	else
+	else {
+		if (pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets_sdp_line_num)
+			pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets_sdp_line_num(
+				pipe_ctx->stream_res.stream_enc,
+				&pipe_ctx->stream_res.encoder_info_frame);
+
 		pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets(
 			pipe_ctx->stream_res.stream_enc,
 			&pipe_ctx->stream_res.encoder_info_frame);
+	}
 }
 
 void dce110_enable_stream(struct pipe_ctx *pipe_ctx)
@@ -1270,8 +1276,18 @@ void dce110_blank_stream(struct pipe_ctx *pipe_ctx)
 			 * has changed or they enter protection state and hang.
 			 */
 			msleep(60);
-		} else if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP)
-			edp_receiver_ready_T9(link);
+		} else if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP) {
+			if (!link->dc->config.edp_no_power_sequencing) {
+				/*
+				 * Sometimes, DP receiver chip power-controlled externally by an
+				 * Embedded Controller could be treated and used as eDP,
+				 * if it drives mobile display. In this case,
+				 * we shouldn't be doing power-sequencing, hence we can skip
+				 * waiting for T9-ready.
+				 */
+				edp_receiver_ready_T9(link);
+			}
+		}
 	}
 
 }

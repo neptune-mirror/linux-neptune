@@ -242,6 +242,7 @@ static const struct xpad_device {
 	{ 0x0f0d, 0x0063, "Hori Real Arcade Pro Hayabusa (USA) Xbox One", MAP_TRIGGERS_TO_BUTTONS, XTYPE_XBOXONE },
 	{ 0x0f0d, 0x0067, "HORIPAD ONE", 0, XTYPE_XBOXONE },
 	{ 0x0f0d, 0x0078, "Hori Real Arcade Pro V Kai Xbox One", MAP_TRIGGERS_TO_BUTTONS, XTYPE_XBOXONE },
+	{ 0x0f0d, 0x00dc, "HORIPAD FPS for Nintendo Switch", MAP_TRIGGERS_TO_BUTTONS, XTYPE_XBOX360 },
 	{ 0x0f30, 0x010b, "Philips Recoil", 0, XTYPE_XBOX },
 	{ 0x0f30, 0x0202, "Joytech Advanced Controller", 0, XTYPE_XBOX },
 	{ 0x0f30, 0x8888, "BigBen XBMiniPad Controller", 0, XTYPE_XBOX },
@@ -332,6 +333,7 @@ static const struct xpad_device {
 	{ 0x24c6, 0x5b03, "Thrustmaster Ferrari 458 Racing Wheel", 0, XTYPE_XBOX360 },
 	{ 0x24c6, 0x5d04, "Razer Sabertooth", 0, XTYPE_XBOX360 },
 	{ 0x24c6, 0xfafe, "Rock Candy Gamepad for Xbox 360", 0, XTYPE_XBOX360 },
+	{ 0x2dc8, 0x3106, "8BitDo Ultimate Wireless Controller", 0, XTYPE_XBOX360 },
 	{ 0x3767, 0x0101, "Fanatec Speedster 3 Forceshock Wheel", 0, XTYPE_XBOX },
 	{ 0xffff, 0xffff, "Chinese-made Xbox Controller", 0, XTYPE_XBOX },
 	{ 0x0000, 0x0000, "Generic X-Box pad", 0, XTYPE_UNKNOWN }
@@ -447,6 +449,8 @@ static const struct usb_device_id xpad_table[] = {
 	XPAD_XBOXONE_VENDOR(0x20d6),		/* PowerA Controllers */
 	XPAD_XBOX360_VENDOR(0x24c6),		/* PowerA Controllers */
 	XPAD_XBOXONE_VENDOR(0x24c6),		/* PowerA Controllers */
+	XPAD_XBOX360_VENDOR(0x2c22),		/* Qanba Controllers */
+	XPAD_XBOX360_VENDOR(0x2dc8),		/* 8BitDo Ultimate Wireless Controller */
 	XPAD_XBOXONE_VENDOR(0x2e24),		/* Hyperkin Duke X-Box One pad */
 	XPAD_XBOX360_VENDOR(0x2f24),		/* GameSir Controllers */
 	{ }
@@ -1503,6 +1507,13 @@ static int xpad_start_input(struct usb_xpad *xpad)
 		return -EIO;
 
 	if (xpad->xtype == XTYPE_XBOXONE) {
+		/* Explicitly disable the audio interface. This is needed for some
+		 * controllers, such as the PowerA Enhanced Wired Controller
+		 * for Series X|S (0x20d6:0x200e) to report the guide button */
+		error = usb_set_interface(xpad->udev, 1, 0);
+		if (error)
+			return error;
+
 		error = xpad_start_xbox_one(xpad);
 		if (error) {
 			usb_kill_urb(xpad->irq_in);
@@ -1802,6 +1813,27 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 		 */
 		error = -ENODEV;
 		goto err_free_in_urb;
+	}
+
+	if (xpad->xtype == XTYPE_XBOX360) {
+		/* Some third-party controllers Xbox 360-style controllers
+		 * require this message to finish initialization */
+		uint8_t dummy[20];
+		int ret;
+
+		usb_control_msg_recv(udev, 0,
+				     /* bRequest */ 0x01,
+				     /* bmRequestType */
+				     USB_TYPE_VENDOR | USB_DIR_IN |
+				     USB_RECIP_INTERFACE,
+				     /* wValue */ 0x100,
+				     /* wIndex */ 0x00,
+				     dummy, sizeof(dummy),
+				     25,
+				     GFP_KERNEL);
+		if (ret)
+			dev_warn(&xpad->dev->dev,
+				 "unable to receive magic message: %d\n", ret);
 	}
 
 	ep_irq_in = ep_irq_out = NULL;

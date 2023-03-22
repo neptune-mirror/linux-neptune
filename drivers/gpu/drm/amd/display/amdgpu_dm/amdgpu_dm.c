@@ -96,7 +96,6 @@
 
 #include "modules/inc/mod_freesync.h"
 #include "modules/power/power_helpers.h"
-#include "modules/inc/mod_info_packet.h"
 
 #define FIRMWARE_RENOIR_DMUB "amdgpu/renoir_dmcub.bin"
 MODULE_FIRMWARE(FIRMWARE_RENOIR_DMUB);
@@ -1504,6 +1503,8 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 		DRM_INFO("Seamless boot condition check passed\n");
 	}
 
+	init_data.flags.enable_mipi_converter_optimization = true;
+
 	INIT_LIST_HEAD(&adev->dm.da_list);
 	/* Display Core create. */
 	adev->dm.dc = dc_create(&init_data);
@@ -2086,6 +2087,7 @@ static int detect_mst_link_for_all_connectors(struct drm_device *dev)
 			ret = drm_dp_mst_topology_mgr_set_mst(&aconnector->mst_mgr, true);
 			if (ret < 0) {
 				DRM_ERROR("DM_MST: Failed to start MST\n");
+				aconnector->mst_mgr.mst_state = false;
 				aconnector->dc_link->type =
 					dc_connection_single;
 				break;
@@ -2151,6 +2153,7 @@ static void s3_handle_mst(struct drm_device *dev, bool suspend)
 	struct drm_dp_mst_topology_mgr *mgr;
 	int ret;
 	bool need_hotplug = false;
+	bool is_dp_alt_mode = false;
 
 	drm_connector_list_iter_begin(dev, &iter);
 	drm_for_each_connector_iter(connector, &iter) {
@@ -2166,8 +2169,21 @@ static void s3_handle_mst(struct drm_device *dev, bool suspend)
 		} else {
 			ret = drm_dp_mst_topology_mgr_resume(mgr, true);
 			if (ret < 0) {
-				drm_dp_mst_topology_mgr_set_mst(mgr, false);
-				need_hotplug = true;
+				aconnector->dc_link->mst_dpcd_fail_on_resume = true;
+				is_dp_alt_mode = wait_for_entering_dp_alt_mode(aconnector->dc_link);
+				if (is_dp_alt_mode) {
+					do {
+						ret = drm_dp_dpcd_read(mgr->aux, DP_DPCD_REV, mgr->dpcd, 1);
+					} while (ret != 1);
+					msleep(50);
+					ret = drm_dp_mst_topology_mgr_resume(mgr, true);
+				}
+
+				if (!is_dp_alt_mode || ret < 0) {
+					dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
+						aconnector->dc_link);
+					need_hotplug = true;
+				}
 			}
 		}
 	}
@@ -2550,34 +2566,6 @@ cleanup:
 	return;
 }
 
-static void dm_set_dpms_off(struct dc_link *link, struct dm_crtc_state *acrtc_state)
-{
-	struct dc_stream_state *stream_state;
-	struct amdgpu_dm_connector *aconnector = link->priv;
-	struct amdgpu_device *adev = drm_to_adev(aconnector->base.dev);
-	struct dc_stream_update stream_update;
-	bool dpms_off = true;
-
-	memset(&stream_update, 0, sizeof(stream_update));
-	stream_update.dpms_off = &dpms_off;
-
-	mutex_lock(&adev->dm.dc_lock);
-	stream_state = dc_stream_find_from_link(link);
-
-	if (stream_state == NULL) {
-		DRM_DEBUG_DRIVER("Error finding stream state associated with link!\n");
-		mutex_unlock(&adev->dm.dc_lock);
-		return;
-	}
-
-	stream_update.stream = stream_state;
-	acrtc_state->force_dpms_off = true;
-	dc_commit_updates_for_stream(stream_state->ctx->dc, NULL, 0,
-				     stream_state, &stream_update,
-				     stream_state->ctx->dc->current_state);
-	mutex_unlock(&adev->dm.dc_lock);
-}
-
 static int dm_resume(void *handle)
 {
 	struct amdgpu_device *adev = handle;
@@ -2695,8 +2683,11 @@ static int dm_resume(void *handle)
 
 		if (aconnector->base.force && new_connection_type == dc_connection_none)
 			emulated_link_detect(aconnector->dc_link);
-		else
+		else {
+			mutex_lock(&dm->dc_lock);
 			dc_link_detect(aconnector->dc_link, DETECT_REASON_HPD);
+			mutex_unlock(&dm->dc_lock);
+		}
 
 		if (aconnector->fake_enable && aconnector->dc_link->local_sink)
 			aconnector->fake_enable = false;
@@ -3026,6 +3017,7 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct dm_connector_state *dm_con_state = to_dm_connector_state(connector->state);
 	struct dm_crtc_state *dm_crtc_state = NULL;
+	bool ret = false;
 
 	if (adev->dm.disable_hpd_irq)
 		return;
@@ -3062,20 +3054,20 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
 		if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
 			drm_kms_helper_hotplug_event(dev);
 
-	} else if (dc_link_detect(aconnector->dc_link, DETECT_REASON_HPD)) {
-		if (new_connection_type == dc_connection_none &&
-		    aconnector->dc_link->type == dc_connection_none &&
-		    dm_crtc_state)
-			dm_set_dpms_off(aconnector->dc_link, dm_crtc_state);
+	} else {
+		mutex_lock(&adev->dm.dc_lock);
+		ret = dc_link_detect(aconnector->dc_link, DETECT_REASON_HPD);
+		mutex_unlock(&adev->dm.dc_lock);
+		if (ret) {
+			amdgpu_dm_update_connector_after_detect(aconnector);
 
-		amdgpu_dm_update_connector_after_detect(aconnector);
+			drm_modeset_lock_all(dev);
+			dm_restore_drm_connector_state(dev, connector);
+			drm_modeset_unlock_all(dev);
 
-		drm_modeset_lock_all(dev);
-		dm_restore_drm_connector_state(dev, connector);
-		drm_modeset_unlock_all(dev);
-
-		if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
-			drm_kms_helper_hotplug_event(dev);
+			if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
+				drm_kms_helper_hotplug_event(dev);
+		}
 	}
 	mutex_unlock(&aconnector->hpd_lock);
 
@@ -3270,19 +3262,25 @@ out:
 			drm_modeset_unlock_all(dev);
 
 			drm_kms_helper_hotplug_event(dev);
-		} else if (dc_link_detect(dc_link, DETECT_REASON_HPDRX)) {
+		} else {
+			bool ret = false;
 
-			if (aconnector->fake_enable)
-				aconnector->fake_enable = false;
+			mutex_lock(&adev->dm.dc_lock);
+			ret = dc_link_detect(dc_link, DETECT_REASON_HPDRX);
+			mutex_unlock(&adev->dm.dc_lock);
 
-			amdgpu_dm_update_connector_after_detect(aconnector);
+			if (ret) {
+				if (aconnector->fake_enable)
+					aconnector->fake_enable = false;
 
+				amdgpu_dm_update_connector_after_detect(aconnector);
 
-			drm_modeset_lock_all(dev);
-			dm_restore_drm_connector_state(dev, connector);
-			drm_modeset_unlock_all(dev);
+				drm_modeset_lock_all(dev);
+				dm_restore_drm_connector_state(dev, connector);
+				drm_modeset_unlock_all(dev);
 
-			drm_kms_helper_hotplug_event(dev);
+				drm_kms_helper_hotplug_event(dev);
+			}
 		}
 	}
 #ifdef CONFIG_DRM_AMD_DC_HDCP
@@ -3963,20 +3961,23 @@ static u32 convert_brightness_to_user(const struct amdgpu_dm_backlight_caps *cap
 				 max - min);
 }
 
-static int amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
+static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 					 int bl_idx,
 					 u32 user_brightness)
 {
 	struct amdgpu_dm_backlight_caps caps;
 	struct dc_link *link;
 	u32 brightness;
+	u32 prev_brightness;
 	bool rc;
 
 	amdgpu_dm_update_backlight_caps(dm, bl_idx);
 	caps = dm->backlight_caps[bl_idx];
 
+	prev_brightness = dm->brightness[bl_idx];
 	dm->brightness[bl_idx] = user_brightness;
-	dm->brightness_set[bl_idx] = true;
+	dm->actual_brightness[bl_idx] = user_brightness;
+
 	/* update scratch register */
 	if (bl_idx == 0)
 		amdgpu_atombios_scratch_regs_set_backlight_level(dm->adev, dm->brightness[bl_idx]);
@@ -3995,7 +3996,8 @@ static int amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 			DRM_DEBUG("DM: Failed to update backlight on eDP[%d]\n", bl_idx);
 	}
 
-	return rc ? 0 : 1;
+	if (!rc)
+		dm->actual_brightness[bl_idx] = prev_brightness;
 }
 
 static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
@@ -4068,7 +4070,7 @@ amdgpu_dm_register_backlight_device(struct amdgpu_display_manager *dm)
 
 	amdgpu_dm_update_backlight_caps(dm, dm->num_of_edps);
 	dm->brightness[dm->num_of_edps] = AMDGPU_MAX_BL_LEVEL;
-	dm->brightness_set[dm->num_of_edps] = false;
+	dm->actual_brightness[dm->num_of_edps] = AMDGPU_MAX_BL_LEVEL;
 
 	props.max_brightness = AMDGPU_MAX_BL_LEVEL;
 	props.brightness = AMDGPU_MAX_BL_LEVEL;
@@ -4311,13 +4313,23 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 			emulated_link_detect(link);
 			amdgpu_dm_update_connector_after_detect(aconnector);
 
-		} else if (dc_link_detect(link, DETECT_REASON_BOOT)) {
-			amdgpu_dm_update_connector_after_detect(aconnector);
-			register_backlight_device(dm, link);
-			if (dm->num_of_edps)
-				update_connector_ext_caps(aconnector);
-			if (psr_feature_enabled)
-				amdgpu_dm_set_psr_caps(link);
+		} else {
+			bool ret = false;
+
+			mutex_lock(&dm->dc_lock);
+			ret = dc_link_detect(link, DETECT_REASON_BOOT);
+			mutex_unlock(&dm->dc_lock);
+
+			if (ret) {
+				amdgpu_dm_update_connector_after_detect(aconnector);
+				register_backlight_device(dm, link);
+
+				if (dm->num_of_edps)
+					update_connector_ext_caps(aconnector);
+
+				if (psr_feature_enabled)
+					amdgpu_dm_set_psr_caps(link);
+			}
 		}
 
 
@@ -4329,7 +4341,8 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	 * TODO: Fix vblank control helpers to delay PSR entry to allow this when PSR
 	 * is also supported.
 	 */
-	adev_to_drm(adev)->vblank_disable_immediate = !psr_feature_enabled;
+	// reverting for deck, see a775e4e4941bf2f326aa36c58f67bd6c96cac717 upstream
+	//adev_to_drm(adev)->vblank_disable_immediate = !psr_feature_enabled;
 
 	/* Software is initialized. Now we can register interrupt handlers. */
 	switch (adev->asic_type) {
@@ -5930,8 +5943,6 @@ static void fill_stream_properties_from_drm_display_mode(
 
 	timing_out->aspect_ratio = get_aspect_ratio(mode_in);
 
-	stream->output_color_space = get_output_color_space(timing_out);
-
 	stream->out_transfer_func->type = TF_TYPE_PREDEFINED;
 	stream->out_transfer_func->tf = TRANSFER_FUNCTION_SRGB;
 	if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A) {
@@ -5942,6 +5953,8 @@ static void fill_stream_properties_from_drm_display_mode(
 			adjust_colour_depth_from_display_info(timing_out, info);
 		}
 	}
+
+	stream->output_color_space = get_output_color_space(timing_out);
 }
 
 static void fill_audio_info(struct audio_info *audio_info,
@@ -8375,6 +8388,9 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	aconnector->base.dpms = DRM_MODE_DPMS_OFF;
 	aconnector->hpd.hpd = AMDGPU_HPD_NONE; /* not used */
 	aconnector->audio_inst = -1;
+	aconnector->pack_sdp_v1_3 = false;
+	aconnector->as_type = ADAPTIVE_SYNC_TYPE_NONE;
+	memset(&aconnector->vsdb_info, 0, sizeof(aconnector->vsdb_info));
 	mutex_init(&aconnector->hpd_lock);
 
 	/*
@@ -8938,6 +8954,8 @@ static void update_freesync_state_on_stream(
 	struct amdgpu_crtc *acrtc = to_amdgpu_crtc(new_crtc_state->base.crtc);
 	unsigned long flags;
 	bool pack_sdp_v1_3 = false;
+	struct amdgpu_dm_connector *aconn;
+	enum vrr_packet_type packet_type = PACKET_TYPE_VRR;
 
 	if (!new_stream)
 		return;
@@ -8973,11 +8991,27 @@ static void update_freesync_state_on_stream(
 		}
 	}
 
+	aconn = (struct amdgpu_dm_connector *)new_stream->dm_stream_context;
+
+	if (aconn && aconn->as_type == ADAPTIVE_SYNC_TYPE_PCON) {
+		pack_sdp_v1_3 = aconn->pack_sdp_v1_3;
+
+		if (aconn->vsdb_info.amd_vsdb_version == 1)
+			packet_type = PACKET_TYPE_FS_V1;
+		else if (aconn->vsdb_info.amd_vsdb_version == 2)
+			packet_type = PACKET_TYPE_FS_V2;
+		else if (aconn->vsdb_info.amd_vsdb_version == 3)
+			packet_type = PACKET_TYPE_FS_V3;
+
+		mod_build_adaptive_sync_infopacket(new_stream, aconn->as_type, NULL,
+					&new_stream->adaptive_sync_infopacket);
+	}
+
 	mod_freesync_build_vrr_infopacket(
 		dm->freesync_module,
 		new_stream,
 		&vrr_params,
-		PACKET_TYPE_VRR,
+		packet_type,
 		TRANSFER_FUNC_UNKNOWN,
 		&vrr_infopacket,
 		pack_sdp_v1_3);
@@ -9924,8 +9958,8 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 	defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
 	/* restore the backlight level */
 	for (i = 0; i < dm->num_of_edps; i++) {
-		if (dm->backlight_dev[i] && dm->brightness_set[i] &&
-		    (amdgpu_dm_backlight_get_level(dm, i) != dm->brightness[i]))
+		if (dm->backlight_dev[i] &&
+		    (dm->actual_brightness[i] != dm->brightness[i]))
 			amdgpu_dm_backlight_set_level(dm, i, dm->brightness[i]);
 	}
 #endif
@@ -11544,6 +11578,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	bool freesync_capable = false;
 	struct amdgpu_hdmi_vsdb_info vsdb_info = {0};
+	enum adaptive_sync_type as_type = ADAPTIVE_SYNC_TYPE_NONE;
 
 	if (!connector->state) {
 		DRM_ERROR("%s - Connector has no state", __func__);
@@ -11626,6 +11661,27 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		if (i >= 0 && vsdb_info.freesync_supported) {
 			timing  = &edid->detailed_timings[i];
 			data    = &timing->data.other_data;
+
+			amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;
+			amdgpu_dm_connector->max_vfreq = vsdb_info.max_refresh_rate_hz;
+			if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
+				freesync_capable = true;
+
+			connector->display_info.monitor_range.min_vfreq = vsdb_info.min_refresh_rate_hz;
+			connector->display_info.monitor_range.max_vfreq = vsdb_info.max_refresh_rate_hz;
+		}
+	}
+
+	as_type = dm_get_adaptive_sync_support_type(amdgpu_dm_connector->dc_link);
+
+	if (as_type == ADAPTIVE_SYNC_TYPE_PCON) {
+		i = parse_hdmi_amd_vsdb(amdgpu_dm_connector, edid, &vsdb_info);
+		if (i >= 0 && vsdb_info.freesync_supported &&
+			vsdb_info.amd_vsdb_version > 0) {
+
+			amdgpu_dm_connector->pack_sdp_v1_3 = true;
+			amdgpu_dm_connector->as_type = as_type;
+			amdgpu_dm_connector->vsdb_info = vsdb_info;
 
 			amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;
 			amdgpu_dm_connector->max_vfreq = vsdb_info.max_refresh_rate_hz;
@@ -11787,8 +11843,8 @@ int amdgpu_dm_process_dmub_aux_transfer_sync(bool is_cmd_aux, struct dc_context 
  */
 bool check_seamless_boot_capability(struct amdgpu_device *adev)
 {
-	switch (adev->asic_type) {
-	case CHIP_VANGOGH:
+	switch (adev->ip_versions[DCE_HWIP][0]) {
+	case IP_VERSION(3, 0, 1):
 		if (!adev->mman.keep_stolen_vga_memory)
 			return true;
 		break;

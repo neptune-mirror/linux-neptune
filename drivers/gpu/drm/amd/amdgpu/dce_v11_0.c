@@ -2909,6 +2909,7 @@ static int dce_v11_0_sw_init(void *handle)
 	adev_to_drm(adev)->mode_config.funcs = &amdgpu_mode_funcs;
 
 	adev_to_drm(adev)->mode_config.async_page_flip = true;
+	adev_to_drm(adev)->mode_config.atomic_async_page_flip_not_supported = true;
 
 	adev_to_drm(adev)->mode_config.max_width = 16384;
 	adev_to_drm(adev)->mode_config.max_height = 16384;

@@ -5213,6 +5213,22 @@ static bool retrieve_link_cap(struct dc_link *link)
 
 		if (status != DC_OK)
 			dm_error("%s: Read DPRX caps data failed.\n", __func__);
+
+		/* AdaptiveSyncCapability  */
+		dpcd_dprx_data = 0;
+		for (i = 0; i < read_dpcd_retry_cnt; i++) {
+			status = core_link_read_dpcd(
+					link, DP_DPRX_FEATURE_ENUMERATION_LIST_CONT_1,
+					&dpcd_dprx_data, sizeof(dpcd_dprx_data));
+			if (status == DC_OK)
+				break;
+		}
+
+		link->dpcd_caps.adaptive_sync_caps.dp_adap_sync_caps.raw = dpcd_dprx_data;
+
+		if (status != DC_OK)
+			dm_error("%s: Read DPRX caps data failed. Addr:%#x\n",
+					__func__, DP_DPRX_FEATURE_ENUMERATION_LIST_CONT_1);
 	}
 
 	else {
@@ -5537,6 +5553,7 @@ void detect_edp_sink_caps(struct dc_link *link)
 	uint32_t link_rate_in_khz;
 	enum dc_link_rate link_rate = LINK_RATE_UNKNOWN;
 	uint8_t backlight_adj_cap;
+	uint8_t general_edp_cap;
 
 	retrieve_link_cap(link);
 	link->dpcd_caps.edp_supported_link_rates_count = 0;
@@ -5574,6 +5591,12 @@ void detect_edp_sink_caps(struct dc_link *link)
 
 	link->dpcd_caps.dynamic_backlight_capable_edp =
 				(backlight_adj_cap & DP_EDP_DYNAMIC_BACKLIGHT_CAP) ? true:false;
+
+	core_link_read_dpcd(link, DP_EDP_GENERAL_CAP_1,
+						&general_edp_cap, sizeof(general_edp_cap));
+
+	link->dpcd_caps.set_power_state_capable_edp =
+				(general_edp_cap & DP_EDP_SET_POWER_CAP) ? true:false;
 
 	dc_link_set_default_brightness_aux(link);
 }

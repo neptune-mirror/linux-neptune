@@ -44,6 +44,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_fb_helper.h>
 
 #include "drm_crtc_helper_internal.h"
 #include "drm_dp_mst_topology_internal.h"
@@ -5065,7 +5066,7 @@ static void drm_dp_delayed_destroy_work(struct work_struct *work)
 	} while (go_again);
 
 	if (send_hotplug)
-		drm_kms_helper_hotplug_event(mgr->dev);
+		drm_client_modeset_probe(&mgr->dev->fb_helper->client, mgr->dev->fb_helper->fb->width, mgr->dev->fb_helper->fb->height);
 }
 
 static struct drm_private_state *

@@ -64,6 +64,7 @@
 #include "irq_types.h"
 #include "signal_types.h"
 #include "amdgpu_dm_crc.h"
+#include "modules/inc/mod_info_packet.h"
 struct aux_payload;
 enum aux_return_code_type;
 
@@ -540,7 +541,12 @@ struct amdgpu_display_manager {
 	 * cached backlight values.
 	 */
 	u32 brightness[AMDGPU_DM_MAX_NUM_EDP];
-	bool brightness_set[AMDGPU_DM_MAX_NUM_EDP];
+	/**
+	 * @actual_brightness:
+	 *
+	 * last successfully applied backlight values.
+	 */
+	u32 actual_brightness[AMDGPU_DM_MAX_NUM_EDP];
 };
 
 enum dsc_clock_force_state {
@@ -555,6 +561,13 @@ struct dsc_preferred_settings {
 	uint32_t dsc_num_slices_h;
 	uint32_t dsc_bits_per_pixel;
 	bool dsc_force_disable_passthrough;
+};
+
+struct amdgpu_hdmi_vsdb_info {
+	unsigned int amd_vsdb_version;		/* VSDB version, should be used to determine which VSIF to send */
+	bool freesync_supported;		/* FreeSync Supported */
+	unsigned int min_refresh_rate_hz;	/* FreeSync Minimum Refresh Rate in Hz */
+	unsigned int max_refresh_rate_hz;	/* FreeSync Maximum Refresh Rate in Hz */
 };
 
 struct amdgpu_dm_connector {
@@ -610,6 +623,10 @@ struct amdgpu_dm_connector {
 	struct drm_display_mode freesync_vid_base;
 
 	int psr_skip_count;
+
+	bool pack_sdp_v1_3;
+	enum adaptive_sync_type as_type;
+	struct amdgpu_hdmi_vsdb_info vsdb_info;
 };
 
 #define to_amdgpu_dm_connector(x) container_of(x, struct amdgpu_dm_connector, base)
@@ -673,14 +690,6 @@ struct dm_connector_state {
 	int vcpi_slots;
 	uint64_t pbn;
 };
-
-struct amdgpu_hdmi_vsdb_info {
-	unsigned int amd_vsdb_version;		/* VSDB version, should be used to determine which VSIF to send */
-	bool freesync_supported;		/* FreeSync Supported */
-	unsigned int min_refresh_rate_hz;	/* FreeSync Minimum Refresh Rate in Hz */
-	unsigned int max_refresh_rate_hz;	/* FreeSync Maximum Refresh Rate in Hz */
-};
-
 
 #define to_dm_connector_state(x)\
 	container_of((x), struct dm_connector_state, base)

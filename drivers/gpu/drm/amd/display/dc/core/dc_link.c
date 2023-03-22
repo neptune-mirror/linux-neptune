@@ -233,7 +233,8 @@ bool dc_link_detect_sink(struct dc_link *link, enum dc_connection_type *type)
 
 	if (link->connector_signal == SIGNAL_TYPE_EDP) {
 		/*in case it is not on*/
-		link->dc->hwss.edp_power_control(link, true);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
 	}
 
@@ -748,14 +749,14 @@ static bool is_same_edid(struct dc_edid *old_edid, struct dc_edid *new_edid)
 		       new_edid->raw_edid, new_edid->length) == 0);
 }
 
-static bool wait_for_entering_dp_alt_mode(struct dc_link *link)
+bool wait_for_entering_dp_alt_mode(struct dc_link *link)
 {
 	/**
 	 * something is terribly wrong if time out is > 200ms. (5Hz)
 	 * 500 microseconds * 400 tries us 200 ms
 	 **/
 	unsigned int sleep_time_in_microseconds = 500;
-	unsigned int tries_allowed = 400;
+	unsigned int tries_allowed = 1000;
 	bool is_in_alt_mode;
 	unsigned long long enter_timestamp;
 	unsigned long long finish_timestamp;
@@ -766,6 +767,11 @@ static bool wait_for_entering_dp_alt_mode(struct dc_link *link)
 
 	if (!link->link_enc->funcs->is_in_alt_mode)
 		return true;
+
+	if (link->mst_dpcd_fail_on_resume) {
+		tries_allowed = 3000;
+		link->mst_dpcd_fail_on_resume = false;
+	}
 
 	is_in_alt_mode = link->link_enc->funcs->is_in_alt_mode(link->link_enc);
 	DC_LOG_WARNING("DP Alt mode state on HPD: %d\n", is_in_alt_mode);
@@ -1017,11 +1023,11 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 	bool same_edid = false;
 	enum dc_edid_status edid_status;
 	struct dc_context *dc_ctx = link->ctx;
+	struct dc *dc = dc_ctx->dc;
 	struct dc_sink *sink = NULL;
 	struct dc_sink *prev_sink = NULL;
 	struct dpcd_caps prev_dpcd_caps;
 	enum dc_connection_type new_connection_type = dc_connection_none;
-	enum dc_connection_type pre_connection_type = dc_connection_none;
 	const uint32_t post_oui_delay = 30; // 30ms
 
 	DC_LOGGER_INIT(link->ctx->logger);
@@ -1058,7 +1064,6 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 
 	link_disconnect_sink(link);
 	if (new_connection_type != dc_connection_none) {
-		pre_connection_type = link->type;
 		link->type = new_connection_type;
 		link->link_state_valid = false;
 
@@ -1092,10 +1097,22 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 		}
 
 		case SIGNAL_TYPE_EDP: {
-			read_current_link_settings_on_detect(link);
-
 			detect_edp_sink_caps(link);
 			read_current_link_settings_on_detect(link);
+
+			/* Disable power sequence on MIPI panel + converter
+			 */
+			if (dc->config.enable_mipi_converter_optimization &&
+				dc_ctx->dce_version == DCN_VERSION_3_01 &&
+				link->dpcd_caps.sink_dev_id == DP_BRANCH_DEVICE_ID_0022B9 &&
+				memcmp(&link->dpcd_caps.branch_dev_name, DP_SINK_BRANCH_DEV_NAME_7580,
+					sizeof(link->dpcd_caps.branch_dev_name)) == 0) {
+				dc->config.edp_no_power_sequencing = true;
+
+				if (!link->dpcd_caps.set_power_state_capable_edp)
+					link->wa_flags.dp_keep_receiver_powered = true;
+			}
+
 			sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C_OVER_AUX;
 			sink_caps.signal = SIGNAL_TYPE_EDP;
 			break;
@@ -1131,11 +1148,6 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 					(link->dpcd_caps.dongle_type !=
 							DISPLAY_DONGLE_DP_HDMI_CONVERTER))
 				converter_disable_audio = true;
-
-			// link switch from MST to non-MST stop topology manager
-			if (pre_connection_type == dc_connection_mst_branch &&
-					link->type != dc_connection_mst_branch)
-				dm_helpers_dp_mst_stop_top_mgr(link->ctx, link);
 			break;
 		}
 
@@ -1953,7 +1965,8 @@ static enum dc_status enable_link_dp(struct dc_state *state,
 
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP) {
 		/*in case it is not on*/
-		link->dc->hwss.edp_power_control(link, true);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
 	}
 

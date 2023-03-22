@@ -1,42 +1,46 @@
-acpi:
+features/acpi:
     e43d238370ab99106afdfd5bc4bdc9f4ef8b6dc9 ("acpi: Bump ACPI_MAX_HANDLES to 16")
-als:
+features/als:
     2aba90bba5c4c9ccbec5057d111c3e52a654e9a9 ("ltrf216a: Add entry for depmod alias")
-amd-extra:
-    383babe752796d7ad27b62b943954fa880c7d4e1 ("Attempt to fix DC crashes on external display use.")
-amd-staging-drm-next:
+features/amd-extra:
+    9795c4c5fef406b37b3162c05c57175734a59328 ("drm/amd/display: don't ignore alpha property on pre-multiplied mode")
+features/amd-staging-drm-next:
     293647b4dc4fafec627b9676ca06f65d462662f4 ("drm/amdgpu: Wrong order for config and counter_id parameters")
-backlight-precision:
+features/backlight-precision:
     b42a7b10e336585731486870db51ecb9cd57c8d0 ("amd/drm : override backlight min value from 12 -> 0")
-battery-quirk:
+features/battery-quirk:
     3f6deb05688d710e9fd9c5099861bb1a7740232c ("ACPI: battery: Accept charges over the design capacity as full")
-btrfs:
+features/btrfs:
     6af5420d40c74edc381f5fa1525177af94be748b ("btrfs: do not do preemptive flushing if the majority is global rsv")
-futex-waitv:
+features/futex-waitv:
     a74175a3a14f2488840435ab63def6279753b4c0 ("futex: Add entry point for FUTEX_WAIT_MULTIPLE (opcode 31)")
-gfxoff:
+features/gfxoff:
     da5799feaf864c733872f7d309133f3aa0d8840a ("drm/amdgpu/vcn: drop gfxoff control for VCN2+")
-hidraw-rwsem:
+features/hidraw-masking:
+    4f06ef28bcfbdb6b1c77695a87c0319a6c810156 ("HID: hid-sony: hidraw")
+features/hidraw-rwsem:
     657cca30ca0855169d8b249199ae02d31bd607ad ("HID: hidraw: Replace hidraw device table mutex with a rwsem")
-mm-soft-dirty-file:
+features/mm-soft-dirty-file:
     dade16308d7c66b639d77b0c3b93f711341d9f79 ("mm: Support soft dirty flag read with reset.")
-platform:
+features/platform:
     d4cf0e5edc08e051cbf5cf091feab7703705402d ("platform: jupiter: Add support for PD voltage/current readings")
-rtw88:
+features/rtw88:
     f5410efd35745cd84361d12029cc76576f5abf3d ("rtw88: 8822c: update rx settings to prevent potential hw deadlock")
-sclk-profiling-mode:
+features/sclk-profiling-mode:
     72a4f00cc35a8c195767eafc3a6783b00e91f303 ("drm/amdgpu/pm: properly handle sclk for profiling modes on vangogh")
-setup-gitlabci:
+features/setup-gitlabci:
     40e5486b4f92756df462e92afbc2c1bbc5439946 ("gitlab-ci: Enable CONFIG_JUPITER in ci build")
-sound:
+features/sound:
     0ceca8cf4caf2b1592b4f68283e351a758f15076 ("ASoC: amd: vg: apply 32bit pcm constraint")
-spi-config-timeout-quirk:
+features/spi-config-timeout-quirk:
     33ddc83245e13398673e0d3e8457a9e96850e341 ("pinctrl-amd: Add quirk to timeout irq pin reconfiguration")
-tcp-timewait:
+features/tcp-timewait:
     c9b81caaf264a6963881002fc26acea53cb0ada0 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
-touchscreen-probe:
-    7a68ff043c92778816dd0165dd616548719d1f67 ("gpio: Initialize gc->irq.domain before setting gc->to_irq")
-ttm:
+features/touchscreen-probe:
+    64ca82b8e0e66a75e457805432391fdbfe9b043f ("gpio: Request interrupts after IRQ is initialized")
+features/tsc:
+    a8993dd6657ff76442f8cf94fa18c3ac0fecf41b ("x86: don't check for random warps if using direct sync")
+features/ttm:
     cb074d1c6a63c670b24d37a72dd78a57ce4f2887 ("drm/ttm: rework bulk move handling v2")
-usb:
+features/usb:
     e2067974dfa3e702679af9433b436014096c26c5 ("usb: dwc3: Bump USB gadget wakeup timeout")

@@ -462,12 +462,19 @@ static void dcn31_hpo_dp_stream_enc_update_dp_info_packets(
 				true);
 		sdp_stream_enable = true;
 	}
+	if (info_frame->adaptive_sync.valid)
+		enc->vpg->funcs->update_generic_info_packet(
+				enc->vpg,
+				5,  /* packetIndex */
+				&info_frame->adaptive_sync,
+				true);
 	/* enable/disable transmission of packet(s).
 	 * If enabled, packet transmission begins on the next frame
 	 */
 	REG_UPDATE(DP_SYM32_ENC_SDP_GSP_CONTROL0, GSP_VIDEO_CONTINUOUS_TRANSMISSION_ENABLE, info_frame->vsc.valid);
 	REG_UPDATE(DP_SYM32_ENC_SDP_GSP_CONTROL2, GSP_VIDEO_CONTINUOUS_TRANSMISSION_ENABLE, info_frame->spd.valid);
 	REG_UPDATE(DP_SYM32_ENC_SDP_GSP_CONTROL3, GSP_VIDEO_CONTINUOUS_TRANSMISSION_ENABLE, info_frame->hdrsmd.valid);
+	REG_UPDATE(DP_SYM32_ENC_SDP_GSP_CONTROL5, GSP_VIDEO_CONTINUOUS_TRANSMISSION_ENABLE, info_frame->adaptive_sync.valid);
 
 	/* check if dynamic metadata packet transmission is enabled */
 	REG_GET(DP_SYM32_ENC_SDP_METADATA_PACKET_CONTROL,
