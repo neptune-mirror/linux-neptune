@@ -449,7 +449,8 @@ static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
 				       bool has_rom,
 				       enum dc_transfer_func_predefined tf,
 				       uint32_t shaper_size,
-				       struct dc_transfer_func *func_shaper)
+				       struct dc_transfer_func *func_shaper,
+				       bool post_blnd)
 {
 	int ret = 0;
 
@@ -461,7 +462,10 @@ static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
 		func_shaper->tf = tf;
 		func_shaper->sdr_ref_white_level = 80; /* hardcoded for now */
 
-		ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, has_rom);
+		if(post_blnd)
+			ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, has_rom);
+		else
+			ret = __set_input_tf(func_shaper, shaper_lut, shaper_size);
 	} else {
 		func_shaper->type = TF_TYPE_BYPASS;
 		func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
@@ -518,7 +522,7 @@ static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
 	amdgpu_dm_atomic_lut3d(drm_lut3d, drm_lut3d_size, lut3d_func);
 
 	return amdgpu_dm_atomic_shaper_lut(drm_shaper_lut, has_rom, tf,
-					   drm_shaper_size, func_shaper);
+					   drm_shaper_size, func_shaper, true);
 }
 
 /**
@@ -793,7 +797,7 @@ static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_functi
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
-					  struct drm_plane_state *plane_state,
+				      struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
 	const struct drm_color_lut *degamma_lut;
@@ -903,6 +907,25 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		/* ...Otherwise we can just bypass the DGM block. */
 		dc_plane_state->in_transfer_func->type = TF_TYPE_BYPASS;
 		dc_plane_state->in_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	if (plane_state->color_mgmt_changed) {
+		const struct drm_color_lut *shaper_lut, *lut3d;
+		uint32_t lut3d_size, shaper_size;
+		enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+
+		shaper_lut = __extract_blob_lut(plane_state->shaper_lut, &shaper_size);
+		lut3d = __extract_blob_lut(plane_state->lut3d, &lut3d_size);
+
+		lut3d_size = lut3d != NULL ? lut3d_size : 0;
+		shaper_size = shaper_lut != NULL ? shaper_size : 0;
+
+		amdgpu_dm_atomic_lut3d(lut3d, lut3d_size, dc_plane_state->lut3d_func);
+		r = amdgpu_dm_atomic_shaper_lut(shaper_lut, shaper_size, false,
+						drm_tf_to_dc_tf(shaper_tf),
+						dc_plane_state->in_shaper_func, false);
+		if (r)
+			return r;
 	}
 
 	return 0;
