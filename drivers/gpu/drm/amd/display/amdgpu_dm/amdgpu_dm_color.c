@@ -793,15 +793,18 @@ static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_functi
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
-					  struct drm_plane_state *plane_state,
+				      struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
 	const struct drm_color_lut *degamma_lut;
 	enum dc_transfer_func_predefined tf = TRANSFER_FUNCTION_SRGB;
 	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	const struct drm_color_lut *shaper_lut, *lut3d;
+	uint32_t lut3d_size, shaper_size;
 	uint32_t degamma_size;
 	bool has_degamma;
-	int r;
+	int r = 0;
 
 	degamma_lut = __extract_blob_lut(plane_state->degamma_lut, &degamma_size);
 
@@ -905,5 +908,19 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		dc_plane_state->in_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
 	}
 
-	return 0;
+	if (!plane_state->color_mgmt_changed)
+		return 0;
+
+	shaper_lut = __extract_blob_lut(plane_state->shaper_lut, &shaper_size);
+	lut3d = __extract_blob_lut(plane_state->lut3d, &lut3d_size);
+
+	lut3d_size = lut3d != NULL ? lut3d_size : 0;
+	shaper_size = shaper_lut != NULL ? shaper_size : 0;
+
+	amdgpu_dm_atomic_lut3d(lut3d, lut3d_size, dc_plane_state->lut3d_func);
+	r = amdgpu_dm_atomic_shaper_lut(shaper_lut, false,
+					drm_tf_to_dc_tf(shaper_tf),
+					shaper_size, dc_plane_state->in_shaper_func);
+
+	return r;
 }
