@@ -1612,6 +1612,12 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	is_dcn = dm->adev->dm.dc->caps.color.dpp.dcn_arch;
 	drm_plane_enable_color_mgmt(plane, is_dcn ? MAX_COLOR_LUT_ENTRIES : 0);
 
+	/* Check asics */
+	drm_plane_create_color_mgmt_properties(plane->dev, plane);
+	drm_plane_attach_color_mgmt_properties(plane,
+					       MAX_COLOR_LUT_ENTRIES,
+					       MAX_COLOR_3DLUT_ENTRIES);
+
 	/* Create (reset) the plane state */
 	if (plane->funcs->reset)
 		plane->funcs->reset(plane);
