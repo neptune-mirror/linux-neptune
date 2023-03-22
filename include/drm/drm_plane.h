@@ -272,6 +272,12 @@ struct drm_plane_state {
 	struct drm_atomic_state *state;
 
 	/**
+	 * @shaper_lut: shaper lookup table blob. The blob (if not NULL) is an
+	 * array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *shaper_lut;
+
+	/**
 	 * @lut3d: 3D lookup table blob. The blob (if not NULL) is an array of
 	 * &struct drm_color_lut.
 	 */
@@ -823,6 +829,17 @@ struct drm_plane {
 	 * Format is S31.32 sign-magnitude.
 	 */
 	struct drm_property *hdr_mult;
+	/**
+	 * @shaper_lut_property: Optional plane property to set the shaper LUT used
+	 * to convert colors; A shaper LUT can be used to delinearize content
+	 * before apply 3D LUT correction.
+	 */
+	struct drm_property *shaper_lut_property;
+	/**
+	 * @shaper_lut_size_property: Optional plane property for the size of the
+	 * shaper LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *shaper_lut_size_property;
 	/**
 	 * @lut3d_property: Optional plane property to set the 3D LUT used to
 	 * convert colors; A shaper LUT can be used to delinearize content

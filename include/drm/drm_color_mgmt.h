@@ -120,6 +120,7 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    uint degamma_lut_size,
 					    bool has_degamma_tf,
 					    bool has_hdr_multiplier,
+					    uint shaper_lut_size,
 					    uint lut3d_size);
 
 /**
