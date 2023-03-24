@@ -557,7 +557,7 @@ static ssize_t anx7580_read_reg_show( struct device *device, struct device_attri
 	return len;
 }
 
-static ssize_t anx7580_write_byte_store( struct device *device, struct device_attribute *attr,const char *buf, size_t count )
+static ssize_t anx7580_write_reg_store( struct device *device, struct device_attribute *attr,const char *buf, size_t count )
 {
     int ret;
 	unsigned int write_byte_sid, write_byte_offset, write_byte_data;
@@ -571,7 +571,37 @@ static ssize_t anx7580_write_byte_store( struct device *device, struct device_at
 	return count;
 }
 
-static ssize_t anx7580_write_byte_show( struct device *device, struct device_attribute *attr, char *buf )
+static ssize_t anx7580_write_reg_show( struct device *device, struct device_attribute *attr, char *buf )
+{
+	return 0;
+}
+
+static ssize_t anx7580_write_reg4_store( struct device *device, struct device_attribute *attr,const char *buf, size_t count )
+{
+    int ret, i, v;
+	unsigned int sid, offset;
+	char char_data[4*2];
+	unsigned int reg_value = 0;
+	anx7580_t *anx = dev_get_drvdata(device);
+
+	// get the base parameters
+	ret = sscanf( buf, "%x %x %s", &sid, &offset, char_data );
+	if(ret != 3) {
+		pr_err( "anx7580: panel write got wrong number of input parameters (%d) from sscanf", ret );
+		return -EINVAL;
+	}
+
+	// get the data payload
+	for ( i=0; i<4; i++ ) {
+	    if ( sscanf( char_data + i * 2, "%2x", &v ) != 1 ) break;
+        reg_value = ( reg_value << (8) ) | (unsigned char)v;
+	}
+	// pr_info("anx7580: write4 %x %x = %x\n", sid, offset, reg_value);
+	anx7580_i2c_write_byte4(anx, sid, offset, reg_value);
+	return count;
+}
+
+static ssize_t anx7580_write_reg4_show( struct device *device, struct device_attribute *attr, char *buf )
 {
 	return 0;
 }
@@ -582,7 +612,8 @@ static struct device_attribute anx7580_attrs[] = {
 	__ATTR(panel_read, 0664, panel_read_show, panel_read_store),
 	__ATTR(panel_write, 0664, panel_write_show, panel_write_store),
 	__ATTR(anx7580_read_reg, 0664, anx7580_read_reg_show, anx7580_read_reg_store),
-	__ATTR(anx7580_write_byte, 0664, anx7580_write_byte_show, anx7580_write_byte_store),
+	__ATTR(anx7580_write_reg, 0664, anx7580_write_reg_show, anx7580_write_reg_store),
+	__ATTR(anx7580_write_reg4, 0664, anx7580_write_reg4_show, anx7580_write_reg4_store),
 };
 
 static int anx7580_probe(struct i2c_client *client,
