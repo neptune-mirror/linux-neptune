@@ -795,6 +795,42 @@ struct drm_mode_config {
 	 */
 	struct drm_property *degamma_lut_size_property;
 	/**
+	 * @plane_degamma_lut_property: Optional Plane property to set the LUT used to
+	 * convert the framebuffer's colors to linear gamma.
+	 */
+	struct drm_property *plane_degamma_lut_property;
+	/**
+	 * @plane_degamma_lut_size_property: Optional Plane property for the size of
+	 * the degamma LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *plane_degamma_lut_size_property;
+	/**
+	 * @plane_degamma_tf: Optional Plane property to specify a
+	 * predefined transfer function, rather than relying on a user-blob LUT.
+	 * If both VALVE1_PLANE_DEGAMMA_LUT and VALVE1_PLANE_DEGAMMA_TF are specified,
+	 * then VALVE1_PLANE_DEGAMMA_LUT takes priority.
+	 */
+	struct drm_property *plane_degamma_tf_property;
+	/**
+	 * @plane_hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.
+	 * When PQ is decoded using the fixed func transfer function to the internal FP16 fb,
+	 * 1.0 -> 80 nits (on AMD at least)
+	 * When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.
+	 * So if you want, 203 nits for SDR content, pass in (203.0 / 80.0).
+	 *
+	 * Format is S31.32 sign-magnitude.
+	 */
+	struct drm_property *plane_hdr_mult;
+	/**
+	 * @crtc_regamma_tf_property:
+	 *
+	 * Transfer function for CRTC regamma.
+	 */
+	struct drm_property *crtc_regamma_tf_property;
+	/**
 	 * @ctm_property: Optional CRTC property to set the
 	 * matrix used to convert colors after the lookup in the
 	 * degamma LUT.

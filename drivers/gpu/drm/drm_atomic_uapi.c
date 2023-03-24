@@ -466,6 +466,11 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		set_out_fence_for_crtc(state->state, crtc, fence_ptr);
 	} else if (property == crtc->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == config->crtc_regamma_tf_property) {
+		if (state->regamma_tf != val) {
+			state->regamma_tf = val;
+			state->color_mgmt_changed |= 1;
+		}
 	} else if (crtc->funcs->atomic_set_property) {
 		return crtc->funcs->atomic_set_property(crtc, state, property, val);
 	} else {
@@ -507,6 +512,8 @@ drm_atomic_crtc_get_property(struct drm_crtc *crtc,
 		*val = 0;
 	else if (property == crtc->scaling_filter_property)
 		*val = state->scaling_filter;
+	else if (property == config->crtc_regamma_tf_property)
+		*val = state->regamma_tf;
 	else if (crtc->funcs->atomic_get_property)
 		return crtc->funcs->atomic_get_property(crtc, state, property, val);
 	else
@@ -595,6 +602,17 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->degamma_lut,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		return ret;
+	} else if (property == config->plane_degamma_tf_property) {
+		state->degamma_tf = val;
+	} else if (property == config->plane_hdr_mult) {
+		state->hdr_mult = val;
 	} else {
 		drm_dbg_atomic(plane->dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -655,6 +673,12 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 		*val = state->scaling_filter;
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		*val = (state->degamma_lut) ? state->degamma_lut->base.id : 0;
+	} else if (property == config->plane_degamma_tf_property) {
+		*val = state->degamma_tf;
+	} else if (property == config->plane_hdr_mult) {
+		*val = state->hdr_mult;
 	} else {
 		return -EINVAL;
 	}
