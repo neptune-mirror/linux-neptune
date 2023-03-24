@@ -1,0 +1,42 @@
+6.1/features/stable-updates:
+    7eaef76fbc4621ced374c85dbc000dd80dc681d7 ("Linux 6.1.20")
+6.1/features/amd-staging-drm-next:
+    1439e4f777a1e101c7568357c01250050a8030f6 ("Merge branch 'amd-staging-drm-next' of git@gitlab.freedesktop.org:agd5f/linux")
+6.1/features/acpi:
+    00ee498fe645228893d0f6d5a85b905fbf6949c5 ("ACPI: Make acpi_handle_list dynamically allocated")
+6.1/features/amd-crtc-lut3d:
+    30520474e1700a4a5d57bbe4b74e311130ff8534 ("drm/amd/display: Update stream update state for 3D LUT + Shaper state")
+6.1/features/amd-drm-extra:
+    0c57093f0fc554a5b68f847aeacaa807d62a8fdf ("fix for dmub stuttering")
+6.1/features/amd-hdr-colorimetry:
+    52bbbd82b4bf54321963533c62ae3b4cfdbd998f ("drm/amd/display: Remove unused display_content_support")
+6.1/features/amd-indirect-sram:
+    17fbc76efc5cda70b18c4f14dd878a875d38ec58 ("drm/amdgpu/vcn: Add parameter to force (en/dis)abling indirect SRAM mode")
+6.1/features/amd-pipe-split:
+    92acc6876af8b69e6c61a14f4ac7e9e788cdc781 ("drm/amd/display: Set MPC_SPLIT_DYNAMIC for DCN301")
+6.1/features/amd-transfer-function:
+    db1e38280e234e531013dd06275af3482092a0eb ("drm/amd/display: Mark plane reset as required when HDR/TF state changes")
+6.1/features/backlight-notif:
+    b9c444cedd8a0a832324ccaaf4e4313f9139b1c3 ("drivers: video: backlight: Disable backlight notification events.")
+6.1/features/backlight-precision:
+    7c0076ec99760d5b82a50d75969ab039d1524cb0 ("amd/drm : override backlight min value from 12 -> 0")
+6.1/features/cirrus-shared-boost:
+    a0649c3066961a650a9663f2b8b8582f5b55d9df ("TEST: cs35l41: Disable pm_runtime")
+6.1/features/gpu-reset:
+    b65228799e5ac96211b0e4c342d0a4478a1b6410 ("drm/amdgpu: schedule GPU reset event work function")
+6.1/features/hid:
+    82d771768114ff114799c735ee8b6f127acb729e ("HID: hid-steam: Add gamepad-only mode switched to by holding options")
+6.1/features/mm-soft-dirty-file:
+    a325a7b546ec539ca7877f258bb59beff9ef41fc ("mm: Use UFFD_WP to make per-pte soft dirty tracking work reliably.")
+6.1/features/quirks:
+    cd98b05c243860ff40ba3461fe6f29994b6086ef ("mmc: core: add safe_trim_quirk attribute")
+6.1/features/setup-gitlabci:
+    ad1f8b5f12c751bc5e10a987a9f24ad668fd68cf ("gitlab-ci: Specify Docker image name")
+6.1/features/steamdeck-mfd:
+    7091a8ea1052a72bc21831e07ffee06c4d7e8625 ("extcon: Add driver for Steam Deck")
+6.1/features/tcp-timewait:
+    ef76035f50a1147a0d39b3d9c1b80b92a2961028 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.1/features/tsc:
+    107385ee5b190c2c34ce8c6ff27720e87da94dbb ("x86: don't check for random warps if using direct sync")
+6.1/features/usb:
+    42c03cb9688e004b3ba2f433a616881f04eded36 ("usb: dwc3: Fix "linux,extcon-name"")
