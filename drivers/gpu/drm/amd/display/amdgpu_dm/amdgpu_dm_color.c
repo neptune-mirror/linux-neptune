@@ -911,9 +911,9 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	if (!plane_state->color_mgmt_changed)
 		return 0;
 
+	shaper_tf = plane_state->shaper_tf;
 	shaper_lut = __extract_blob_lut(plane_state->shaper_lut, &shaper_size);
 	lut3d = __extract_blob_lut(plane_state->lut3d, &lut3d_size);
-
 	lut3d_size = lut3d != NULL ? lut3d_size : 0;
 	shaper_size = shaper_lut != NULL ? shaper_size : 0;
 
