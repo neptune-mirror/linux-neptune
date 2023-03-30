@@ -921,12 +921,17 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		shaper_size = shaper_lut != NULL ? shaper_size : 0;
 		shaper_tf = plane_state->shaper_tf;
 
+		printk("[Josh Color] Updating plane %d shaper + 3D LUT: shaper tf: %d shaper size: %u lut3d size: %u", plane_state->plane->index, (int)shaper_tf, shaper_size, lut3d_size);
+
 		amdgpu_dm_atomic_lut3d(lut3d, lut3d_size, dc_plane_state->lut3d_func);
 		r = amdgpu_dm_atomic_shaper_lut(shaper_lut, false,
 						drm_tf_to_dc_tf(shaper_tf),
 						shaper_size, dc_plane_state->in_shaper_func, false);
 		if (r)
+		{
+			printk("[Josh Color] Setting plane %d shaper/3d lut failed", plane_state->plane->index);
 			return r;
+		}
 	}
 
 	return 0;
