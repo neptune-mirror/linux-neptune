@@ -300,13 +300,6 @@ struct drm_crtc_state {
 	struct drm_property_blob *lut3d;
 
 	/**
-	 * @regamma_tf:
-	 *
-	 * Pre-defined transfer function for converting internal FB -> wire encoding.
-	 */
-	enum drm_transfer_function regamma_tf;
-
-	/**
 	 * @target_vblank:
 	 *
 	 * Target vertical blank period when a page flip

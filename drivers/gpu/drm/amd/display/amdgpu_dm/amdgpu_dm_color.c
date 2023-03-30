@@ -73,8 +73,6 @@
 
 #define MAX_DRM_LUT_VALUE 0xFFFF
 
-static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_function drm_tf);
-
 /**
  * amdgpu_dm_init_color_mod - Initialize the color module.
  *
@@ -184,6 +182,7 @@ static void __drm_lut_to_dc_gamma(const struct drm_color_lut *lut,
 static void __drm_ctm_to_dc_matrix(const struct drm_color_ctm *ctm,
 				   struct fixed31_32 *matrix)
 {
+	int64_t val;
 	int i;
 
 	/*
@@ -202,7 +201,12 @@ static void __drm_ctm_to_dc_matrix(const struct drm_color_ctm *ctm,
 		}
 
 		/* gamut_remap_matrix[i] = ctm[i - floor(i/4)] */
-		matrix[i] = dc_fixpt_from_s3132(ctm->matrix[i - (i / 4)]);
+		val = ctm->matrix[i - (i / 4)];
+		/* If negative, convert to 2's complement. */
+		if (val & (1ULL << 63))
+			val = -(val & ~(1ULL << 63));
+
+		matrix[i].value = val;
 	}
 }
 
@@ -251,14 +255,13 @@ static int __set_legacy_tf(struct dc_transfer_func *func,
  * @func: transfer function
  * @lut: lookup table that defines the color space
  * @lut_size: size of respective lut
- * @has_rom: if ROM can be used for hardcoded curve
  *
  * Returns:
  * 0 in case of success. -ENOMEM if fails.
  */
 static int __set_output_tf(struct dc_transfer_func *func,
-			   const struct drm_color_lut *lut, uint32_t lut_size,
-			   bool has_rom)
+			   const struct drm_color_lut *lut,
+			   uint32_t lut_size)
 {
 	struct dc_gamma *gamma = NULL;
 	struct calculate_buffer cal_buffer = {0};
@@ -268,50 +271,33 @@ static int __set_output_tf(struct dc_transfer_func *func,
 
 	cal_buffer.buffer_index = -1;
 
-	if (lut_size) {
-		gamma = dc_create_gamma();
-		if (!gamma)
-			return -ENOMEM;
+	gamma = dc_create_gamma();
+	if (!gamma)
+		return -ENOMEM;
 
-		gamma->num_entries = lut_size;
-		__drm_lut_to_dc_gamma(lut, gamma, false);
-	}
+	gamma->num_entries = lut_size;
+	__drm_lut_to_dc_gamma(lut, gamma, false);
 
-	if (func->tf == TRANSFER_FUNCTION_LINEAR) {
-		/*
-		 * Color module doesn't like calculating regamma params
-		 * on top of a linear input. But degamma params can be used
-		 * instead to simulate this.
-		 */
-		if (gamma)
-			gamma->type = GAMMA_CUSTOM;
-		res = mod_color_calculate_degamma_params(NULL, func,
-							gamma, gamma != NULL);
-	} else {
-		/*
-		 * Assume sRGB. The actual mapping will depend on whether the
-		 * input was legacy or not.
-		 */
-		if (gamma)
-			gamma->type = GAMMA_CS_TFM_1D;
-		res = mod_color_calculate_regamma_params(func, gamma, gamma != NULL,
-							 has_rom, NULL, &cal_buffer);
-	}
+	/*
+	 * Color module doesn't like calculating regamma params
+	 * on top of a linear input. But degamma params can be used
+	 * instead to simulate this.
+	 */
+	gamma->type = GAMMA_CUSTOM;
+	res = mod_color_calculate_degamma_params(NULL, func, gamma, true);
 
-	if (gamma)
-		dc_gamma_release(&gamma);
+	dc_gamma_release(&gamma);
 
 	return res ? 0 : -ENOMEM;
 }
 
 static int amdgpu_dm_set_atomic_regamma(struct dc_stream_state *stream,
 					const struct drm_color_lut *regamma_lut,
-					uint32_t regamma_size, bool has_rom,
-					enum dc_transfer_func_predefined tf)
+					uint32_t regamma_size)
 {
 	int ret = 0;
 
-	if (regamma_size || tf != TRANSFER_FUNCTION_LINEAR) {
+	if (regamma_size) {
 		/* CRTC RGM goes into RGM LUT.
 		 *
 		 * Note: here there is no implicit sRGB regamma. We are using
@@ -319,11 +305,10 @@ static int amdgpu_dm_set_atomic_regamma(struct dc_stream_state *stream,
 		 * from a linear base.
 		 */
 		stream->out_transfer_func->type = TF_TYPE_DISTRIBUTED_POINTS;
-		stream->out_transfer_func->tf = tf;
-		stream->out_transfer_func->sdr_ref_white_level = 80; /* hardcoded for now */
+		stream->out_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
 
 		ret = __set_output_tf(stream->out_transfer_func, regamma_lut,
-				      regamma_size, has_rom);
+				      regamma_size);
 	} else {
 		/*
 		 * No CRTC RGM means we can just put the block into bypass
@@ -662,7 +647,6 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state 
 	uint32_t degamma_size, regamma_size;
 	uint32_t lut3d_size, shaper_size;
 	bool has_regamma, has_degamma;
-	enum dc_transfer_func_predefined tf;
 	bool has_lut3d, has_shaper_lut;
 	bool is_legacy;
 	int r;
@@ -691,8 +675,6 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state 
 		regamma_lut && !__is_lut_linear(regamma_lut, regamma_size);
 
 	is_legacy = regamma_size == MAX_COLOR_LEGACY_LUT_ENTRIES;
-
-	tf = drm_tf_to_dc_tf(crtc->base.regamma_tf);
 
 	/* Reset all adjustments. */
 	crtc->cm_has_degamma = false;
@@ -753,7 +735,7 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state 
 		 * dcn30_set_output_transfer_func()
 		 */
 		regamma_size = has_regamma ? regamma_size : 0;
-		r = amdgpu_dm_set_atomic_regamma(stream, regamma_lut, regamma_size, has_rom, tf);
+		r = amdgpu_dm_set_atomic_regamma(stream, regamma_lut, regamma_size);
 		if (r)
 			return r;
 	}
@@ -791,29 +773,9 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dc_state *ctx, struct dm_crtc_state 
 	return 0;
 }
 
-static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_function drm_tf)
-{
-	switch (drm_tf)
-	{
-	default:
-	case DRM_TRANSFER_FUNCTION_DEFAULT: return TRANSFER_FUNCTION_LINEAR;
-	case DRM_TRANSFER_FUNCTION_SRGB:	return TRANSFER_FUNCTION_SRGB;
-
-	case DRM_TRANSFER_FUNCTION_BT709:	return TRANSFER_FUNCTION_BT709;
-	case DRM_TRANSFER_FUNCTION_PQ:		return TRANSFER_FUNCTION_PQ;
-	case DRM_TRANSFER_FUNCTION_LINEAR:	return TRANSFER_FUNCTION_LINEAR;
-	case DRM_TRANSFER_FUNCTION_UNITY:	return TRANSFER_FUNCTION_UNITY;
-	case DRM_TRANSFER_FUNCTION_HLG:		return TRANSFER_FUNCTION_HLG;
-	case DRM_TRANSFER_FUNCTION_GAMMA22:	return TRANSFER_FUNCTION_GAMMA22;
-	case DRM_TRANSFER_FUNCTION_GAMMA24:	return TRANSFER_FUNCTION_GAMMA24;
-	case DRM_TRANSFER_FUNCTION_GAMMA26:	return TRANSFER_FUNCTION_GAMMA26;
-	}
-}
-
 /**
  * amdgpu_dm_update_plane_color_mgmt: Maps DRM color management to DC plane.
  * @crtc: amdgpu_dm crtc state
- * @plane_state: DRM plane
  * @dc_plane_state: target DC surface
  *
  * Update the underlying dc_stream_state's input transfer function (ITF) in
@@ -824,23 +786,12 @@ static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_functi
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
-					  struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
 	const struct drm_color_lut *degamma_lut;
 	enum dc_transfer_func_predefined tf = TRANSFER_FUNCTION_SRGB;
-	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 	uint32_t degamma_size;
-	bool has_degamma;
 	int r;
-
-	degamma_lut = __extract_blob_lut(plane_state->degamma_lut, &degamma_size);
-
-	has_degamma =
-		degamma_lut && !__is_lut_linear(degamma_lut, degamma_size);
-
-	drm_tf = plane_state->degamma_tf;
-	dc_plane_state->hdr_mult = dc_fixpt_from_s3132(plane_state->hdr_mult);
 
 	/* Get the correct base transfer function for implicit degamma. */
 	switch (dc_plane_state->format) {
@@ -853,30 +804,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		break;
 	}
 
-	if (has_degamma) {
-		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
-
-		dc_plane_state->in_transfer_func->type =
-			TF_TYPE_DISTRIBUTED_POINTS;
-
-		dc_plane_state->in_transfer_func->tf =
-			drm_tf_to_dc_tf(drm_tf);
-
-		r = __set_input_tf(dc_plane_state->in_transfer_func,
-				   degamma_lut, degamma_size);
-		if (r)
-			return r;
-	} else if (drm_tf != DRM_TRANSFER_FUNCTION_DEFAULT) {
-		dc_plane_state->in_transfer_func->type =
-			TF_TYPE_PREDEFINED;
-
-		dc_plane_state->in_transfer_func->tf =
-			drm_tf_to_dc_tf(drm_tf);
-
-		if (!mod_color_calculate_degamma_params(NULL,
-			    dc_plane_state->in_transfer_func, NULL, false))
-			return -ENOMEM;
-	} else if (crtc->cm_has_degamma) {
+	if (crtc->cm_has_degamma) {
 		degamma_lut = __extract_blob_lut(crtc->base.degamma_lut,
 						 &degamma_size);
 		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
