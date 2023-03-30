@@ -177,7 +177,9 @@ bool dcn30_set_input_transfer_func(struct dc *dc,
 
 	result = dpp_base->funcs->dpp_program_gamcor_lut(dpp_base, params);
 
+	printk("dcn30_set_input_transfer_func 1: %p", pipe_ctx->stream_res.opp);
 	if (pipe_ctx->stream_res.opp && pipe_ctx->stream_res.opp->ctx) {
+		printk("dcn30_set_input_transfer_func 2: %p %p", pipe_ctx->stream_res.opp, pipe_ctx->stream_res.opp->ctx);
 		if (dpp_base->funcs->dpp_program_blnd_lut)
 			hws->funcs.set_blend_lut(pipe_ctx, plane_state);
 		if (dpp_base->funcs->dpp_program_shaper_lut &&
