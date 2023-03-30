@@ -922,9 +922,9 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		shaper_tf = plane_state->shaper_tf;
 
 		amdgpu_dm_atomic_lut3d(lut3d, lut3d_size, dc_plane_state->lut3d_func);
-		r = amdgpu_dm_atomic_shaper_lut(shaper_lut, shaper_size, false,
+		r = amdgpu_dm_atomic_shaper_lut(shaper_lut, false,
 						drm_tf_to_dc_tf(shaper_tf),
-						dc_plane_state->in_shaper_func, false);
+						shaper_size, dc_plane_state->in_shaper_func, false);
 		if (r)
 			return r;
 	}
