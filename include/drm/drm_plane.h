@@ -40,6 +40,9 @@ enum drm_scaling_filter {
 	DRM_SCALING_FILTER_NEAREST_NEIGHBOR,
 };
 
+// 1.0 in S31.32
+#define DRM_HDR_MULT_DEFAULT (0x100000000LL)
+
 /**
  * struct drm_plane_state - mutable plane state
  *
@@ -191,6 +194,36 @@ struct drm_plane_state {
 	struct drm_property_blob *fb_damage_clips;
 
 	/**
+	 * @degamma_lut:
+	 *
+	 * LUT for converting plane pixel data before going into plane merger.
+	 * The blob (if not NULL) is an array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *degamma_lut;
+
+	/**
+	 * @degamma_tf:
+	 *
+	 * Pre-defined transfer function for converting plane pixel data before
+	 * going into plane merger.
+	 */
+	enum drm_transfer_function degamma_tf;
+
+	/**
+	 * @hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.
+	 * When PQ is decoded using the fixed func transfer function to the internal FP16 fb,
+	 * 1.0 -> 80 nits (on AMD at least)
+	 * When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.
+	 * So if you want, 203 nits for SDR content, pass in (203.0 / 80.0).
+	 *
+	 * Format is S31.32 sign-magnitude.
+	 */
+	__u64 hdr_mult;
+
+	/**
 	 * @src:
 	 *
 	 * source coordinates of the plane (in 16.16).
@@ -237,6 +270,33 @@ struct drm_plane_state {
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
+
+	/**
+	 * @shaper_lut: shaper lookup table blob. The blob (if not NULL) is an
+	 * array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *shaper_lut;
+
+	/**
+	 * @shaper_tf:
+	 *
+	 * Pre-defined transfer function for converting plane pixel data before
+	 * applying shaper LUT.
+	 */
+	enum drm_transfer_function shaper_tf;
+
+	/**
+	 * @lut3d: 3D lookup table blob. The blob (if not NULL) is an array of
+	 * &struct drm_color_lut.
+	 */
+	struct drm_property_blob *lut3d;
+
+	/**
+	 * @color_mgmt_changed: Color management properties have changed. Used
+	 * by the atomic helpers and drivers to steer the atomic commit control
+	 * flow.
+	 */
+	bool color_mgmt_changed : 1;
 };
 
 static inline struct drm_rect
@@ -748,6 +808,38 @@ struct drm_plane {
 	 * scaling.
 	 */
 	struct drm_property *scaling_filter_property;
+
+	/**
+	 * @lut3d_property: Optional plane property to set the shaper LUT used
+	 * to convert colors; A shaper LUT can be used to delinearize content
+	 * before apply 3D LUT correction.
+	 */
+	struct drm_property *shaper_lut_property;
+
+	/**
+	 * @lut3d_size_property: Optional plane property for the size of the
+	 * shaper LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *shaper_lut_size_property;
+
+	/**
+	 * @shaper_tf: Optional Plane property to specify a transfer function
+	 * for input shaper LUT.
+	 */
+	struct drm_property *shaper_tf_property;
+
+	/**
+	 * @lut3d_property: Optional plane property to set the 3D LUT used to
+	 * convert colors; A shaper LUT can be used to delinearize content
+	 * before apply 3D LUT correction.
+	 */
+	struct drm_property *lut3d_property;
+
+	/**
+	 * @lut3d_size_property: Optional plane property for the size of the
+	 * 3D LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *lut3d_size_property;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
@@ -880,6 +972,11 @@ void drm_plane_force_disable(struct drm_plane *plane);
 int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
 				       struct drm_property *property,
 				       uint64_t value);
+int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
+					   struct drm_plane *plane);
+void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
+					    uint shaper_lut_size,
+					    uint lut3d_size);
 
 /**
  * drm_plane_find - find a &drm_plane

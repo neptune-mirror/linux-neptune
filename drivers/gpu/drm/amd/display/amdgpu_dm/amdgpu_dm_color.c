@@ -73,6 +73,8 @@
 
 #define MAX_DRM_LUT_VALUE 0xFFFF
 
+static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_function drm_tf);
+
 /**
  * amdgpu_dm_init_color_mod - Initialize the color module.
  *
@@ -182,7 +184,6 @@ static void __drm_lut_to_dc_gamma(const struct drm_color_lut *lut,
 static void __drm_ctm_to_dc_matrix(const struct drm_color_ctm *ctm,
 				   struct fixed31_32 *matrix)
 {
-	int64_t val;
 	int i;
 
 	/*
@@ -201,12 +202,7 @@ static void __drm_ctm_to_dc_matrix(const struct drm_color_ctm *ctm,
 		}
 
 		/* gamut_remap_matrix[i] = ctm[i - floor(i/4)] */
-		val = ctm->matrix[i - (i / 4)];
-		/* If negative, convert to 2's complement. */
-		if (val & (1ULL << 63))
-			val = -(val & ~(1ULL << 63));
-
-		matrix[i].value = val;
+		matrix[i] = dc_fixpt_from_s3132(ctm->matrix[i - (i / 4)]);
 	}
 }
 
@@ -272,12 +268,14 @@ static int __set_output_tf(struct dc_transfer_func *func,
 
 	cal_buffer.buffer_index = -1;
 
-	gamma = dc_create_gamma();
-	if (!gamma)
-		return -ENOMEM;
+	if (lut_size) {
+		gamma = dc_create_gamma();
+		if (!gamma)
+			return -ENOMEM;
 
-	gamma->num_entries = lut_size;
-	__drm_lut_to_dc_gamma(lut, gamma, false);
+		gamma->num_entries = lut_size;
+		__drm_lut_to_dc_gamma(lut, gamma, false);
+	}
 
 	if (func->tf == TRANSFER_FUNCTION_LINEAR) {
 		/*
@@ -285,22 +283,135 @@ static int __set_output_tf(struct dc_transfer_func *func,
 		 * on top of a linear input. But degamma params can be used
 		 * instead to simulate this.
 		 */
-		gamma->type = GAMMA_CUSTOM;
+		if (gamma)
+			gamma->type = GAMMA_CUSTOM;
 		res = mod_color_calculate_degamma_params(NULL, func,
-							gamma, true);
+							 gamma, gamma != NULL);
 	} else {
 		/*
 		 * Assume sRGB. The actual mapping will depend on whether the
 		 * input was legacy or not.
 		 */
-		gamma->type = GAMMA_CS_TFM_1D;
-		res = mod_color_calculate_regamma_params(func, gamma, false,
+		if (gamma)
+			gamma->type = GAMMA_CS_TFM_1D;
+		res = mod_color_calculate_regamma_params(func, gamma, gamma != NULL,
 							 has_rom, NULL, &cal_buffer);
 	}
 
-	dc_gamma_release(&gamma);
+	if (gamma)
+		dc_gamma_release(&gamma);
 
 	return res ? 0 : -ENOMEM;
+}
+
+static int amdgpu_dm_set_atomic_regamma(struct dc_stream_state *stream,
+					const struct drm_color_lut *regamma_lut,
+					uint32_t regamma_size, bool has_rom,
+					enum dc_transfer_func_predefined tf)
+{
+	int ret = 0;
+	if (regamma_size || tf != TRANSFER_FUNCTION_LINEAR) {
+		/* CRTC RGM goes into RGM LUT.
+		 *
+		 * Note: there is no implicit sRGB regamma here. We are using
+		 * degamma calculation from color module to calculate the curve
+		 * from a linear base.
+		 */
+		stream->out_transfer_func->type = TF_TYPE_DISTRIBUTED_POINTS;
+		stream->out_transfer_func->tf = tf;
+		stream->out_transfer_func->sdr_ref_white_level = 80;
+
+		ret = __set_output_tf(stream->out_transfer_func,
+				      regamma_lut, regamma_size, has_rom);
+	} else {
+		/*
+		 * No CRTC RGM means we can just put the block into bypass
+		 * since we don't have any plane level adjustments using it.
+		 */
+		stream->out_transfer_func->type = TF_TYPE_BYPASS;
+		stream->out_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	return ret;
+}
+
+static void __to_dc_lut3d_color(struct dc_rgb *rgb,
+				const struct drm_color_lut lut,
+				int bit_precision)
+{
+	rgb->red = drm_color_lut_extract(lut.red, bit_precision);
+	rgb->green = drm_color_lut_extract(lut.green, bit_precision);
+	rgb->blue  = drm_color_lut_extract(lut.blue, bit_precision);
+}
+
+static void __drm_3dlut_to_dc_3dlut(const struct drm_color_lut *lut,
+				    uint32_t lut3d_size,
+				    struct tetrahedral_params *params,
+				    bool use_tetrahedral_9,
+				    int bit_depth)
+{
+	struct dc_rgb *lut0;
+	struct dc_rgb *lut1;
+	struct dc_rgb *lut2;
+	struct dc_rgb *lut3;
+	int lut_i, i;
+
+
+	if (use_tetrahedral_9) {
+		lut0 = params->tetrahedral_9.lut0;
+		lut1 = params->tetrahedral_9.lut1;
+		lut2 = params->tetrahedral_9.lut2;
+		lut3 = params->tetrahedral_9.lut3;
+	} else {
+		lut0 = params->tetrahedral_17.lut0;
+		lut1 = params->tetrahedral_17.lut1;
+		lut2 = params->tetrahedral_17.lut2;
+		lut3 = params->tetrahedral_17.lut3;
+	}
+
+	for (lut_i = 0, i = 0; i < lut3d_size - 4; lut_i++, i += 4) {
+		/* We should consider the 3dlut RGB values are distributed
+		 * along four arrays lut0-3 where the first sizes 1229 and the
+		 * other 1228. The bit depth supported for 3dlut channel is
+		 * 12-bit, but DC also supports 10-bit.
+		 *
+		 * TODO: improve color pipeline API to enable the userspace set
+		 * bit depth and 3D LUT size/stride, as specified by VA-API.
+		 */
+		__to_dc_lut3d_color(&lut0[lut_i], lut[i], bit_depth);
+		__to_dc_lut3d_color(&lut1[lut_i], lut[i + 1], bit_depth);
+		__to_dc_lut3d_color(&lut2[lut_i], lut[i + 2], bit_depth);
+		__to_dc_lut3d_color(&lut3[lut_i], lut[i + 3], bit_depth);
+	}
+	/* lut0 has 1229 points (lut_size/4 + 1) */
+	__to_dc_lut3d_color(&lut0[lut_i], lut[i], bit_depth);
+}
+
+/* amdgpu_dm_atomic_lut3d - set DRM 3D LUT to DC stream
+ * @drm_lut3d: DRM CRTC (user) 3D LUT
+ * @drm_lut3d_size: size of 3D LUT
+ * @lut3d: DC 3D LUT
+ *
+ * Map DRM CRTC 3D LUT to DC 3D LUT and all necessary bits to program it
+ * on DCN MPC accordingly.
+ */
+static void amdgpu_dm_atomic_lut3d(const struct drm_color_lut *drm_lut,
+				   uint32_t drm_lut3d_size,
+				   struct dc_3dlut *lut)
+{
+	if (!drm_lut3d_size) {
+		lut->state.bits.initialized = 0;
+	} else {
+		/* Stride and bit depth are not programmable by API yet.
+		 * Therefore, only supports 17x17x17 3D LUT (12-bit).
+		 */
+		lut->lut_3d.use_tetrahedral_9 = false;
+		lut->lut_3d.use_12bits = true;
+		lut->state.bits.initialized = 1;
+		__drm_3dlut_to_dc_3dlut(drm_lut, drm_lut3d_size, &lut->lut_3d,
+					lut->lut_3d.use_tetrahedral_9,
+					MAX_COLOR_3DLUT_BITDEPTH);
+	}
 }
 
 /**
@@ -332,6 +443,141 @@ static int __set_input_tf(struct dc_transfer_func *func,
 	dc_gamma_release(&gamma);
 
 	return res ? 0 : -ENOMEM;
+}
+
+static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
+				       bool has_rom,
+				       enum dc_transfer_func_predefined tf,
+				       uint32_t shaper_size,
+				       struct dc_transfer_func *func_shaper,
+				       bool post_blnd)
+{
+	int ret = 0;
+
+	if (shaper_size || tf != TRANSFER_FUNCTION_LINEAR) {
+		/* If DRM shaper LUT is set, we assume a linear color space
+		 * (linearized by DRM degamma 1D LUT or not)
+		 */
+		func_shaper->type = TF_TYPE_DISTRIBUTED_POINTS;
+		func_shaper->tf = tf;
+		func_shaper->sdr_ref_white_level = 80; /* hardcoded for now */
+
+		if(post_blnd)
+			ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, has_rom);
+		else
+			ret = __set_input_tf(func_shaper, shaper_lut, shaper_size);
+	} else {
+		func_shaper->type = TF_TYPE_BYPASS;
+		func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	return ret;
+}
+
+/* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
+ * interface
+ * @dc: Display Core control structure
+ * @ctx: <add desc>
+ * @stream: DC stream state to set shaper LUT and 3D LUT
+ * @drm_shaper_lut: DRM CRTC (user) shaper LUT
+ * @drm_shaper_size: size of shaper LUT
+ * @drm_lut3d: DRM CRTC (user) 3D LUT
+ * @drm_lut3d_size: size of 3D LUT
+ *
+ * Returns:
+ * 0 on success.
+ */
+static int amdgpu_dm_atomic_shaper_lut3d(struct dc *dc,
+					 struct dc_state *ctx,
+					 struct dc_stream_state *stream,
+					 const struct drm_color_lut *drm_shaper_lut,
+					 uint32_t drm_shaper_size,
+					 bool has_rom,
+					 enum dc_transfer_func_predefined tf,
+					 const struct drm_color_lut *drm_lut3d,
+					 uint32_t drm_lut3d_size)
+{
+	struct dc_3dlut *lut3d_func;
+	struct dc_transfer_func *func_shaper;
+	bool acquire = drm_shaper_size || drm_lut3d_size;
+
+	lut3d_func = (struct dc_3dlut *)stream->lut3d_func;
+	func_shaper = (struct dc_transfer_func *)stream->func_shaper;
+
+	ASSERT((lut3d_func && func_shaper) || (!lut3d_func && !func_shaper));
+	if ((acquire && !lut3d_func && !func_shaper) ||
+	    (!acquire && lut3d_func && func_shaper))
+	{
+		if (!dc_acquire_release_mpc_3dlut_for_ctx(dc, acquire, ctx, stream,
+							  &lut3d_func, &func_shaper))
+			return DC_ERROR_UNEXPECTED;
+	}
+
+	stream->func_shaper = func_shaper;
+	stream->lut3d_func = lut3d_func;
+
+	if (!acquire)
+		return 0;
+
+	amdgpu_dm_atomic_lut3d(drm_lut3d, drm_lut3d_size, lut3d_func);
+
+	return amdgpu_dm_atomic_shaper_lut(drm_shaper_lut, has_rom, tf,
+					   drm_shaper_size, func_shaper, true);
+}
+
+/**
+ * amdgpu_dm_lut3d_size - get expected size according to hw color caps
+ * @adev: amdgpu device
+ * @lut_size: default size
+ *
+ * Return:
+ * lut_size if DC 3D LUT is supported, zero otherwise.
+ */
+static uint32_t amdgpu_dm_get_lut3d_size(struct amdgpu_device *adev,
+					 uint32_t lut_size)
+{
+	return adev->dm.dc->caps.color.mpc.num_3dluts ? lut_size : 0;
+}
+
+/**
+ * amdgpu_dm_verify_lut3d_size - verifies if 3D LUT is supported and if DRM 3D
+ * LUT matches the hw supported size
+ * @adev: amdgpu device
+ * @crtc_state: the DRM CRTC state
+ *
+ * Verifies if post-blending (MPC) 3D LUT is supported by the HW (DCN 3.0 or
+ * newer) and if the DRM 3D LUT matches the supported size.
+ *
+ * Returns:
+ * 0 on success. -EINVAL if lut size are invalid.
+ */
+int amdgpu_dm_verify_lut3d_size(struct amdgpu_device *adev,
+				const struct drm_crtc_state *crtc_state)
+{
+	const struct drm_color_lut *shaper = NULL, *lut3d = NULL;
+	uint32_t exp_size, size;
+
+	/* shaper LUT is only available if 3D LUT color caps*/
+	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_LUT_ENTRIES);
+	shaper = __extract_blob_lut(crtc_state->shaper_lut, &size);
+
+	if (shaper && size != exp_size) {
+		DRM_DEBUG_DRIVER(
+			"Invalid Shaper LUT size. Should be %u but got %u.\n",
+			exp_size, size);
+		return -EINVAL;
+	}
+
+	exp_size = amdgpu_dm_get_lut3d_size(adev, MAX_COLOR_3DLUT_ENTRIES);
+	lut3d = __extract_blob_lut(crtc_state->lut3d, &size);
+
+	if (lut3d && size != exp_size) {
+		DRM_DEBUG_DRIVER("Invalid Gamma 3D LUT size. Should be %u but got %u.\n",
+				 exp_size, size);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 /**
@@ -373,6 +619,7 @@ int amdgpu_dm_verify_lut_sizes(const struct drm_crtc_state *crtc_state)
 /**
  * amdgpu_dm_update_crtc_color_mgmt: Maps DRM color management to DC stream.
  * @crtc: amdgpu_dm crtc state
+ * @ctx: <add desc>
  *
  * With no plane level color management properties we're free to use any
  * of the HW blocks as long as the CRTC CTM always comes before the
@@ -392,15 +639,19 @@ int amdgpu_dm_verify_lut_sizes(const struct drm_crtc_state *crtc_state)
  * Returns:
  * 0 on success. Error code if setup fails.
  */
-int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
+int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc,
+				     struct dc_state *ctx)
 {
 	struct dc_stream_state *stream = crtc->stream;
 	struct amdgpu_device *adev = drm_to_adev(crtc->base.state->dev);
 	bool has_rom = adev->asic_type <= CHIP_RAVEN;
 	struct drm_color_ctm *ctm = NULL;
 	const struct drm_color_lut *degamma_lut, *regamma_lut;
+	const struct drm_color_lut *shaper_lut, *lut3d;
 	uint32_t degamma_size, regamma_size;
+	uint32_t lut3d_size, shaper_size;
 	bool has_regamma, has_degamma;
+	enum dc_transfer_func_predefined tf;
 	bool is_legacy;
 	int r;
 
@@ -408,7 +659,13 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 	if (r)
 		return r;
 
+	r =  amdgpu_dm_verify_lut3d_size(adev, &crtc->base);
+	if (r)
+		return r;
+
 	degamma_lut = __extract_blob_lut(crtc->base.degamma_lut, &degamma_size);
+	shaper_lut = __extract_blob_lut(crtc->base.shaper_lut, &shaper_size);
+	lut3d = __extract_blob_lut(crtc->base.lut3d, &lut3d_size);
 	regamma_lut = __extract_blob_lut(crtc->base.gamma_lut, &regamma_size);
 
 	has_degamma =
@@ -418,6 +675,8 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 		regamma_lut && !__is_lut_linear(regamma_lut, regamma_size);
 
 	is_legacy = regamma_size == MAX_COLOR_LEGACY_LUT_ENTRIES;
+
+	tf = drm_tf_to_dc_tf(crtc->base.regamma_tf);
 
 	/* Reset all adjustments. */
 	crtc->cm_has_degamma = false;
@@ -440,26 +699,36 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 		stream->out_transfer_func->type = TF_TYPE_DISTRIBUTED_POINTS;
 		stream->out_transfer_func->tf = TRANSFER_FUNCTION_SRGB;
 
+		/* Note: although we pass has_rom as parameter here, we never
+		 * actually use ROM because the color module only takes the ROM
+		 * path if transfer_func->type == PREDEFINED.
+		 *
+		 * See more in mod_color_calculate_regamma_params()
+		 */
 		r = __set_legacy_tf(stream->out_transfer_func, regamma_lut,
 				    regamma_size, has_rom);
 		if (r)
 			return r;
-	} else if (has_regamma) {
-		/* If atomic regamma, CRTC RGM goes into RGM LUT. */
-		stream->out_transfer_func->type = TF_TYPE_DISTRIBUTED_POINTS;
-		stream->out_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
-
-		r = __set_output_tf(stream->out_transfer_func, regamma_lut,
-				    regamma_size, has_rom);
+	} else {
+		lut3d_size = lut3d != NULL ? lut3d_size : 0;
+		shaper_size = shaper_lut != NULL ? shaper_size : 0;
+		r = amdgpu_dm_atomic_shaper_lut3d(adev->dm.dc, ctx, stream,
+						  shaper_lut, shaper_size,
+						  has_rom, tf,
+						  lut3d, lut3d_size);
+		if (r) {
+			DRM_DEBUG_DRIVER("Failed on shaper/3D LUTs setup\n");
+			return r;
+		}
+		/* Note: OGAM is disabled if 3D LUT is successfully programmed.
+		 * See params and set_output_gamma in
+		 * dcn30_set_output_transfer_func()
+		 */
+		regamma_size = has_regamma ? regamma_size : 0;
+		r = amdgpu_dm_set_atomic_regamma(stream, regamma_lut,
+						 regamma_size, has_rom, tf);
 		if (r)
 			return r;
-	} else {
-		/*
-		 * No CRTC RGM means we can just put the block into bypass
-		 * since we don't have any plane level adjustments using it.
-		 */
-		stream->out_transfer_func->type = TF_TYPE_BYPASS;
-		stream->out_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
 	}
 
 	/*
@@ -495,9 +764,29 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
 	return 0;
 }
 
+static enum dc_transfer_func_predefined drm_tf_to_dc_tf(enum drm_transfer_function drm_tf)
+{
+	switch (drm_tf)
+	{
+	default:
+	case DRM_TRANSFER_FUNCTION_DEFAULT: return TRANSFER_FUNCTION_LINEAR;
+	case DRM_TRANSFER_FUNCTION_SRGB:	return TRANSFER_FUNCTION_SRGB;
+
+	case DRM_TRANSFER_FUNCTION_BT709:	return TRANSFER_FUNCTION_BT709;
+	case DRM_TRANSFER_FUNCTION_PQ:		return TRANSFER_FUNCTION_PQ;
+	case DRM_TRANSFER_FUNCTION_LINEAR:	return TRANSFER_FUNCTION_LINEAR;
+	case DRM_TRANSFER_FUNCTION_UNITY:	return TRANSFER_FUNCTION_UNITY;
+	case DRM_TRANSFER_FUNCTION_HLG:		return TRANSFER_FUNCTION_HLG;
+	case DRM_TRANSFER_FUNCTION_GAMMA22:	return TRANSFER_FUNCTION_GAMMA22;
+	case DRM_TRANSFER_FUNCTION_GAMMA24:	return TRANSFER_FUNCTION_GAMMA24;
+	case DRM_TRANSFER_FUNCTION_GAMMA26:	return TRANSFER_FUNCTION_GAMMA26;
+	}
+}
+
 /**
  * amdgpu_dm_update_plane_color_mgmt: Maps DRM color management to DC plane.
  * @crtc: amdgpu_dm crtc state
+ * @plane_state: DRM plane
  * @dc_plane_state: target DC surface
  *
  * Update the underlying dc_stream_state's input transfer function (ITF) in
@@ -508,12 +797,23 @@ int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc)
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
+				      struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
 	const struct drm_color_lut *degamma_lut;
 	enum dc_transfer_func_predefined tf = TRANSFER_FUNCTION_SRGB;
+	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 	uint32_t degamma_size;
+	bool has_degamma;
 	int r;
+
+	degamma_lut = __extract_blob_lut(plane_state->degamma_lut, &degamma_size);
+
+	has_degamma =
+		degamma_lut && !__is_lut_linear(degamma_lut, degamma_size);
+
+	drm_tf = plane_state->degamma_tf;
+	dc_plane_state->hdr_mult = dc_fixpt_from_s3132(plane_state->hdr_mult);
 
 	/* Get the correct base transfer function for implicit degamma. */
 	switch (dc_plane_state->format) {
@@ -526,7 +826,30 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		break;
 	}
 
-	if (crtc->cm_has_degamma) {
+	if (has_degamma) {
+		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
+
+		dc_plane_state->in_transfer_func->type =
+			TF_TYPE_DISTRIBUTED_POINTS;
+
+		dc_plane_state->in_transfer_func->tf =
+			drm_tf_to_dc_tf(drm_tf);
+
+		r = __set_input_tf(dc_plane_state->in_transfer_func,
+				   degamma_lut, degamma_size);
+		if (r)
+			return r;
+	} else if (drm_tf != DRM_TRANSFER_FUNCTION_DEFAULT) {
+		dc_plane_state->in_transfer_func->type =
+			TF_TYPE_PREDEFINED;
+
+		dc_plane_state->in_transfer_func->tf =
+			drm_tf_to_dc_tf(drm_tf);
+
+		if (!mod_color_calculate_degamma_params(NULL,
+			    dc_plane_state->in_transfer_func, NULL, false))
+			return -ENOMEM;
+	} else if (crtc->cm_has_degamma) {
 		degamma_lut = __extract_blob_lut(crtc->base.degamma_lut,
 						 &degamma_size);
 		ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
@@ -584,6 +907,26 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		/* ...Otherwise we can just bypass the DGM block. */
 		dc_plane_state->in_transfer_func->type = TF_TYPE_BYPASS;
 		dc_plane_state->in_transfer_func->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	if (plane_state->color_mgmt_changed) {
+		const struct drm_color_lut *shaper_lut, *lut3d;
+		uint32_t lut3d_size, shaper_size;
+		enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+
+		shaper_lut = __extract_blob_lut(plane_state->shaper_lut, &shaper_size);
+		lut3d = __extract_blob_lut(plane_state->lut3d, &lut3d_size);
+
+		lut3d_size = lut3d != NULL ? lut3d_size : 0;
+		shaper_size = shaper_lut != NULL ? shaper_size : 0;
+		shaper_tf = plane_state->shaper_tf;
+
+		amdgpu_dm_atomic_lut3d(lut3d, lut3d_size, dc_plane_state->lut3d_func);
+		r = amdgpu_dm_atomic_shaper_lut(shaper_lut, shaper_size, false,
+						drm_tf_to_dc_tf(shaper_tf),
+						dc_plane_state->in_shaper_func, false);
+		if (r)
+			return r;
 	}
 
 	return 0;

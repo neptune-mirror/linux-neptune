@@ -430,6 +430,22 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 					&replaced);
 		state->color_mgmt_changed |= replaced;
 		return ret;
+	} else if (property == config->shaper_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->shaper_lut,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
+	} else if (property == config->lut3d_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->lut3d,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
 	} else if (property == config->gamma_lut_property) {
 		ret = drm_atomic_replace_property_blob_from_id(dev,
 					&state->gamma_lut,
@@ -450,6 +466,11 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		set_out_fence_for_crtc(state->state, crtc, fence_ptr);
 	} else if (property == crtc->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == config->crtc_regamma_tf_property) {
+		if (state->regamma_tf != val) {
+			state->regamma_tf = val;
+			state->color_mgmt_changed |= 1;
+		}
 	} else if (crtc->funcs->atomic_set_property) {
 		return crtc->funcs->atomic_set_property(crtc, state, property, val);
 	} else {
@@ -481,12 +502,18 @@ drm_atomic_crtc_get_property(struct drm_crtc *crtc,
 		*val = (state->degamma_lut) ? state->degamma_lut->base.id : 0;
 	else if (property == config->ctm_property)
 		*val = (state->ctm) ? state->ctm->base.id : 0;
+	else if (property == config->shaper_lut_property)
+		*val = (state->shaper_lut) ? state->shaper_lut->base.id : 0;
+	else if (property == config->lut3d_property)
+		*val = (state->lut3d) ? state->lut3d->base.id : 0;
 	else if (property == config->gamma_lut_property)
 		*val = (state->gamma_lut) ? state->gamma_lut->base.id : 0;
 	else if (property == config->prop_out_fence_ptr)
 		*val = 0;
 	else if (property == crtc->scaling_filter_property)
 		*val = state->scaling_filter;
+	else if (property == config->crtc_regamma_tf_property)
+		*val = state->regamma_tf;
 	else if (crtc->funcs->atomic_get_property)
 		return crtc->funcs->atomic_get_property(crtc, state, property, val);
 	else
@@ -572,9 +599,36 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		return ret;
 	} else if (property == plane->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == plane->shaper_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->shaper_lut,
+					val, -1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
+	} else if (property == plane->shaper_tf_property) {
+		state->shaper_tf = val;
+	} else if (property == plane->lut3d_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->lut3d,
+					val, -1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->degamma_lut,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		return ret;
+	} else if (property == config->plane_degamma_tf_property) {
+		state->degamma_tf = val;
+	} else if (property == config->plane_hdr_mult) {
+		state->hdr_mult = val;
 	} else {
 		drm_dbg_atomic(plane->dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -633,8 +687,22 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 			state->fb_damage_clips->base.id : 0;
 	} else if (property == plane->scaling_filter_property) {
 		*val = state->scaling_filter;
+	} else if (property == plane->shaper_lut_property) {
+		*val = (state->shaper_lut) ?
+			state->shaper_lut->base.id : 0;
+	} else if (property == plane->shaper_tf_property) {
+		*val = state->shaper_tf;
+	} else if (property == plane->lut3d_property) {
+		*val = (state->lut3d) ?
+			state->lut3d->base.id : 0;
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
+	} else if (property == config->plane_degamma_lut_property) {
+		*val = (state->degamma_lut) ? state->degamma_lut->base.id : 0;
+	} else if (property == config->plane_degamma_tf_property) {
+		*val = state->degamma_tf;
+	} else if (property == config->plane_hdr_mult) {
+		*val = state->hdr_mult;
 	} else {
 		return -EINVAL;
 	}

@@ -141,8 +141,13 @@ void __drm_atomic_helper_crtc_duplicate_state(struct drm_crtc *crtc,
 		drm_property_blob_get(state->degamma_lut);
 	if (state->ctm)
 		drm_property_blob_get(state->ctm);
+	if (state->shaper_lut)
+		drm_property_blob_get(state->shaper_lut);
+	if (state->lut3d)
+		drm_property_blob_get(state->lut3d);
 	if (state->gamma_lut)
 		drm_property_blob_get(state->gamma_lut);
+
 	state->mode_changed = false;
 	state->active_changed = false;
 	state->planes_changed = false;
@@ -214,6 +219,8 @@ void __drm_atomic_helper_crtc_destroy_state(struct drm_crtc_state *state)
 	drm_property_blob_put(state->mode_blob);
 	drm_property_blob_put(state->degamma_lut);
 	drm_property_blob_put(state->ctm);
+	drm_property_blob_put(state->shaper_lut);
+	drm_property_blob_put(state->lut3d);
 	drm_property_blob_put(state->gamma_lut);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_crtc_destroy_state);
@@ -252,6 +259,10 @@ void __drm_atomic_helper_plane_state_reset(struct drm_plane_state *plane_state,
 
 	plane_state->alpha = DRM_BLEND_ALPHA_OPAQUE;
 	plane_state->pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
+
+	plane_state->degamma_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	plane_state->shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	plane_state->hdr_mult = DRM_HDR_MULT_DEFAULT;
 
 	if (plane->color_encoding_property) {
 		if (!drm_object_property_get_default_value(&plane->base,
@@ -332,12 +343,19 @@ void __drm_atomic_helper_plane_duplicate_state(struct drm_plane *plane,
 {
 	memcpy(state, plane->state, sizeof(*state));
 
+	if (state->degamma_lut)
+		drm_property_blob_get(state->degamma_lut);
+	if (state->lut3d)
+		drm_property_blob_get(state->lut3d);
+	if (state->shaper_lut)
+		drm_property_blob_get(state->shaper_lut);
 	if (state->fb)
 		drm_framebuffer_get(state->fb);
 
 	state->fence = NULL;
 	state->commit = NULL;
 	state->fb_damage_clips = NULL;
+	state->color_mgmt_changed = false;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_duplicate_state);
 
@@ -383,6 +401,9 @@ void __drm_atomic_helper_plane_destroy_state(struct drm_plane_state *state)
 	if (state->commit)
 		drm_crtc_commit_put(state->commit);
 
+	drm_property_blob_put(state->degamma_lut);
+	drm_property_blob_put(state->shaper_lut);
+	drm_property_blob_put(state->lut3d);
 	drm_property_blob_put(state->fb_damage_clips);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_destroy_state);

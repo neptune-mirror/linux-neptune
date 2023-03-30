@@ -59,8 +59,15 @@ void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 				bool has_ctm,
 				uint gamma_lut_size);
 
+void drm_crtc_enable_lut3d(struct drm_crtc *crtc,
+			   uint shaper_lut_size,
+			   uint lut3d_size);
+
 int drm_mode_crtc_set_gamma_size(struct drm_crtc *crtc,
 				 int gamma_size);
+
+void drm_plane_enable_color_mgmt(struct drm_plane *plane,
+				uint degamma_lut_size);
 
 /**
  * drm_color_lut_size - calculate the number of entries in the LUT
@@ -73,6 +80,21 @@ static inline int drm_color_lut_size(const struct drm_property_blob *blob)
 {
 	return blob->length / sizeof(struct drm_color_lut);
 }
+
+enum drm_transfer_function {
+	DRM_TRANSFER_FUNCTION_DEFAULT,
+
+	DRM_TRANSFER_FUNCTION_SRGB,
+	DRM_TRANSFER_FUNCTION_BT709,
+	DRM_TRANSFER_FUNCTION_PQ,
+	DRM_TRANSFER_FUNCTION_LINEAR,
+	DRM_TRANSFER_FUNCTION_UNITY,
+	DRM_TRANSFER_FUNCTION_HLG,
+	DRM_TRANSFER_FUNCTION_GAMMA22,
+	DRM_TRANSFER_FUNCTION_GAMMA24,
+	DRM_TRANSFER_FUNCTION_GAMMA26,
+	DRM_TRANSFER_FUNCTION_MAX,
+};
 
 enum drm_color_encoding {
 	DRM_COLOR_YCBCR_BT601,

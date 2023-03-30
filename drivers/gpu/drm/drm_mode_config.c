@@ -216,6 +216,19 @@ static const struct drm_prop_enum_list drm_plane_type_enum_list[] = {
 	{ DRM_PLANE_TYPE_CURSOR, "Cursor" },
 };
 
+static const struct drm_prop_enum_list drm_transfer_function_enum_list[] = {
+	{ DRM_TRANSFER_FUNCTION_DEFAULT, "Default" },
+	{ DRM_TRANSFER_FUNCTION_SRGB, "sRGB" },
+	{ DRM_TRANSFER_FUNCTION_BT709, "BT.709" },
+	{ DRM_TRANSFER_FUNCTION_PQ, "PQ (Perceptual Quantizer)" },
+	{ DRM_TRANSFER_FUNCTION_LINEAR, "Linear" },
+	{ DRM_TRANSFER_FUNCTION_UNITY, "Unity" }, /* kinda useless, whatever. */
+	{ DRM_TRANSFER_FUNCTION_HLG, "HLG (Hybrid Log Gamma)" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA22, "Gamma 2.2" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA24, "Gamma 2.4" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA26, "Gamma 2.6" },
+};
+
 static int drm_mode_create_standard_properties(struct drm_device *dev)
 {
 	struct drm_property *prop;
@@ -346,10 +359,77 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
+			"VALVE1_PLANE_DEGAMMA_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.plane_degamma_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"VALVE1_PLANE_DEGAMMA_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.plane_degamma_lut_size_property = prop;
+
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"VALVE1_PLANE_DEGAMMA_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.plane_degamma_tf_property = prop;
+
+	prop = drm_property_create_range(dev,
+			0,
+			"VALVE1_PLANE_HDR_MULT", 0, U64_MAX);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.plane_hdr_mult = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
 			"CTM", 0);
 	if (!prop)
 		return -ENOMEM;
 	dev->mode_config.ctm_property = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"VALVE1_SHAPER_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.shaper_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"VALVE1_SHAPER_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.shaper_lut_size_property = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"VALVE1_LUT3D", 0);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.lut3d_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"VALVE1_LUT3D_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.lut3d_size_property = prop;
+
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"VALVE1_CRTC_REGAMMA_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+	dev->mode_config.crtc_regamma_tf_property = prop;
 
 	prop = drm_property_create(dev,
 			DRM_MODE_PROP_BLOB,
