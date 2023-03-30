@@ -8192,10 +8192,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 				&acrtc_state->stream->csc_color_matrix;
 			bundle->stream_update.out_transfer_func =
 				acrtc_state->stream->out_transfer_func;
-			bundle->stream_update.lut3d_func =
-				(struct dc_3dlut *)acrtc_state->stream->lut3d_func;
-			bundle->stream_update.func_shaper =
-				(struct dc_transfer_func *)acrtc_state->stream->func_shaper;
 		}
 
 		acrtc_state->stream->abm_level = acrtc_state->abm_level;
@@ -9375,11 +9371,7 @@ skip_modeset:
 	 */
 	if (dm_new_crtc_state->base.color_mgmt_changed ||
 	    drm_atomic_crtc_needs_modeset(new_crtc_state)) {
-		ret = dm_atomic_get_state(state, &dm_state);
-		if (ret)
-			goto fail;
-		ASSERT(dm_state && dm_state->context);
-		ret = amdgpu_dm_update_crtc_color_mgmt(dm_state->context, dm_new_crtc_state);
+		ret = amdgpu_dm_update_crtc_color_mgmt(dm_new_crtc_state);
 		if (ret)
 			goto fail;
 	}
@@ -9952,12 +9944,6 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 			continue;
 
 		ret = amdgpu_dm_verify_lut_sizes(new_crtc_state);
-		if (ret) {
-			DRM_DEBUG_DRIVER("amdgpu_dm_verify_lut_sizes() failed\n");
-			goto fail;
-		}
-
-		ret = amdgpu_dm_verify_lut3d_size(adev, new_crtc_state);
 		if (ret) {
 			DRM_DEBUG_DRIVER("amdgpu_dm_verify_lut_sizes() failed\n");
 			goto fail;
