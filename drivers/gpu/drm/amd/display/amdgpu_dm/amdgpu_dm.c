@@ -9487,7 +9487,10 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 		/* HDR/Transfer Function changes. */
 		if (old_other_state->degamma_tf != new_other_state->degamma_tf ||
 			old_other_state->degamma_lut != new_other_state->degamma_lut ||
-			old_other_state->hdr_mult != new_other_state->hdr_mult)
+			old_other_state->hdr_mult != new_other_state->hdr_mult ||
+			old_other_state->shaper_lut != new_other_state->shaper_lut ||
+			old_other_state->shaper_tf != new_other_state->shaper_tf ||
+			old_other_state->lut3d != new_other_state->lut3d)
 			return true;
 
 		/* Framebuffer checks fall at the end. */
