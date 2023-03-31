@@ -910,6 +910,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	}
 
 	//if (plane_state->color_mgmt_changed) {
+	{
 		const struct drm_color_lut *shaper_lut, *lut3d;
 		uint32_t lut3d_size, shaper_size;
 		enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
