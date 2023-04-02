@@ -87,6 +87,12 @@
  *	publish the largest size, and sub-sample smaller sized LUTs
  *	appropriately.
  *
+ * “BLEND_LUT”:
+ *	TODO
+ *
+ * “BLEND_LUT_SIZE”:
+ *	TODO
+ *
  * “LUT3D”:
  *	Blob property to set the 3D LUT mapping pixel data after the color
  *	transformation matrix and before gamma 1D lut correction. The
@@ -758,13 +764,39 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	plane->shaper_tf_property = prop;
 
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+				   "VALVE1_PLANE_BLEND_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "VALVE1_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_lut_size_property = prop;
+
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"VALVE1_PLANE_BLEND_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_tf_property = prop;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
 
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    uint shaper_lut_size,
-					    uint lut3d_size)
+					    uint lut3d_size,
+						uint blend_lut_size)
 {
 	if (!lut3d_size)
 		return;
@@ -797,6 +829,26 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 		return;
 	drm_object_attach_property(&plane->base,
 				   plane->shaper_tf_property,
+				   DRM_TRANSFER_FUNCTION_DEFAULT);
+
+	if (!blend_lut_size)
+		return;
+
+	if (!plane->blend_lut_property)
+		return;
+	drm_object_attach_property(&plane->base,
+				   plane->blend_lut_property, 0);
+
+	if (!plane->blend_lut_size_property)
+		return;
+	drm_object_attach_property(&plane->base,
+				   plane->blend_lut_size_property,
+				   blend_lut_size);
+
+	if (!plane->blend_tf_property)
+		return;
+	drm_object_attach_property(&plane->base,
+				   plane->blend_tf_property,
 				   DRM_TRANSFER_FUNCTION_DEFAULT);
 }
 EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
