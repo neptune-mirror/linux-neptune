@@ -462,10 +462,7 @@ static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
 		func_shaper->tf = tf;
 		func_shaper->sdr_ref_white_level = 80; /* hardcoded for now */
 
-		if(post_blnd)
-			ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, has_rom);
-		else
-			ret = __set_input_tf(func_shaper, shaper_lut, shaper_size);
+		ret = __set_output_tf(func_shaper, shaper_lut, shaper_size, has_rom);
 	} else {
 		func_shaper->type = TF_TYPE_BYPASS;
 		func_shaper->tf = TRANSFER_FUNCTION_LINEAR;
