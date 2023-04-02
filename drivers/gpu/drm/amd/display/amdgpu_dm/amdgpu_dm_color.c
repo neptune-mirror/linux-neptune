@@ -471,6 +471,31 @@ static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
 	return ret;
 }
 
+static int amdgpu_dm_atomic_blend_lut(const struct drm_color_lut *shaper_lut,
+				       bool has_rom,
+				       enum dc_transfer_func_predefined tf,
+				       uint32_t shaper_size,
+				       struct dc_transfer_func *func_blend)
+{
+	int ret = 0;
+
+	if (shaper_size || tf != TRANSFER_FUNCTION_LINEAR) {
+		/* If DRM shaper LUT is set, we assume a linear color space
+		 * (linearized by DRM degamma 1D LUT or not)
+		 */
+		func_blend->type = TF_TYPE_DISTRIBUTED_POINTS;
+		func_blend->tf = tf;
+		func_blend->sdr_ref_white_level = 80; /* hardcoded for now */
+
+		ret = __set_input_tf(func_blend, shaper_lut, shaper_size);
+	} else {
+		func_blend->type = TF_TYPE_BYPASS;
+		func_blend->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	return ret;
+}
+
 /* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
  * interface
  * @dc: Display Core control structure
@@ -908,16 +933,20 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 
 	//if (plane_state->color_mgmt_changed) {
 	{
-		const struct drm_color_lut *shaper_lut, *lut3d;
-		uint32_t lut3d_size, shaper_size;
+		const struct drm_color_lut *shaper_lut, *lut3d, *blend_lut;
+		uint32_t lut3d_size, shaper_size, blend_size;
 		enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+		enum drm_transfer_function blend_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 
 		shaper_lut = __extract_blob_lut(plane_state->shaper_lut, &shaper_size);
 		lut3d = __extract_blob_lut(plane_state->lut3d, &lut3d_size);
+		blend_lut = __extract_blob_lut(plane_state->blend_lut, &blend_size);
 
 		lut3d_size = lut3d != NULL ? lut3d_size : 0;
 		shaper_size = shaper_lut != NULL ? shaper_size : 0;
 		shaper_tf = plane_state->shaper_tf;
+		blend_size = blend_lut != NULL ? blend_size : 0;
+		blend_tf = plane_state->blend_tf;
 
 		printk("[Josh Color] Updating plane %d shaper + 3D LUT: shaper tf: %d shaper size: %u lut3d size: %u", plane_state->plane->index, (int)shaper_tf, shaper_size, lut3d_size);
 
@@ -930,6 +959,16 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 			printk("[Josh Color] Setting plane %d shaper/3d lut failed", plane_state->plane->index);
 			return r;
 		}
+
+		r = amdgpu_dm_atomic_blend_lut(blend_lut, false,
+						drm_tf_to_dc_tf(blend_tf),
+						blend_size, dc_plane_state->blend_tf);
+		if (r)
+		{
+			printk("[Josh Color] Setting plane %d blend lut failed", plane_state->plane->index);
+			return r;
+		}
+
 	}
 
 	return 0;

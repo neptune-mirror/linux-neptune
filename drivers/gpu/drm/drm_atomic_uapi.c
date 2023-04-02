@@ -606,8 +606,17 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 					&replaced);
 		state->color_mgmt_changed |= replaced;
 		return ret;
+	} else if (property == plane->blend_lut_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->blend_lut,
+					val, -1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
 	} else if (property == plane->shaper_tf_property) {
 		state->shaper_tf = val;
+	} else if (property == plane->blend_tf_property) {
+		state->blend_tf = val;
 	} else if (property == plane->lut3d_property) {
 		ret = drm_atomic_replace_property_blob_from_id(dev,
 					&state->lut3d,
@@ -690,8 +699,13 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 	} else if (property == plane->shaper_lut_property) {
 		*val = (state->shaper_lut) ?
 			state->shaper_lut->base.id : 0;
+	} else if (property == plane->blend_lut_property) {
+		*val = (state->blend_lut) ?
+			state->blend_lut->base.id : 0;
 	} else if (property == plane->shaper_tf_property) {
 		*val = state->shaper_tf;
+	}  else if (property == plane->blend_tf_property) {
+		*val = state->blend_tf;
 	} else if (property == plane->lut3d_property) {
 		*val = (state->lut3d) ?
 			state->lut3d->base.id : 0;

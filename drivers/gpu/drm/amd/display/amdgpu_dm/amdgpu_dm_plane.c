@@ -1619,7 +1619,8 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	drm_plane_create_color_mgmt_properties(plane->dev, plane);
 	drm_plane_attach_color_mgmt_properties(plane,
 					       MAX_COLOR_LUT_ENTRIES,
-					       MAX_COLOR_3DLUT_ENTRIES);
+					       MAX_COLOR_3DLUT_ENTRIES,
+						   MAX_COLOR_LUT_ENTRIES);
 
 	/* Create (reset) the plane state */
 	if (plane->funcs->reset)

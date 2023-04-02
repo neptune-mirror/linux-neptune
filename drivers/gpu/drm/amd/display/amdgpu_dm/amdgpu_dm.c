@@ -9490,6 +9490,8 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 			old_other_state->hdr_mult != new_other_state->hdr_mult ||
 			old_other_state->shaper_lut != new_other_state->shaper_lut ||
 			old_other_state->shaper_tf != new_other_state->shaper_tf ||
+			old_other_state->blend_lut != new_other_state->blend_lut ||
+			old_other_state->blend_tf != new_other_state->blend_tf ||
 			old_other_state->lut3d != new_other_state->lut3d)
 			return true;
 
