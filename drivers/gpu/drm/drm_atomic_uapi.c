@@ -603,6 +603,11 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 					&replaced);
 		state->color_mgmt_changed |= replaced;
 		return ret;
+	} else if (property == plane->degamma_tf_property) {
+		if (state->degamma_tf != val) {
+			state->degamma_tf = val;
+			state->color_mgmt_changed = 1;
+		}
 	} else {
 		drm_dbg_atomic(plane->dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -665,6 +670,8 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else if (property == plane->degamma_lut_property) {
 		*val = (state->degamma_lut) ? state->degamma_lut->base.id : 0;
+	} else if (property == plane->degamma_tf_property) {
+		*val = state->degamma_tf;
 	} else {
 		return -EINVAL;
 	}

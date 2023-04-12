@@ -78,6 +78,21 @@ static inline int drm_color_lut_size(const struct drm_property_blob *blob)
 	return blob->length / sizeof(struct drm_color_lut);
 }
 
+enum drm_transfer_function {
+	DRM_TRANSFER_FUNCTION_DEFAULT,
+
+	DRM_TRANSFER_FUNCTION_SRGB,
+	DRM_TRANSFER_FUNCTION_BT709,
+	DRM_TRANSFER_FUNCTION_PQ,
+	DRM_TRANSFER_FUNCTION_LINEAR,
+	DRM_TRANSFER_FUNCTION_UNITY,
+	DRM_TRANSFER_FUNCTION_HLG,
+	DRM_TRANSFER_FUNCTION_GAMMA22,
+	DRM_TRANSFER_FUNCTION_GAMMA24,
+	DRM_TRANSFER_FUNCTION_GAMMA26,
+	DRM_TRANSFER_FUNCTION_MAX,
+};
+
 enum drm_color_encoding {
 	DRM_COLOR_YCBCR_BT601,
 	DRM_COLOR_YCBCR_BT709,
@@ -101,7 +116,8 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 					   struct drm_plane *plane);
 
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
-					    uint degamma_lut_size);
+					    uint degamma_lut_size,
+					    bool has_degamma_tf);
 
 /**
  * enum drm_color_lut_tests - hw-specific LUT tests to perform

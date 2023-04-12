@@ -659,6 +659,19 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 }
 EXPORT_SYMBOL(drm_plane_create_color_properties);
 
+static const struct drm_prop_enum_list drm_transfer_function_enum_list[] = {
+	{ DRM_TRANSFER_FUNCTION_DEFAULT, "Default" },
+	{ DRM_TRANSFER_FUNCTION_SRGB, "sRGB" },
+	{ DRM_TRANSFER_FUNCTION_BT709, "BT.709" },
+	{ DRM_TRANSFER_FUNCTION_PQ, "PQ (Perceptual Quantizer)" },
+	{ DRM_TRANSFER_FUNCTION_LINEAR, "Linear" },
+	{ DRM_TRANSFER_FUNCTION_UNITY, "Unity" }, /* kinda useless, whatever. */
+	{ DRM_TRANSFER_FUNCTION_HLG, "HLG (Hybrid Log Gamma)" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA22, "Gamma 2.2" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA24, "Gamma 2.4" },
+	{ DRM_TRANSFER_FUNCTION_GAMMA26, "Gamma 2.6" },
+};
+
 /**
  * drm_plane_create_color_mgmt_properties - create color management properties
  * for a drm plane
@@ -684,6 +697,9 @@ EXPORT_SYMBOL(drm_plane_create_color_properties);
  *	publish the largest size, and sub-sample smaller sized LUTs (e.g. for
  *	split-gamma modes) appropriately.
  *
+ * “PLANE_DEGAMMA_TF”:
+ *	Enum property to set a predefined transfer function.
+ *
  */
 int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 					   struct drm_plane *plane)
@@ -706,6 +722,15 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	plane->degamma_lut_size_property = prop;
 
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"DEGAMMA_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+	plane->degamma_tf_property = prop;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
@@ -720,7 +745,8 @@ EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
  * plane. Degamma properties are only attached if their size is not 0.
  */
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
-					    uint degamma_lut_size)
+					    uint degamma_lut_size,
+					    bool has_degamma_tf)
 {
 	if (degamma_lut_size) {
 		drm_object_attach_property(&plane->base,
@@ -729,6 +755,10 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					   plane->degamma_lut_size_property,
 					   degamma_lut_size);
 	}
+	if (has_degamma_tf)
+		drm_object_attach_property(&plane->base,
+					   plane->degamma_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 }
 EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
 
