@@ -731,6 +731,13 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 		return -ENOMEM;
 	plane->degamma_tf_property = prop;
 
+	prop = drm_property_create_range(dev,
+			0,
+			"HDR_MULT", 0, U64_MAX);
+	if (!prop)
+		return -ENOMEM;
+	plane->hdr_mult = prop;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
@@ -746,7 +753,8 @@ EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
  */
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    uint degamma_lut_size,
-					    bool has_degamma_tf)
+					    bool has_degamma_tf,
+					    bool has_hdr_multiplier)
 {
 	if (degamma_lut_size) {
 		drm_object_attach_property(&plane->base,
@@ -759,6 +767,10 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 		drm_object_attach_property(&plane->base,
 					   plane->degamma_tf_property,
 					   DRM_TRANSFER_FUNCTION_DEFAULT);
+	if (has_hdr_multiplier)
+		drm_object_attach_property(&plane->base,
+					   plane->hdr_mult,
+					   DRM_HDR_MULT_DEFAULT);
 }
 EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
 

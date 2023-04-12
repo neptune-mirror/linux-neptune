@@ -40,6 +40,9 @@ enum drm_scaling_filter {
 	DRM_SCALING_FILTER_NEAREST_NEIGHBOR,
 };
 
+// 1.0 in S31.32
+#define DRM_HDR_MULT_DEFAULT (0x100000000LL)
+
 /**
  * struct drm_plane_state - mutable plane state
  *
@@ -205,6 +208,20 @@ struct drm_plane_state {
 	 * going into plane merger.
 	 */
 	enum drm_transfer_function degamma_tf;
+
+	/**
+	 * @hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.
+	 * When PQ is decoded using the fixed func transfer function to the internal FP16 fb,
+	 * 1.0 -> 80 nits (on AMD at least)
+	 * When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.
+	 * So if you want, 203 nits for SDR content, pass in (203.0 / 80.0).
+	 *
+	 * Format is S31.32 sign-magnitude.
+	 */
+	__u64 hdr_mult;
 
 	/**
 	 * @src:
@@ -787,7 +804,19 @@ struct drm_plane {
 	 * transfer function, rather than relying on a user-blob LUT.
 	 */
 	struct drm_property *degamma_tf_property;
-
+	/**
+	 * @hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.
+	 * When PQ is decoded using the fixed func transfer function to the internal FP16 fb,
+	 * 1.0 -> 80 nits (on AMD at least)
+	 * When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.
+	 * So if you want, 203 nits for SDR content, pass in (203.0 / 80.0).
+	 *
+	 * Format is S31.32 sign-magnitude.
+	 */
+	struct drm_property *hdr_mult;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
