@@ -97,6 +97,12 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 				      enum drm_color_encoding default_encoding,
 				      enum drm_color_range default_range);
 
+int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
+					   struct drm_plane *plane);
+
+void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
+					    uint degamma_lut_size);
+
 /**
  * enum drm_color_lut_tests - hw-specific LUT tests to perform
  *

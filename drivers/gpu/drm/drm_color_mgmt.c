@@ -660,6 +660,79 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 EXPORT_SYMBOL(drm_plane_create_color_properties);
 
 /**
+ * drm_plane_create_color_mgmt_properties - create color management properties
+ * for a drm plane
+ * @dev: DRM device
+ * @plane: DRM plane
+ *
+ * Creates color correction properties for planes.
+ *
+ * "PLANE_DEGAMMA_LUT”:
+ *	Blob property to set the degamma lookup table (LUT) to convert plane
+ *	pixel data pre-blending. The data is interpreted as an array of
+ *	&struct drm_color_lut elements.
+ *
+ *	Setting this to NULL (blob property value set to 0) means a
+ *	linear/pass-thru gamma table should be used. This is generally the
+ *	driver boot-up state too. Drivers can access this blob through
+ *	&drm_plane_state.degamma_lut.
+ *
+ * “PLANE_DEGAMMA_LUT_SIZE”:
+ *	Unsinged range property to give the size of the lookup table to be set
+ *	on the PLANE_DEGAMMA_LUT property (the size depends on the underlying
+ *	hardware). If drivers support multiple LUT sizes then they should
+ *	publish the largest size, and sub-sample smaller sized LUTs (e.g. for
+ *	split-gamma modes) appropriately.
+ *
+ */
+int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
+					   struct drm_plane *plane)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+				   "DEGAMMA_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->degamma_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "DEGAMMA_LUT_SIZE",
+					 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->degamma_lut_size_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
+
+/**
+ * drm_plane_attach_color_mgmt_properties - attach plane color management
+ * properties
+ * @plane: DRM plane
+ * @degamma_lut_size: the size of the degamma lut (before CSC)
+ *
+ * This function lets the driver attach the color correction properties for
+ * plane. Degamma properties are only attached if their size is not 0.
+ */
+void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
+					    uint degamma_lut_size)
+{
+	if (degamma_lut_size) {
+		drm_object_attach_property(&plane->base,
+					   plane->degamma_lut_property, 0);
+		drm_object_attach_property(&plane->base,
+					   plane->degamma_lut_size_property,
+					   degamma_lut_size);
+	}
+}
+EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
+
+/**
  * drm_color_lut_check - check validity of lookup table
  * @lut: property blob containing LUT to check
  * @tests: bitmask of tests to run

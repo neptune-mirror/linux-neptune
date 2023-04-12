@@ -191,6 +191,14 @@ struct drm_plane_state {
 	struct drm_property_blob *fb_damage_clips;
 
 	/**
+	 * @degamma_lut:
+	 *
+	 * LUT for converting plane pixel data before going into plane merger.
+	 * The blob (if not NULL) is an array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *degamma_lut;
+
+	/**
 	 * @src:
 	 *
 	 * source coordinates of the plane (in 16.16).
@@ -755,6 +763,18 @@ struct drm_plane {
 	 * scaling.
 	 */
 	struct drm_property *scaling_filter_property;
+
+	/**
+	 * @degamma_lut_property: Optional Plane property to set the LUT used to
+	 * convert the framebuffer's colors to linear gamma.
+	 */
+	struct drm_property *degamma_lut_property;
+	/**
+	 * @degamma_lut_size_property: Optional Plane property for the size of
+	 * the degamma LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *degamma_lut_size_property;
+
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
