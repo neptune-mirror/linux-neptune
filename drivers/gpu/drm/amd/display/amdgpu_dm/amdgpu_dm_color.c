@@ -884,6 +884,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 			  !__is_lut_linear(degamma_lut, degamma_size);
 
 	drm_tf = plane_state->degamma_tf;
+	dc_plane_state->hdr_mult = dc_fixpt_from_s3132(plane_state->hdr_mult);
 
 	has_crtc_cm_degamma = (crtc->cm_has_degamma || crtc->cm_is_degamma_srgb);
 	/* We only have one degamma block available (pre-blending) for the
