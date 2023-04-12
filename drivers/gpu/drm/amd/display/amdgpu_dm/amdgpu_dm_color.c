@@ -864,6 +864,7 @@ static int map_crtc_degamma_to_dc_plane(struct dm_crtc_state *crtc,
 /**
  * amdgpu_dm_update_plane_color_mgmt: Maps DRM color management to DC plane.
  * @crtc: amdgpu_dm crtc state
+ * @plane_state: DRM plane state
  * @dc_plane_state: target DC surface
  *
  * Update the underlying dc_stream_state's input transfer function (ITF) in
@@ -874,13 +875,48 @@ static int map_crtc_degamma_to_dc_plane(struct dm_crtc_state *crtc,
  * 0 on success. -ENOMEM if mem allocation fails.
  */
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
+				      struct drm_plane_state *plane_state,
 				      struct dc_plane_state *dc_plane_state)
 {
+	struct dm_plane_state *dm_plane_state = to_dm_plane_state(plane_state);
+	const struct drm_color_lut *degamma_lut;
+	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	uint32_t degamma_size;
+	bool has_degamma_lut;
 	bool has_crtc_cm_degamma;
 	int ret;
 
+	degamma_lut = __extract_blob_lut(dm_plane_state->degamma_lut, &degamma_size);
+
+	has_degamma_lut = degamma_lut &&
+			  !__is_lut_linear(degamma_lut, degamma_size);
+
+	drm_tf = dm_plane_state->degamma_tf;
+
 	has_crtc_cm_degamma = (crtc->cm_has_degamma || crtc->cm_is_degamma_srgb);
-	if (has_crtc_cm_degamma){
+
+	if (has_degamma_lut || drm_tf != DRM_TRANSFER_FUNCTION_DEFAULT) {
+		dc_plane_state->in_transfer_func->tf = drm_tf_to_dc_tf(drm_tf);
+
+		if (has_degamma_lut) {
+			ASSERT(degamma_size == MAX_COLOR_LUT_ENTRIES);
+
+			dc_plane_state->in_transfer_func->type =
+				TF_TYPE_DISTRIBUTED_POINTS;
+
+			ret = __set_input_tf(dc_plane_state->in_transfer_func,
+					   degamma_lut, degamma_size);
+			if (ret)
+				return ret;
+	       } else {
+			dc_plane_state->in_transfer_func->type =
+				TF_TYPE_PREDEFINED;
+
+			if (!mod_color_calculate_degamma_params(NULL,
+			    dc_plane_state->in_transfer_func, NULL, false))
+				return -ENOMEM;
+		}
+	} else if (has_crtc_cm_degamma) {
 		/* AMD HW doesn't have post-blending degamma caps. When DRM
 		 * CRTC atomic degamma is set, we maps it to DPP degamma block
 		 * (pre-blending) or, on legacy gamma, we use DPP degamma to
