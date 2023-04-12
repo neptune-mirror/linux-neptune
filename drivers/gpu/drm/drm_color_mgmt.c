@@ -239,10 +239,16 @@ EXPORT_SYMBOL(drm_crtc_enable_color_mgmt);
  */
 void drm_crtc_additional_color_mgmt(struct drm_crtc *crtc,
 				    uint shaper_lut_size,
-				    uint lut3d_size)
+				    uint lut3d_size,
+				    bool has_gamma_tf)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_mode_config *config = &dev->mode_config;
+
+	if(has_gamma_tf)
+		drm_object_attach_property(&crtc->base,
+					   config->gamma_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 
 	if (shaper_lut_size) {
 		drm_object_attach_property(&crtc->base,

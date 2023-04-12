@@ -281,6 +281,13 @@ struct drm_crtc_state {
 	struct drm_property_blob *gamma_lut;
 
 	/**
+	 * @gamma_tf:
+	 *
+	 * Pre-defined transfer function for converting internal FB -> wire encoding.
+	 */
+	enum drm_transfer_function gamma_tf;
+
+	/**
 	 * @shaper_lut:
 	 *
 	 * Lookup table used to de-linearize pixel data for gamma correction.

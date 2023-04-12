@@ -61,7 +61,8 @@ void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 
 void drm_crtc_additional_color_mgmt(struct drm_crtc *crtc,
 				    uint shaper_lut_size,
-				    uint lut3d_size);
+				    uint lut3d_size,
+				    bool has_gamma_tf);
 
 int drm_mode_crtc_set_gamma_size(struct drm_crtc *crtc,
 				 int gamma_size);

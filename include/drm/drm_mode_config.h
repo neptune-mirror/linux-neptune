@@ -836,6 +836,12 @@ struct drm_mode_config {
 	 * gamma LUT as supported by the driver (read-only).
 	 */
 	struct drm_property *gamma_lut_size_property;
+	/**
+	 * @gamma_tf_property:
+	 *
+	 * Transfer function for CRTC regamma.
+	 */
+	struct drm_property *gamma_tf_property;
 
 	/**
 	 * @suggested_x_property: Optional connector property with a hint for
