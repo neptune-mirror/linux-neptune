@@ -744,6 +744,20 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 		return -ENOMEM;
 	plane->hdr_mult = prop;
 
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB, "LUT3D", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->lut3d_property = prop;
+
+	prop = drm_property_create_range(dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "LUT3D_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->lut3d_size_property = prop;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
@@ -753,14 +767,17 @@ EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
  * properties
  * @plane: DRM plane
  * @degamma_lut_size: the size of the degamma lut (before CSC)
+ * @lut3d_size: the max size of 3D LUT
  *
  * This function lets the driver attach the color correction properties for
- * plane. Degamma properties are only attached if their size is not 0.
+ * plane. Degamma and lut3d properties are only attached if their size is not
+ * 0.
  */
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    uint degamma_lut_size,
 					    bool has_degamma_tf,
-					    bool has_hdr_multiplier)
+					    bool has_hdr_multiplier,
+					    uint lut3d_size)
 {
 	if (degamma_lut_size) {
 		drm_object_attach_property(&plane->base,
@@ -777,6 +794,13 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 		drm_object_attach_property(&plane->base,
 					   plane->hdr_mult,
 					   DRM_HDR_MULT_DEFAULT);
+	if (lut3d_size) {
+		drm_object_attach_property(&plane->base,
+					   plane->lut3d_property, 0);
+		drm_object_attach_property(&plane->base,
+					   plane->lut3d_size_property,
+					   lut3d_size);
+	}
 }
 EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
 

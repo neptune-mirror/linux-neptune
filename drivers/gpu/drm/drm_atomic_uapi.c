@@ -599,6 +599,13 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		return ret;
 	} else if (property == plane->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == plane->lut3d_property) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->lut3d,
+					val, -1, sizeof(struct drm_color_lut),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);
@@ -678,6 +685,9 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 			state->fb_damage_clips->base.id : 0;
 	} else if (property == plane->scaling_filter_property) {
 		*val = state->scaling_filter;
+	} else if (property == plane->lut3d_property) {
+		*val = (state->lut3d) ?
+			state->lut3d->base.id : 0;
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else if (property == plane->degamma_lut_property) {

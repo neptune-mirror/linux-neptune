@@ -272,6 +272,12 @@ struct drm_plane_state {
 	struct drm_atomic_state *state;
 
 	/**
+	 * @lut3d: 3D lookup table blob. The blob (if not NULL) is an array of
+	 * &struct drm_color_lut.
+	 */
+	struct drm_property_blob *lut3d;
+
+	/**
 	 * @color_mgmt_changed: Color management properties have changed. Used
 	 * by the atomic helpers and drivers to steer the atomic commit control
 	 * flow.
@@ -817,6 +823,17 @@ struct drm_plane {
 	 * Format is S31.32 sign-magnitude.
 	 */
 	struct drm_property *hdr_mult;
+	/**
+	 * @lut3d_property: Optional plane property to set the 3D LUT used to
+	 * convert colors; A shaper LUT can be used to delinearize content
+	 * before apply 3D LUT correction.
+	 */
+	struct drm_property *lut3d_property;
+	/**
+	 * @lut3d_size_property: Optional plane property for the size of the
+	 * 3D LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *lut3d_size_property;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
@@ -949,7 +966,6 @@ void drm_plane_force_disable(struct drm_plane *plane);
 int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
 				       struct drm_property *property,
 				       uint64_t value);
-
 /**
  * drm_plane_find - find a &drm_plane
  * @dev: DRM device

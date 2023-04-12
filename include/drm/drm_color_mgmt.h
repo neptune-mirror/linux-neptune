@@ -119,7 +119,8 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    uint degamma_lut_size,
 					    bool has_degamma_tf,
-					    bool has_hdr_multiplier);
+					    bool has_hdr_multiplier,
+					    uint lut3d_size);
 
 /**
  * enum drm_color_lut_tests - hw-specific LUT tests to perform
