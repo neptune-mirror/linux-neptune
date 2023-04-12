@@ -1605,6 +1605,7 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 #ifdef CONFIG_DRM_AMD_DC_HDR
 	attach_color_mgmt_properties(dm, plane);
 #endif
+
 	/* Create (reset) the plane state */
 	if (plane->funcs->reset)
 		plane->funcs->reset(plane);
