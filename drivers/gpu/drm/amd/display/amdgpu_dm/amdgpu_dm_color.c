@@ -474,6 +474,34 @@ static int amdgpu_dm_atomic_shaper_lut(const struct drm_color_lut *shaper_lut,
 	return ret;
 }
 
+static int amdgpu_dm_atomic_blend_lut(const struct drm_color_lut *blend_lut,
+				       bool has_rom,
+				       enum dc_transfer_func_predefined tf,
+				       uint32_t blend_size,
+				       struct dc_transfer_func *func_blend)
+{
+	int ret = 0;
+
+	if (blend_size || tf != TRANSFER_FUNCTION_LINEAR) {
+		/* DRM plane gamma LUT or TF means we are linearizing color
+		 * space before blending (similar to degamma programming). As
+		 * we don't have hardcoded curve support, or we use AMD color
+		 * module to fill the parameters that will be translated to HW
+		 * points.
+		 */
+		func_blend->type = TF_TYPE_DISTRIBUTED_POINTS;
+		func_blend->tf = tf;
+		func_blend->sdr_ref_white_level = 80; /* hardcoded for now */
+
+		ret = __set_input_tf(func_blend, blend_lut, blend_size);
+	} else {
+		func_blend->type = TF_TYPE_BYPASS;
+		func_blend->tf = TRANSFER_FUNCTION_LINEAR;
+	}
+
+	return ret;
+}
+
 /* amdgpu_dm_atomic_shaper_lut3d - set DRM CRTC shaper LUT and 3D LUT to DC
  * interface
  * @dc: Display Core control structure
@@ -879,8 +907,9 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	const struct drm_color_lut *degamma_lut;
 	enum drm_transfer_function drm_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 	enum drm_transfer_function shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
-	const struct drm_color_lut *shaper_lut, *lut3d;
-	uint32_t lut3d_size, shaper_size;
+	enum drm_transfer_function blend_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	const struct drm_color_lut *shaper_lut, *lut3d, *blend_lut;
+	uint32_t lut3d_size, shaper_size, blend_size;
 	uint32_t degamma_size;
 	bool has_degamma_lut;
 	bool has_crtc_cm_degamma;
@@ -956,6 +985,28 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	ret = amdgpu_dm_atomic_shaper_lut(shaper_lut, false,
 					  drm_tf_to_dc_tf(shaper_tf),
 					  shaper_size, dc_plane_state->in_shaper_func);
+	if (ret) {
+		drm_dbg_kms(crtc->base.crtc->dev,
+			    "setting plane %d shaper/3d lut failed.\n",
+			    plane_state->plane->index);
 
-	return ret;
+		return ret;
+	}
+
+	blend_tf = plane_state->blend_tf;
+	blend_lut = __extract_blob_lut(plane_state->blend_lut, &blend_size);
+	blend_size = blend_lut != NULL ? blend_size : 0;
+
+	ret = amdgpu_dm_atomic_blend_lut(blend_lut, false,
+					 drm_tf_to_dc_tf(blend_tf),
+					 blend_size, dc_plane_state->blend_tf);
+	if (ret) {
+		drm_dbg_kms(crtc->base.crtc->dev,
+			    "setting plane %d gamma lut failed.\n",
+			    plane_state->plane->index);
+
+		return ret;
+	}
+
+	return 0;
 }
