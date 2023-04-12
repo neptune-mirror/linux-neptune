@@ -286,6 +286,20 @@ struct drm_plane_state {
 	enum drm_transfer_function shaper_tf;
 
 	/**
+	 * @blend_lut: blend lut lookup table blob. The blob (if not NULL) is an
+	 * array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *blend_lut;
+
+	/**
+	 * @blend_tf:
+	 *
+	 * Pre-defined transfer function for converting plane pixel data before
+	 * applying blend LUT.
+	 */
+	enum drm_transfer_function blend_tf;
+
+	/**
 	 * @lut3d: 3D lookup table blob. The blob (if not NULL) is an array of
 	 * &struct drm_color_lut.
 	 */
@@ -853,6 +867,21 @@ struct drm_plane {
 	 * for input shaper LUT.
 	 */
 	struct drm_property *shaper_tf_property;
+
+	/**
+	 * @blend_lut_property: todo
+	 */
+	struct drm_property *blend_lut_property;
+
+	/**
+	 * @blend_lut_size_property: todo
+	 */
+	struct drm_property *blend_lut_size_property;
+
+	/**
+	 * @blend_tf_property: todo
+	 */
+	struct drm_property *blend_tf_property;
 
 	/**
 	 * @lut3d_property: Optional plane property to set the 3D LUT used to

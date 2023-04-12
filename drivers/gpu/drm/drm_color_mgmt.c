@@ -795,6 +795,31 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	plane->shaper_tf_property = prop;
 
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+				   "BLEND_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "BLEND_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_lut_size_property = prop;
+
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"BLEND_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
+
+	plane->blend_tf_property = prop;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_create_color_mgmt_properties);
@@ -816,7 +841,9 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    bool has_hdr_multiplier,
 					    uint shaper_lut_size,
 					    bool has_shaper_tf,
-					    uint lut3d_size)
+					    uint lut3d_size,
+					    uint blend_lut_size,
+					    bool has_blend_tf)
 {
 	if (degamma_lut_size) {
 		drm_object_attach_property(&plane->base,
@@ -851,6 +878,18 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					   plane->lut3d_size_property,
 					   lut3d_size);
 	}
+
+	if (blend_lut_size) {
+		drm_object_attach_property(&plane->base,
+					   plane->blend_lut_property, 0);
+		drm_object_attach_property(&plane->base,
+					   plane->blend_lut_size_property,
+					   blend_lut_size);
+	}
+	if (has_blend_tf)
+		drm_object_attach_property(&plane->base,
+					   plane->blend_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 }
 EXPORT_SYMBOL(drm_plane_attach_color_mgmt_properties);
 
