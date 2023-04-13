@@ -261,6 +261,7 @@ void __drm_atomic_helper_plane_state_reset(struct drm_plane_state *plane_state,
 	plane_state->pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
 
 	plane_state->degamma_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
+	plane_state->shaper_tf = DRM_TRANSFER_FUNCTION_DEFAULT;
 	plane_state->hdr_mult = DRM_HDR_MULT_DEFAULT;
 
 	if (plane->color_encoding_property) {

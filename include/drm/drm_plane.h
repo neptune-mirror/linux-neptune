@@ -278,6 +278,14 @@ struct drm_plane_state {
 	struct drm_property_blob *shaper_lut;
 
 	/**
+	 * @shaper_tf:
+	 *
+	 * Pre-defined transfer function for converting plane pixel data before
+	 * applying shaper LUT.
+	 */
+	enum drm_transfer_function shaper_tf;
+
+	/**
 	 * @lut3d: 3D lookup table blob. The blob (if not NULL) is an array of
 	 * &struct drm_color_lut.
 	 */
@@ -840,6 +848,12 @@ struct drm_plane {
 	 * shaper LUT as supported by the driver (read-only).
 	 */
 	struct drm_property *shaper_lut_size_property;
+	/**
+	 * @shaper_tf: Optional Plane property to specify a transfer function
+	 * for input shaper LUT.
+	 */
+	struct drm_property *shaper_tf_property;
+
 	/**
 	 * @lut3d_property: Optional plane property to set the 3D LUT used to
 	 * convert colors; A shaper LUT can be used to delinearize content

@@ -711,6 +711,18 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 					   struct drm_plane *plane)
 {
 	struct drm_property *prop;
+	static const struct drm_prop_enum_list drm_transfer_function_enum_list[] = {
+		{ DRM_TRANSFER_FUNCTION_DEFAULT, "Default" },
+		{ DRM_TRANSFER_FUNCTION_SRGB, "sRGB" },
+		{ DRM_TRANSFER_FUNCTION_BT709, "BT.709" },
+		{ DRM_TRANSFER_FUNCTION_PQ, "PQ (Perceptual Quantizer)" },
+		{ DRM_TRANSFER_FUNCTION_LINEAR, "Linear" },
+		{ DRM_TRANSFER_FUNCTION_UNITY, "Unity" }, /* kinda useless, whatever. */
+		{ DRM_TRANSFER_FUNCTION_HLG, "HLG (Hybrid Log Gamma)" },
+		{ DRM_TRANSFER_FUNCTION_GAMMA22, "Gamma 2.2" },
+		{ DRM_TRANSFER_FUNCTION_GAMMA24, "Gamma 2.4" },
+		{ DRM_TRANSFER_FUNCTION_GAMMA26, "Gamma 2.6" },
+	};
 
 	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
 				   "DEGAMMA_LUT", 0);
@@ -773,7 +785,15 @@ int drm_plane_create_color_mgmt_properties(struct drm_device *dev,
 
 	plane->shaper_lut_size_property = prop;
 
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_ENUM,
+					"SHAPER_TF",
+					drm_transfer_function_enum_list,
+					ARRAY_SIZE(drm_transfer_function_enum_list));
+	if (!prop)
+		return -ENOMEM;
 
+	plane->shaper_tf_property = prop;
 
 	return 0;
 }
@@ -795,6 +815,7 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					    bool has_degamma_tf,
 					    bool has_hdr_multiplier,
 					    uint shaper_lut_size,
+					    bool has_shaper_tf,
 					    uint lut3d_size)
 {
 	if (degamma_lut_size) {
@@ -819,6 +840,10 @@ void drm_plane_attach_color_mgmt_properties(struct drm_plane *plane,
 					   plane->shaper_lut_size_property,
 					   shaper_lut_size);
 	}
+	if (has_shaper_tf)
+		drm_object_attach_property(&plane->base,
+					   plane->shaper_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 	if (lut3d_size) {
 		drm_object_attach_property(&plane->base,
 					   plane->lut3d_property, 0);
