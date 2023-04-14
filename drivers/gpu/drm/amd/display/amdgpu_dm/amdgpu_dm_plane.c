@@ -1548,6 +1548,7 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	int res = -EPERM;
 	unsigned int supported_rotations;
 	uint64_t *modifiers = NULL;
+	bool has_dgam, has_3dlut, has_gamma;
 
 	num_formats = get_plane_formats(plane, plane_cap, formats,
 					ARRAY_SIZE(formats));
@@ -1605,6 +1606,30 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 #ifdef CONFIG_DRM_AMD_DC_HDR
 	attach_color_mgmt_properties(dm, plane);
 #endif
+
+	drm_plane_create_color_mgmt_properties(plane->dev, plane);
+	/* Attach DRM plane color mgmt properties according to ASIC caps for
+	 * DPP. Only for DCN. Still pending DCE caps check.
+	 *
+	 * 1 - According to dpp_color_caps docs, hdr_mult and gamut remap
+	 * (CTM) are always available in DPP.
+	 * 2 - DCN1 and DCN2 use dgam_ram caps for pre-blending degamma LUT and
+	 * only support sRGB and BT2020 ROM (predefined type for TF). From
+	 * DCN3, degamma is done by gamma_corr and full dgam_rom_caps.
+	 * 3 - DPP ogam_ram caps means pre-blending out gamma or blend gamma.
+	 */
+	has_dgam = dm->dc->caps.color.dpp.dgam_ram || dm->dc->caps.color.dpp.gamma_corr;
+	has_3dlut = dm->dc->caps.color.dpp.hw_3d_lut;
+	has_gamma = dm->dc->caps.color.dpp.ogam_ram;
+	drm_plane_attach_color_mgmt_properties(plane,
+					       has_dgam ? MAX_COLOR_LUT_ENTRIES : 0,
+					       has_dgam ? true : false,
+					       true,
+					       has_3dlut ? MAX_COLOR_LUT_ENTRIES : 0,
+					       has_3dlut ? true : false,
+					       has_3dlut ? MAX_COLOR_3DLUT_ENTRIES : 0,
+					       has_gamma ? MAX_COLOR_LUT_ENTRIES : 0,
+					       has_gamma ? true : false);
 
 	/* Create (reset) the plane state */
 	if (plane->funcs->reset)
