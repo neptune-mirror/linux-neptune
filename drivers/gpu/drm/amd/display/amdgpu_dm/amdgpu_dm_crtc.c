@@ -249,6 +249,7 @@ static struct drm_crtc_state *dm_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->mpo_requested = cur->mpo_requested;
 	state->shaper_lut = cur->shaper_lut;
 	state->lut3d = cur->lut3d;
+	state->gamma_tf = cur->gamma_tf;
 	/* TODO Duplicate dc_stream after objects are stream object is flattened */
 
 	if (state->shaper_lut)
@@ -313,6 +314,11 @@ dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
 					   adev->mode_info.lut3d_size_property,
 					   MAX_COLOR_3DLUT_ENTRIES);
 	}
+
+	if(adev->dm.dc->caps.color.mpc.ogam_ram)
+		drm_object_attach_property(&crtc->base,
+					   adev->mode_info.gamma_tf_property,
+					   DRM_TRANSFER_FUNCTION_DEFAULT);
 }
 
 static int
@@ -375,6 +381,11 @@ amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
 					&replaced);
 		acrtc_state->base.color_mgmt_changed |= replaced;
 		return ret;
+	} else if (property == adev->mode_info.gamma_tf_property) {
+		if (acrtc_state->gamma_tf != val) {
+			acrtc_state->gamma_tf = val;
+			acrtc_state->base.color_mgmt_changed |= 1;
+		}
 	} else {
 		drm_dbg_atomic(crtc->dev,
 			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -401,6 +412,8 @@ amdgpu_dm_atomic_crtc_get_property(struct drm_crtc *crtc,
 	else if (property == adev->mode_info.lut3d_property)
 		*val = (acrtc_state->lut3d) ?
 			acrtc_state->lut3d->base.id : 0;
+	else if (property == adev->mode_info.gamma_tf_property)
+		*val = acrtc_state->gamma_tf;
 	else
 		return -EINVAL;
 
