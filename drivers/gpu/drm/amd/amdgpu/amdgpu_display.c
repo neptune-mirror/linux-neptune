@@ -1212,6 +1212,28 @@ amdgpu_display_user_framebuffer_create(struct drm_device *dev,
 	return &amdgpu_fb->base;
 }
 
+static int
+amdgpu_display_create_color_properties(struct amdgpu_device *adev)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(adev_to_drm(adev),
+				   DRM_MODE_PROP_BLOB,
+				   "AMD_SHAPER_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	adev->mode_info.shaper_lut_property = prop;
+
+	prop = drm_property_create_range(adev_to_drm(adev),
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "AMD_SHAPER_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	adev->mode_info.shaper_lut_size_property = prop;
+
+	return 0;
+}
+
 const struct drm_mode_config_funcs amdgpu_mode_funcs = {
 	.fb_create = amdgpu_display_user_framebuffer_create,
 	.output_poll_changed = drm_fb_helper_output_poll_changed,
@@ -1288,6 +1310,9 @@ int amdgpu_display_modeset_create_props(struct amdgpu_device *adev)
 		if (!adev->mode_info.abm_level_property)
 			return -ENOMEM;
 	}
+
+	if (amdgpu_display_create_color_properties(adev))
+		return -ENOMEM;
 
 	return 0;
 }

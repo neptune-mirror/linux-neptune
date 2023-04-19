@@ -209,6 +209,7 @@ static void dm_crtc_destroy_state(struct drm_crtc *crtc,
 	if (cur->stream)
 		dc_stream_release(cur->stream);
 
+	drm_property_blob_put(cur->shaper_lut);
 
 	__drm_atomic_helper_crtc_destroy_state(state);
 
@@ -245,7 +246,11 @@ static struct drm_crtc_state *dm_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->cm_is_degamma_srgb = cur->cm_is_degamma_srgb;
 	state->crc_skip_count = cur->crc_skip_count;
 	state->mpo_requested = cur->mpo_requested;
+	state->shaper_lut = cur->shaper_lut;
 	/* TODO Duplicate dc_stream after objects are stream object is flattened */
+
+	if (state->shaper_lut)
+		drm_property_blob_get(state->shaper_lut);
 
 	return &state->base;
 }
@@ -279,6 +284,110 @@ static int amdgpu_dm_crtc_late_register(struct drm_crtc *crtc)
 }
 #endif
 
+/**
+ * drm_crtc_additional_color_mgmt - enable additional color properties
+ * @crtc: DRM CRTC
+ *
+ * This function lets the driver enable the 3D LUT color correction property
+ * on a CRTC. This includes shaper LUT, 3D LUT and regamma TF. The shaper
+ * LUT and 3D LUT property is only attached if its size is not 0.
+ */
+static void
+dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
+{
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+
+	if (adev->dm.dc->caps.color.mpc.num_3dluts) {
+		drm_object_attach_property(&crtc->base,
+					   adev->mode_info.shaper_lut_property, 0);
+		drm_object_attach_property(&crtc->base,
+					   adev->mode_info.shaper_lut_size_property,
+					   MAX_COLOR_LUT_ENTRIES);
+	}
+}
+
+static int
+atomic_replace_property_blob_from_id(struct drm_device *dev,
+					 struct drm_property_blob **blob,
+					 uint64_t blob_id,
+					 ssize_t expected_size,
+					 ssize_t expected_elem_size,
+					 bool *replaced)
+{
+	struct drm_property_blob *new_blob = NULL;
+
+	if (blob_id != 0) {
+		new_blob = drm_property_lookup_blob(dev, blob_id);
+		if (new_blob == NULL)
+			return -EINVAL;
+
+		if (expected_size > 0 &&
+		    new_blob->length != expected_size) {
+			drm_property_blob_put(new_blob);
+			return -EINVAL;
+		}
+		if (expected_elem_size > 0 &&
+		    new_blob->length % expected_elem_size != 0) {
+			drm_property_blob_put(new_blob);
+			return -EINVAL;
+		}
+	}
+
+	*replaced |= drm_property_replace_blob(blob, new_blob);
+	drm_property_blob_put(new_blob);
+
+	return 0;
+}
+
+static int
+amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
+				   struct drm_crtc_state *state,
+				   struct drm_property *property,
+				   uint64_t val)
+{
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(state);
+	bool replaced = false;
+	int ret;
+
+	if (property == adev->mode_info.shaper_lut_property) {
+		ret = atomic_replace_property_blob_from_id(crtc->dev,
+					&acrtc_state->shaper_lut,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		acrtc_state->base.color_mgmt_changed |= replaced;
+		return ret;
+	} else {
+		drm_dbg_atomic(crtc->dev,
+			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]]\n",
+			       crtc->base.id, crtc->name,
+			       property->base.id, property->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+amdgpu_dm_atomic_crtc_get_property(struct drm_crtc *crtc,
+				   const struct drm_crtc_state *state,
+				   struct drm_property *property,
+				   uint64_t *val)
+{
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(state);
+
+	if (property == adev->mode_info.shaper_lut_property)
+		*val = (acrtc_state->shaper_lut) ?
+			acrtc_state->shaper_lut->base.id : 0;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+
 /* Implemented only the options currently available for the driver */
 static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.reset = dm_crtc_reset_state,
@@ -297,6 +406,8 @@ static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 #if defined(CONFIG_DEBUG_FS)
 	.late_register = amdgpu_dm_crtc_late_register,
 #endif
+	.atomic_set_property = amdgpu_dm_atomic_crtc_set_property,
+	.atomic_get_property = amdgpu_dm_atomic_crtc_get_property,
 };
 
 static void dm_crtc_helper_disable(struct drm_crtc *crtc)
@@ -457,8 +568,9 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	is_dcn = dm->adev->dm.dc->caps.color.dpp.dcn_arch;
 	drm_crtc_enable_color_mgmt(&acrtc->base, is_dcn ? MAX_COLOR_LUT_ENTRIES : 0,
 				   true, MAX_COLOR_LUT_ENTRIES);
-
 	drm_mode_crtc_set_gamma_size(&acrtc->base, MAX_COLOR_LEGACY_LUT_ENTRIES);
+
+	dm_crtc_additional_color_mgmt(&acrtc->base);
 
 	return 0;
 
