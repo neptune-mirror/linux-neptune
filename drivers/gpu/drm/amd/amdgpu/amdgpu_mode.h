@@ -358,6 +358,8 @@ struct amdgpu_mode_info {
 	 * shaper LUT as supported by the driver (read-only).
 	 */
 	struct drm_property *shaper_lut_size_property;
+	struct drm_property *lut3d_property;
+	struct drm_property *lut3d_size_property;
 };
 
 #define AMDGPU_MAX_BL_LEVEL 0xFF

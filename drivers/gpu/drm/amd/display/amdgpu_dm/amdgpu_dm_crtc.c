@@ -210,6 +210,7 @@ static void dm_crtc_destroy_state(struct drm_crtc *crtc,
 		dc_stream_release(cur->stream);
 
 	drm_property_blob_put(cur->shaper_lut);
+	drm_property_blob_put(cur->lut3d);
 
 	__drm_atomic_helper_crtc_destroy_state(state);
 
@@ -247,10 +248,13 @@ static struct drm_crtc_state *dm_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->crc_skip_count = cur->crc_skip_count;
 	state->mpo_requested = cur->mpo_requested;
 	state->shaper_lut = cur->shaper_lut;
+	state->lut3d = cur->lut3d;
 	/* TODO Duplicate dc_stream after objects are stream object is flattened */
 
 	if (state->shaper_lut)
 		drm_property_blob_get(state->shaper_lut);
+	if (state->lut3d)
+		drm_property_blob_get(state->lut3d);
 
 	return &state->base;
 }
@@ -303,6 +307,11 @@ dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
 		drm_object_attach_property(&crtc->base,
 					   adev->mode_info.shaper_lut_size_property,
 					   MAX_COLOR_LUT_ENTRIES);
+		drm_object_attach_property(&crtc->base,
+					   adev->mode_info.lut3d_property, 0);
+		drm_object_attach_property(&crtc->base,
+					   adev->mode_info.lut3d_size_property,
+					   MAX_COLOR_3DLUT_ENTRIES);
 	}
 }
 
@@ -358,6 +367,14 @@ amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
 					&replaced);
 		acrtc_state->base.color_mgmt_changed |= replaced;
 		return ret;
+	} else if (property == adev->mode_info.lut3d_property) {
+		ret = atomic_replace_property_blob_from_id(crtc->dev,
+					&acrtc_state->lut3d,
+					val,
+					-1, sizeof(struct drm_color_lut),
+					&replaced);
+		acrtc_state->base.color_mgmt_changed |= replaced;
+		return ret;
 	} else {
 		drm_dbg_atomic(crtc->dev,
 			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]]\n",
@@ -381,6 +398,9 @@ amdgpu_dm_atomic_crtc_get_property(struct drm_crtc *crtc,
 	if (property == adev->mode_info.shaper_lut_property)
 		*val = (acrtc_state->shaper_lut) ?
 			acrtc_state->shaper_lut->base.id : 0;
+	else if (property == adev->mode_info.lut3d_property)
+		*val = (acrtc_state->lut3d) ?
+			acrtc_state->lut3d->base.id : 0;
 	else
 		return -EINVAL;
 

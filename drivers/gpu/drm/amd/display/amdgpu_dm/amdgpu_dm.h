@@ -692,6 +692,7 @@ struct dm_crtc_state {
 	 * of &struct drm_color_lut.
 	 */
 	struct drm_property_blob *shaper_lut;
+	struct drm_property_blob *lut3d;
 };
 
 #define to_dm_crtc_state(x) container_of(x, struct dm_crtc_state, base)
@@ -786,6 +787,10 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 void amdgpu_dm_trigger_timing_sync(struct drm_device *dev);
 
+/* 3D LUT max size is 17x17x17 */
+#define MAX_COLOR_3DLUT_ENTRIES 4913
+#define MAX_COLOR_3DLUT_BITDEPTH 12
+/* 1D LUT degamma, regamma and shaper*/
 #define MAX_COLOR_LUT_ENTRIES 4096
 /* Legacy gamm LUT users such as X doesn't like large LUT sizes */
 #define MAX_COLOR_LEGACY_LUT_ENTRIES 256
