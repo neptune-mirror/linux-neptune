@@ -332,7 +332,8 @@ bool cm_helper_translate_curve_to_hw_format(
 	memset(lut_params, 0, sizeof(struct pwl_params));
 	memset(seg_distr, 0, sizeof(seg_distr));
 
-	if (output_tf->tf == TRANSFER_FUNCTION_PQ || output_tf->tf == TRANSFER_FUNCTION_GAMMA22) {
+	//if (output_tf->tf == TRANSFER_FUNCTION_PQ || output_tf->tf == TRANSFER_FUNCTION_GAMMA22) {
+	if (true) {
 		/* 32 segments
 		 * segments are from 2^-25 to 2^7
 		 */
