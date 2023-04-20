@@ -687,6 +687,7 @@ struct dm_plane_state {
 	enum drm_transfer_function degamma_tf;
 	__u64 hdr_mult;
 	struct drm_property_blob *shaper_lut;
+	enum drm_transfer_function shaper_tf;
 	struct drm_property_blob *lut3d;
 };
 
