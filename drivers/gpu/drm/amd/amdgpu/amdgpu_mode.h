@@ -365,6 +365,8 @@ struct amdgpu_mode_info {
 	struct drm_property *plane_degamma_lut_size_property;
 	struct drm_property *plane_degamma_tf_property;
 	struct drm_property *plane_hdr_mult_property;
+	struct drm_property *plane_shaper_lut_property;
+	struct drm_property *plane_shaper_lut_size_property;
 	struct drm_property *plane_lut3d_property;
 	struct drm_property *plane_lut3d_size_property;
 };
