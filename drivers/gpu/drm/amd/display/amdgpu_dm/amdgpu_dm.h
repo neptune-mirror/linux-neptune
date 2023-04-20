@@ -689,6 +689,8 @@ struct dm_plane_state {
 	struct drm_property_blob *shaper_lut;
 	enum drm_transfer_function shaper_tf;
 	struct drm_property_blob *lut3d;
+	struct drm_property_blob *blend_lut;
+	enum drm_transfer_function blend_tf;
 };
 
 struct dm_crtc_state {
