@@ -68,5 +68,4 @@ const struct drm_format_info *amd_get_format_info(const struct drm_mode_fb_cmd2 
 void fill_blending_from_plane_state(const struct drm_plane_state *plane_state,
 				    bool *per_pixel_alpha, bool *pre_multiplied_alpha,
 				    bool *global_alpha, int *global_alpha_value);
-
 #endif

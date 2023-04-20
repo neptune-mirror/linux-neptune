@@ -50,6 +50,7 @@
 
 #define AMDGPU_DMUB_NOTIFICATION_MAX 5
 
+#define AMDGPU_HDR_MULT_DEFAULT (0x100000000LL)
 /*
 #include "include/amdgpu_dal_power_if.h"
 #include "amdgpu_dm_irq.h"
@@ -684,6 +685,7 @@ struct dm_plane_state {
 	 */
 	struct drm_property_blob *degamma_lut;
 	enum drm_transfer_function degamma_tf;
+	__u64 hdr_mult;
 };
 
 struct dm_crtc_state {

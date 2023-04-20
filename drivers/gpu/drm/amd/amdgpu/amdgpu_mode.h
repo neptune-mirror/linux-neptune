@@ -364,6 +364,7 @@ struct amdgpu_mode_info {
 	struct drm_property *plane_degamma_lut_property;
 	struct drm_property *plane_degamma_lut_size_property;
 	struct drm_property *plane_degamma_tf_property;
+	struct drm_property *plane_hdr_mult_property;
 };
 
 #define AMDGPU_MAX_BL_LEVEL 0xFF
