@@ -1232,35 +1232,35 @@ amdgpu_display_create_color_properties(struct amdgpu_device *adev)
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_SHAPER_LUT", 0);
+				   "VALVE1_SHAPER_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.shaper_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_SHAPER_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_SHAPER_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.shaper_lut_size_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_LUT3D", 0);
+				   "VALVE1_LUT3D", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.lut3d_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_LUT3D_SIZE", 0, UINT_MAX);
+					 "VALVE1_LUT3D_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.lut3d_size_property = prop;
 
 	prop = drm_property_create_enum(adev_to_drm(adev),
 					DRM_MODE_PROP_ENUM,
-					"GAMMA_TF",
+					"VALVE1_CRTC_REGAMMA_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
@@ -1269,21 +1269,21 @@ amdgpu_display_create_color_properties(struct amdgpu_device *adev)
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_DEGAMMA_LUT", 0);
+				   "VALVE1_PLANE_DEGAMMA_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_degamma_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_DEGAMMA_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_DEGAMMA_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_degamma_lut_size_property = prop;
 
 	prop = drm_property_create_enum(adev_to_drm(adev),
 					DRM_MODE_PROP_ENUM,
-					"AMD_PLANE_DEGAMMA_TF",
+					"VALVE1_PLANE_DEGAMMA_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
@@ -1291,28 +1291,28 @@ amdgpu_display_create_color_properties(struct amdgpu_device *adev)
 	adev->mode_info.plane_degamma_tf_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
-					 0, "AMD_PLANE_HDR_MULT", 0, UINT_MAX);
+					 0, "VALVE1_PLANE_HDR_MULT", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_hdr_mult_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_SHAPER_LUT", 0);
+				   "VALVE1_PLANE_SHAPER_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_shaper_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_SHAPER_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_SHAPER_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_shaper_lut_size_property = prop;
 
 	prop = drm_property_create_enum(adev_to_drm(adev),
 					DRM_MODE_PROP_ENUM,
-					"AMD_PLANE_SHAPER_TF",
+					"VALVE1_PLANE_SHAPER_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
@@ -1321,35 +1321,35 @@ amdgpu_display_create_color_properties(struct amdgpu_device *adev)
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_LUT3D", 0);
+				   "VALVE1_PLANE_LUT3D", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_lut3d_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_LUT3D_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_LUT3D_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_lut3d_size_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_BLEND_LUT", 0);
+				   "VALVE1_PLANE_BLEND_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_blend_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_blend_lut_size_property = prop;
 
 	prop = drm_property_create_enum(adev_to_drm(adev),
 					DRM_MODE_PROP_ENUM,
-					"AMD_PLANE_BLEND_TF",
+					"VALVE1_PLANE_BLEND_TF",
 					drm_transfer_function_enum_list,
 					ARRAY_SIZE(drm_transfer_function_enum_list));
 	if (!prop)
