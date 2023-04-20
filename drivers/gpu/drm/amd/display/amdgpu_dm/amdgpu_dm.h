@@ -683,6 +683,7 @@ struct dm_plane_state {
 	 * The blob (if not NULL) is an array of &struct drm_color_lut.
 	 */
 	struct drm_property_blob *degamma_lut;
+	enum drm_transfer_function degamma_tf;
 };
 
 struct dm_crtc_state {
