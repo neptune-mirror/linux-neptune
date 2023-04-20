@@ -51,6 +51,13 @@ int fill_plane_buffer_attributes(struct amdgpu_device *adev,
 				 bool tmz_surface,
 				 bool force_disable_dcc);
 
+int amdgpu_dm_replace_property_blob_from_id(struct drm_device *dev,
+					    struct drm_property_blob **blob,
+					    uint64_t blob_id,
+					    ssize_t expected_size,
+					    ssize_t expected_elem_size,
+					    bool *replaced);
+
 int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 			 struct drm_plane *plane,
 			 unsigned long possible_crtcs,

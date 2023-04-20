@@ -322,39 +322,6 @@ dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
 }
 
 static int
-atomic_replace_property_blob_from_id(struct drm_device *dev,
-					 struct drm_property_blob **blob,
-					 uint64_t blob_id,
-					 ssize_t expected_size,
-					 ssize_t expected_elem_size,
-					 bool *replaced)
-{
-	struct drm_property_blob *new_blob = NULL;
-
-	if (blob_id != 0) {
-		new_blob = drm_property_lookup_blob(dev, blob_id);
-		if (new_blob == NULL)
-			return -EINVAL;
-
-		if (expected_size > 0 &&
-		    new_blob->length != expected_size) {
-			drm_property_blob_put(new_blob);
-			return -EINVAL;
-		}
-		if (expected_elem_size > 0 &&
-		    new_blob->length % expected_elem_size != 0) {
-			drm_property_blob_put(new_blob);
-			return -EINVAL;
-		}
-	}
-
-	*replaced |= drm_property_replace_blob(blob, new_blob);
-	drm_property_blob_put(new_blob);
-
-	return 0;
-}
-
-static int
 amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
 				   struct drm_crtc_state *state,
 				   struct drm_property *property,
@@ -366,7 +333,7 @@ amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
 	int ret;
 
 	if (property == adev->mode_info.shaper_lut_property) {
-		ret = atomic_replace_property_blob_from_id(crtc->dev,
+		ret = amdgpu_dm_replace_property_blob_from_id(crtc->dev,
 					&acrtc_state->shaper_lut,
 					val,
 					-1, sizeof(struct drm_color_lut),
@@ -374,7 +341,7 @@ amdgpu_dm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		acrtc_state->base.color_mgmt_changed |= replaced;
 		return ret;
 	} else if (property == adev->mode_info.lut3d_property) {
-		ret = atomic_replace_property_blob_from_id(crtc->dev,
+		ret = amdgpu_dm_replace_property_blob_from_id(crtc->dev,
 					&acrtc_state->lut3d,
 					val,
 					-1, sizeof(struct drm_color_lut),
