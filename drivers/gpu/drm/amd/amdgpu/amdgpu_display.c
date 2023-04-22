@@ -1225,7 +1225,7 @@ static const struct drm_prop_enum_list drm_transfer_function_enum_list[] = {
 	{ DRM_TRANSFER_FUNCTION_GAMMA26, "Gamma 2.6" },
 };
 
-#ifdef AMD_PRIVATE_COLOR
+#ifdef CONFIG_DRM_AMD_COLOR_STEAMDECK
 static int
 amdgpu_display_create_color_properties(struct amdgpu_device *adev)
 {
@@ -1410,7 +1410,7 @@ int amdgpu_display_modeset_create_props(struct amdgpu_device *adev)
 			return -ENOMEM;
 	}
 
-#ifdef AMD_PRIVATE_COLOR
+#ifdef CONFIG_DRM_AMD_COLOR_STEAMDECK
 	if (amdgpu_display_create_color_properties(adev))
 		return -ENOMEM;
 #endif
