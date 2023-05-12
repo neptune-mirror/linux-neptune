@@ -727,6 +727,7 @@ struct dm_crtc_state {
 	struct dc_info_packet vrr_infopacket;
 
 	int abm_level;
+	bool cm_needs_reset;
 };
 
 #define to_dm_crtc_state(x) container_of(x, struct dm_crtc_state, base)
