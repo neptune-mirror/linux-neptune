@@ -204,7 +204,7 @@ static LIST_HEAD(steam_devices);
 #define STEAM_TRACKPAD_GESTURE_KEYBOARD		0x08
 
 /* Other random constants */
-#define STEAM_SERIAL_LEN 10
+#define STEAM_SERIAL_LEN 0x15
 
 struct steam_device {
 	struct list_head list;
@@ -351,10 +351,10 @@ static int steam_get_serial(struct steam_device *steam)
 {
 	/*
 	 * Send: 0xae 0x15 0x01
-	 * Recv: 0xae 0x15 0x01 serialnumber (10 chars)
+	 * Recv: 0xae 0x15 0x01 serialnumber
 	 */
 	int ret;
-	u8 cmd[] = {STEAM_CMD_GET_STRING_ATTRIB, 0x15, STEAM_ATTRIB_STR_UNIT_SERIAL};
+	u8 cmd[] = {STEAM_CMD_GET_STRING_ATTRIB, sizeof(steam->serial_no), STEAM_ATTRIB_STR_UNIT_SERIAL};
 	u8 reply[3 + STEAM_SERIAL_LEN + 1];
 
 	ret = steam_send_report(steam, cmd, sizeof(cmd));
@@ -363,10 +363,10 @@ static int steam_get_serial(struct steam_device *steam)
 	ret = steam_recv_report(steam, reply, sizeof(reply));
 	if (ret < 0)
 		return ret;
-	if (reply[0] != 0xae || reply[1] != 0x15 || reply[2] != STEAM_ATTRIB_STR_UNIT_SERIAL)
+	if (reply[0] != 0xae || reply[1] < 1 || reply[1] > sizeof(steam->serial_no) || reply[2] != STEAM_ATTRIB_STR_UNIT_SERIAL)
 		return -EIO;
 	reply[3 + STEAM_SERIAL_LEN] = 0;
-	strscpy(steam->serial_no, reply + 3, sizeof(steam->serial_no));
+	strscpy(steam->serial_no, reply + 3, reply[1]);
 	return 0;
 }
 
