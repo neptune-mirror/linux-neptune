@@ -1971,6 +1971,51 @@ static void ath11k_qmi_free_target_mem_chunk(struct ath11k_base *ab)
 	}
 }
 
+static size_t ath11k_qmi_get_remote_buf_len(struct fw_remote_mem *fw_mem)
+{
+	unsigned int i;
+	size_t len = 0;
+
+	for (i = 0; i < ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01; i++) {
+		if (fw_mem[i].vaddr && fw_mem[i].size)
+			len += fw_mem[i].size;
+	}
+	return len;
+}
+
+int ath11k_qmi_remote_dump(struct ath11k_base *ab)
+{
+	struct fw_remote_crash_data *crash_data = &ab->remote_crash_data;
+	struct fw_remote_mem *fw_mem = ab->remote_mem;
+	u8 i;
+	u32 offset = 0;
+
+	crash_data->remote_buf_len = ath11k_qmi_get_remote_buf_len(fw_mem);
+	ath11k_info(ab, "%s remote buffer len=%lu\n", __func__, crash_data->remote_buf_len);
+	crash_data->remote_buf = vzalloc(crash_data->remote_buf_len);
+	if (!crash_data->remote_buf)
+		return -ENOMEM;
+
+	for (i = 0; i < ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01; i++) {
+		if (fw_mem[i].vaddr && fw_mem[i].size) {
+			ath11k_info(ab, "remote mem: 0x%p, size: 0x%lx\n", fw_mem[i].vaddr,
+				    fw_mem[i].size);
+			memcpy(crash_data->remote_buf + offset, fw_mem[i].vaddr, fw_mem[i].size);
+			offset += fw_mem[i].size;
+		}
+	}
+	return 0;
+}
+EXPORT_SYMBOL(ath11k_qmi_remote_dump);
+
+static void ath11k_qmi_set_remote_mem(struct fw_remote_mem *fw_mem,
+				      void *vaddr, size_t size,
+				      uint32_t segnum)
+{
+	fw_mem[segnum].vaddr = vaddr;
+	fw_mem[segnum].size = size;
+}
+
 static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 {
 	int i;
@@ -2015,6 +2060,15 @@ static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 				   chunk->type);
 			return -EINVAL;
 		}
+
+		if (chunk->type == QMI_WLANFW_MEM_TYPE_DDR_V01) {
+			ath11k_qmi_set_remote_mem(ab->remote_mem,
+						  chunk->vaddr,
+						  chunk->size,
+						  i);
+			ath11k_info(ab, "vaddr=0x%p size=0x%x\n", chunk->vaddr, chunk->size);
+		}
+
 		chunk->prev_type = chunk->type;
 		chunk->prev_size = chunk->size;
 	}
@@ -3268,6 +3322,9 @@ int ath11k_qmi_init_service(struct ath11k_base *ab)
 	INIT_LIST_HEAD(&ab->qmi.event_list);
 	spin_lock_init(&ab->qmi.event_lock);
 	INIT_WORK(&ab->qmi.event_work, ath11k_qmi_driver_event_work);
+
+	memset(ab->remote_mem, 0,
+	       sizeof(struct fw_remote_mem) * ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01);
 
 	ret = qmi_add_lookup(&ab->qmi.handle, ATH11K_QMI_WLFW_SERVICE_ID_V01,
 			     ATH11K_QMI_WLFW_SERVICE_VERS_V01,

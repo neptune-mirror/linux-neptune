@@ -827,6 +827,16 @@ struct ath11k_msi_config {
 	u16 hw_rev;
 };
 
+struct fw_remote_mem {
+	size_t size;
+	void *vaddr;
+};
+
+struct fw_remote_crash_data {
+	u8 *remote_buf;
+	size_t remote_buf_len;
+};
+
 /* Master structure to hold the hw data which may be used in core module */
 struct ath11k_base {
 	enum ath11k_hw_rev hw_rev;
@@ -968,6 +978,9 @@ struct ath11k_base {
 
 		const struct ath11k_pci_ops *ops;
 	} pci;
+
+	struct fw_remote_mem remote_mem[ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01];
+	struct fw_remote_crash_data remote_crash_data;
 
 	/* must be last */
 	u8 drv_priv[] __aligned(sizeof(void *));
