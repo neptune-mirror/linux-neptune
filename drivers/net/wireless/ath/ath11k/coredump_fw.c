@@ -60,3 +60,46 @@ int ath11k_coredump_fw_paging_dump(struct ath11k_pci *ab_pci, struct mhi_control
 
 	return 0;
 }
+
+int ath11k_coredump_fw_rddm_dump(struct ath11k_pci *ab_pci, struct mhi_controller *mhi_cntrl)
+{
+	struct ath11k_mhi_fw_crash_data *crash_data = &ab_pci->mhi_fw_crash_data;
+	struct image_info *img = mhi_cntrl->rddm_image;
+	char *buf = NULL;
+	unsigned int size = 0;
+	int seg = 0;
+	u32 offset = 0;
+	u32 rddm_vec_entry_num;
+	u32 entries = mhi_cntrl->rddm_image->entries;
+
+	rddm_vec_entry_num = DIV_ROUND_UP(RDDM_DUMP_SIZE,
+					  mhi_cntrl->seg_len);
+	crash_data->ramdump_buf_len = (entries - 1) * mhi_cntrl->seg_len +
+				      rddm_vec_entry_num * sizeof(struct ath11k_vec_entry);
+
+	ath11k_info(ab_pci->ab, "rddm_vec_entry_num=%d entries=%d\n",
+		    rddm_vec_entry_num, img->entries);
+
+	crash_data->ramdump_buf = vzalloc(crash_data->ramdump_buf_len);
+	if (!crash_data->ramdump_buf)
+		return -ENOMEM;
+
+	for (seg = 0; seg < rddm_vec_entry_num; seg++) {
+		buf = img->mhi_buf[seg].buf;
+		size = img->mhi_buf[seg].len;
+		ath11k_info(ab_pci->ab,
+			    "write rddm memory: mem: 0x%p, size: 0x%x\n",
+			    buf, size);
+		memcpy(crash_data->ramdump_buf + offset, buf, size);
+		offset += size;
+	}
+
+	buf = crash_data->ramdump_buf + offset;
+	size = img->mhi_buf[img->entries - 1].len;
+	ath11k_info(ab_pci->ab,
+		    "to write vector table block: mem: 0x%p, size: 0x%x\n",
+		    buf, size);
+	memcpy(buf, img->mhi_buf[img->entries - 1].buf, size);
+
+	return 0;
+}
