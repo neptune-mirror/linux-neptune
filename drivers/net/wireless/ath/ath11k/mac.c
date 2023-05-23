@@ -5011,6 +5011,7 @@ static int ath11k_mac_set_txbf_conf(struct ath11k_vif *arvif)
 	u32 vht_cap = ar->pdev->cap.vht_cap;
 	u32 vdev_param = WMI_VDEV_PARAM_TXBF;
 
+	printk("start ath11k_mac_set_txbf_conf\n");
 	if (vht_cap & (IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE)) {
 		nsts = vht_cap & IEEE80211_VHT_CAP_BEAMFORMEE_STS_MASK;
 		nsts >>= IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT;
@@ -5049,6 +5050,9 @@ static int ath11k_mac_set_txbf_conf(struct ath11k_vif *arvif)
 			value |= WMI_VDEV_PARAM_TXBF_MU_TX_BFEE;
 	}
 
+	ath11k_wmi_vdev_set_param_cmd(ar, arvif->vdev_id,
+					     WMI_VDEV_PARAM_SET_HEMU_MODE, 55);
+	printk("hard code WMI_VDEV_PARAM_SET_HEMU_MODE %d 55 as cld\n", WMI_VDEV_PARAM_SET_HEMU_MODE);
 	return ath11k_wmi_vdev_set_param_cmd(ar, arvif->vdev_id,
 					     vdev_param, value);
 }
