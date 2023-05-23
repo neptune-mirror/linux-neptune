@@ -135,6 +135,7 @@ struct ath11k_pci {
 	u16 link_ctl;
 	struct register_crash_data reg_data;
 	struct ath11k_mhi_fw_crash_data mhi_fw_crash_data;
+	struct work_struct rddm_worker;
 
 };
 

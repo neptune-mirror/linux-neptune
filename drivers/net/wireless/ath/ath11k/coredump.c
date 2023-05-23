@@ -6,6 +6,7 @@
 #include <linux/devcoredump.h>
 #include "coredump.h"
 #include "pci.h"
+#include "debug.h"
 
 static struct ath11k_dump_file_data *
 ath11k_coredump_build(struct ath11k_mhi_fw_crash_data *crash_data,
@@ -131,4 +132,28 @@ static void ath11k_coredump_buf_release(struct ath11k_pci *ab_pci)
 		vfree(reg->reg_rddm_buf);
 		reg->reg_rddm_buf = NULL;
 	}
+}
+
+void ath11k_mhi_pm_rddm_worker(struct work_struct *work)
+{
+	struct ath11k_pci *ab_pci = container_of(work,
+						 struct ath11k_pci,
+						 rddm_worker);
+	struct ath11k_base *ab = ab_pci->ab;
+
+	mhi_download_rddm_image(ab_pci->mhi_ctrl, false);
+
+	ath11k_coredump_fw_rddm_dump(ab_pci, ab_pci->mhi_ctrl);
+	ath11k_coredump_fw_paging_dump(ab_pci, ab_pci->mhi_ctrl);
+	ath11k_qmi_remote_dump(ab_pci->ab);
+	ath11k_pci_register_dump(ab_pci);
+
+	ath11k_coredump_submit(ab_pci);
+	ath11k_coredump_buf_release(ab_pci);
+
+	if (test_bit(ATH11K_FLAG_UNREGISTERING, &ab->dev_flags))
+		return;
+
+	ath11k_info(ab, "start to reset for rddm\n");
+	queue_work(ab->workqueue_aux, &ab->reset_work);
 }

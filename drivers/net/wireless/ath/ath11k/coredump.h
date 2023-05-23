@@ -43,4 +43,6 @@ struct ath11k_dump_file_data {
 	u8 data[0];
 } __packed;
 
+void ath11k_mhi_pm_rddm_worker(struct work_struct *work);
+
 #endif
