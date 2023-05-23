@@ -9,6 +9,7 @@
 #include <linux/mhi.h>
 
 #include "core.h"
+#include "coredump_fw.h"
 
 #define PCIE_SOC_GLOBAL_RESET			0x3008
 #define PCIE_SOC_GLOBAL_RESET_V			1
@@ -133,6 +134,7 @@ struct ath11k_pci {
 	unsigned long flags;
 	u16 link_ctl;
 	struct register_crash_data reg_data;
+	struct ath11k_mhi_fw_crash_data mhi_fw_crash_data;
 
 };
 
