@@ -592,7 +592,10 @@ static int ath11k_pcic_ext_irq_config(struct ath11k_base *ab)
 			ath11k_dbg(ab, ATH11K_DBG_PCI,
 				   "irq:%d group:%d\n", irq, i);
 
-			irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY);
+			if (!test_bit(ATH11K_FLAG_MULTI_MSI_VECTORS, &ab->dev_flags))
+				irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY | IRQ_MOVE_PCNTXT);
+			else
+				irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY);
 			ret = request_irq(irq, ath11k_pcic_ext_interrupt_handler,
 					  irq_flags, "DP_EXT_IRQ", irq_grp);
 			if (ret) {
@@ -642,6 +645,8 @@ int ath11k_pcic_config_irq(struct ath11k_base *ab)
 
 		tasklet_setup(&ce_pipe->intr_tq, ath11k_pcic_ce_tasklet);
 
+		if (!test_bit(ATH11K_FLAG_MULTI_MSI_VECTORS, &ab->dev_flags))
+			irq_set_status_flags(irq, IRQ_MOVE_PCNTXT);
 		ret = request_irq(irq, ath11k_pcic_ce_interrupt_handler,
 				  irq_flags, irq_name[irq_idx], ce_pipe);
 		if (ret) {
