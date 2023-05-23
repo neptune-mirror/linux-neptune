@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ATH11K_DEBUG_H_
@@ -33,6 +34,7 @@ __printf(2, 3) void ath11k_err(struct ath11k_base *ab, const char *fmt, ...);
 __printf(2, 3) void ath11k_warn(struct ath11k_base *ab, const char *fmt, ...);
 
 extern unsigned int ath11k_debug_mask;
+extern unsigned int ath11k_ftm_mode;
 
 #ifdef CONFIG_ATH11K_DEBUG
 __printf(3, 4) void __ath11k_dbg(struct ath11k_base *ab,

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef ATH11K_WMI_H
@@ -68,6 +69,7 @@ struct wmi_tlv {
 
 #define WMI_APPEND_TO_EXISTING_CHAN_LIST_FLAG 1
 
+#define MAX_WMI_UTF_LEN 252
 #define WMI_BA_MODE_BUFFER_SIZE_256  3
 /*
  * HW mode config type replicated from FW header
@@ -3517,6 +3519,24 @@ struct wmi_get_pdev_temperature_cmd {
 	u32 tlv_header;
 	u32 param;
 	u32 pdev_id;
+} __packed;
+
+struct wmi_ftm_seg_hdr {
+	u32 len;
+	u32 msgref;
+	u32 segmentinfo;
+	u32 pdev_id;
+} __packed;
+
+struct wmi_ftm_cmd {
+	u32 tlv_header;
+	struct wmi_ftm_seg_hdr seg_hdr;
+	u8 data[];
+} __packed;
+
+struct wmi_ftm_event_msg {
+	struct wmi_ftm_seg_hdr seg_hdr;
+	u8 data[];
 } __packed;
 
 #define WMI_BEACON_TX_BUFFER_SIZE	512

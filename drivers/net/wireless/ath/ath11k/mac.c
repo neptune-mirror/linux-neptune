@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <net/mac80211.h>
@@ -644,7 +644,10 @@ struct ath11k *ath11k_mac_get_ar_by_pdev_id(struct ath11k_base *ab, u32 pdev_id)
 		return NULL;
 
 	for (i = 0; i < ab->num_radios; i++) {
-		pdev = rcu_dereference(ab->pdevs_active[i]);
+		if (ab->fw_mode == ATH11K_FIRMWARE_MODE_FTM)
+			pdev = &ab->pdevs[i];
+		else
+			pdev = rcu_dereference(ab->pdevs_active[i]);
 
 		if (pdev && pdev->pdev_id == pdev_id)
 			return (pdev->ar ? pdev->ar : NULL);
@@ -5803,6 +5806,11 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 	struct ath11k_pdev *pdev = ar->pdev;
 	int ret;
 
+	if (ath11k_ftm_mode) {
+		ath11k_err(ab, "fail to start mac operations in ftm mode\n");
+		return -EWOULDBLOCK;
+	}
+
 	ath11k_mac_drain_tx(ar);
 	mutex_lock(&ar->conf_mutex);
 
@@ -5817,6 +5825,7 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 	case ATH11K_STATE_RESTARTED:
 	case ATH11K_STATE_WEDGED:
 	case ATH11K_STATE_ON:
+	case ATH11K_STATE_TM:
 		WARN_ON(1);
 		ret = -EINVAL;
 		goto err;

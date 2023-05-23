@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
@@ -19,6 +19,7 @@
 #include "mac.h"
 #include "hw.h"
 #include "peer.h"
+#include "testmode.h"
 
 struct wmi_tlv_policy {
 	size_t min_len;
@@ -7751,6 +7752,37 @@ exit:
 }
 
 static void
+ath11k_wmi_tm_event_segmented(struct ath11k_base *ab, u32 cmd_id,
+			      struct sk_buff *skb)
+{
+	const void **tb;
+	const struct wmi_ftm_event_msg *ev;
+	u16 length;
+	int ret;
+
+	tb = ath11k_wmi_tlv_parse_alloc(ab, skb->data, skb->len, GFP_ATOMIC);
+	if (IS_ERR(tb)) {
+		ret = PTR_ERR(tb);
+		ath11k_warn(ab, "failed to parse ftm event tlv: %d\n", ret);
+		return;
+	}
+
+	ev = tb[WMI_TAG_ARRAY_BYTE];
+	if (!ev) {
+		ath11k_warn(ab, "failed to fetch ftm msg\n");
+		kfree(tb);
+		return;
+	}
+
+	length = skb->len - TLV_HDR_SIZE;
+	ret = ath11k_tm_process_event(ab, cmd_id, ev, length);
+	if (ret)
+		ath11k_warn(ab, "Failed to process ftm event\n");
+
+	kfree(tb);
+}
+
+static void
 ath11k_wmi_pdev_temperature_event(struct ath11k_base *ab,
 				  struct sk_buff *skb)
 {
@@ -8101,6 +8133,12 @@ static void ath11k_wmi_tlv_op_rx(struct ath11k_base *ab, struct sk_buff *skb)
 		break;
 	case WMI_PDEV_CSA_SWITCH_COUNT_STATUS_EVENTID:
 		ath11k_wmi_pdev_csa_switch_count_status_event(ab, skb);
+		break;
+	case WMI_PDEV_UTF_EVENTID:
+		if (test_bit(ATH11K_FLAG_FTM_SEGMENTED, &ab->dev_flags))
+			ath11k_wmi_tm_event_segmented(ab, id, skb);
+		else
+			ath11k_tm_wmi_event_unsegmented(ab, id, skb);
 		break;
 	case WMI_PDEV_TEMPERATURE_EVENTID:
 		ath11k_wmi_pdev_temperature_event(ab, skb);
