@@ -6102,6 +6102,7 @@ struct wmi_coex_config_cmd {
 } __packed;
 
 #define WMI_COEX_ISOLATION_ARG1_DEFAUT     30
+#define WMI_COEX_BTC_MODE_ARG1_DEFAULT	1
 
 int ath11k_wmi_cmd_send(struct ath11k_pdev_wmi *wmi, struct sk_buff *skb,
 			u32 cmd_id);
