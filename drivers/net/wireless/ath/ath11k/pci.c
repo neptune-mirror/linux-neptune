@@ -228,7 +228,12 @@ static u32 ath11k_pci_window_read32(struct ath11k_base *ab, u32 offset)
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
 	u32 window_start, val;
 
-	window_start = ath11k_pci_get_window_start(ab, offset);
+	if (ab->hw_params.static_window_map)
+        	window_start = ath11k_pci_get_window_start(ab, offset);
+      	else
+        	window_start = ATH11K_PCI_WINDOW_START;
+
+	//window_start = ath11k_pci_get_window_start(ab, offset);
 
 	if (window_start == ATH11K_PCI_WINDOW_START) {
 		spin_lock_bh(&ab_pci->window_lock);
@@ -852,6 +857,8 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 	u32 soc_hw_version_major, soc_hw_version_minor, addr;
 	const struct ath11k_pci_ops *pci_ops;
 	int ret;
+	u32 sub_version;
+	int ops_init = 0;
 
 	ab = ath11k_core_alloc(&pdev->dev, sizeof(*ab_pci), ATH11K_BUS_PCI);
 
@@ -899,8 +906,8 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 	case QCA6390_DEVICE_ID:
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
 					   &soc_hw_version_minor);
-		switch (soc_hw_version_major) {
-		case 2:
+ 		switch (soc_hw_version_major) {
+ 		case 2:
 			ab->hw_rev = ATH11K_HW_QCA6390_HW20;
 			break;
 		default:
@@ -920,6 +927,13 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		ab->id.bdf_search = ATH11K_BDF_SEARCH_BUS_AND_BOARD;
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
 					   &soc_hw_version_minor);
+		pci_ops = &ath11k_pci_ops_qca6390;
+		ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
+		if (ret) {
+			ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
+			goto err_pci_free_region;
+		}
+		ops_init = 1;
 		switch (soc_hw_version_major) {
 		case 2:
 			switch (soc_hw_version_minor) {
@@ -930,7 +944,7 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 			case 0x10:
 			case 0x11:
 				//ab->hw_rev = ATH11K_HW_WCN6855_HW21;
-				sub_version = ath11k_pci_read32(ab, SUB_VERSION);
+				sub_version = ath11k_pcic_read32(ab, SUB_VERSION);
 				ath11k_dbg(ab, ATH11K_DBG_PCI, "sub_version 0x%x\n", sub_version);
 				switch (sub_version) {
 				case 0x1019A0E1:
@@ -955,7 +969,6 @@ unsupported_wcn6855_soc:
 			goto err_pci_free_region;
 		}
 
-		pci_ops = &ath11k_pci_ops_qca6390;
 		break;
 	default:
 		dev_err(&pdev->dev, "Unknown PCI device found: 0x%x\n",
@@ -964,11 +977,13 @@ unsupported_wcn6855_soc:
 		goto err_pci_free_region;
 	}
 
-	ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
-	if (ret) {
-		ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
-		goto err_pci_free_region;
-	}
+	if(ops_init == 1){
+		ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
+		if (ret) {
+			ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
+			goto err_pci_free_region;
+		}
+ 	}
 
 	ret = ath11k_pcic_init_msi_config(ab);
 	if (ret) {

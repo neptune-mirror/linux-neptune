@@ -1029,6 +1029,7 @@ static ssize_t ath11k_read_sram_dump(struct file *file,
 
 static int ath11k_release_sram_dump(struct inode *inode, struct file *file)
 {
+	struct ath11k_base *ab = inode->i_private;
 	vfree(file->private_data);
 	file->private_data = NULL;
 
