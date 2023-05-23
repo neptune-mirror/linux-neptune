@@ -2040,10 +2040,10 @@ static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 			chunk->vaddr = NULL;
 		}
 
-		chunk->vaddr = dma_alloc_coherent(ab->dev,
+		chunk->vaddr = ath11k_core_dma_alloc_coherent(ab->dev,
 						  chunk->size,
 						  &chunk->paddr,
-						  GFP_KERNEL | __GFP_NOWARN);
+						  GFP_KERNEL | __GFP_NOWARN | GFP_DMA32);
 		if (!chunk->vaddr) {
 			if (ab->qmi.mem_seg_count <= ATH11K_QMI_FW_MEM_REQ_SEGMENT_CNT) {
 				ath11k_dbg(ab, ATH11K_DBG_QMI,
@@ -2564,9 +2564,9 @@ static int ath11k_qmi_m3_load(struct ath11k_base *ab)
 	if (m3_mem->vaddr || m3_mem->size)
 		goto skip_m3_alloc;
 
-	m3_mem->vaddr = dma_alloc_coherent(ab->dev,
+	m3_mem->vaddr = ath11k_core_dma_alloc_coherent(ab->dev,
 					   fw->size, &m3_mem->paddr,
-					   GFP_KERNEL);
+					   GFP_KERNEL  | GFP_DMA32);
 	if (!m3_mem->vaddr) {
 		ath11k_err(ab, "failed to allocate memory for M3 with size %zu\n",
 			   fw->size);

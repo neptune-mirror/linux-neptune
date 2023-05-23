@@ -9,6 +9,7 @@
 #include <linux/remoteproc.h>
 #include <linux/firmware.h>
 #include <linux/of.h>
+#include <linux/dma-direct.h>
 
 #include "core.h"
 #include "dp_tx.h"
@@ -676,6 +677,40 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = true,
 	},
 };
+
+static const struct dma_map_ops *ath11k_core_get_dma_ops(struct device *dev)
+{
+	if (dev->dma_ops)
+		return dev->dma_ops;
+	return NULL;
+}
+
+void *ath11k_core_dma_alloc_coherent(struct device *dev, size_t size,
+				     dma_addr_t *dma_handle, gfp_t flag)
+{
+	unsigned long attrs = (flag & __GFP_NOWARN) ? DMA_ATTR_NO_WARN : 0;
+	const struct dma_map_ops *ops = ath11k_core_get_dma_ops(dev);
+	void *cpu_addr;
+
+	WARN_ON_ONCE(!dev->coherent_dma_mask);
+
+	/*
+	 * DMA allocations can never be turned back into a page pointer, so
+	 * requesting compound pages doesn't make sense (and can't even be
+	 * supported at all by various backends).
+	 */
+	if (WARN_ON_ONCE(flag & __GFP_COMP))
+		return NULL;
+
+	if (!ops)
+		cpu_addr = dma_direct_alloc(dev, size, dma_handle, flag, attrs);
+	else if (ops->alloc)
+		cpu_addr = ops->alloc(dev, size, dma_handle, flag, attrs);
+	else
+		return NULL;
+
+	return cpu_addr;
+}
 
 static inline struct ath11k_pdev *ath11k_core_get_single_pdev(struct ath11k_base *ab)
 {

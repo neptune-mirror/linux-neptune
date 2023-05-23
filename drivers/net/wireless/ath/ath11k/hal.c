@@ -8,6 +8,7 @@
 #include "debug.h"
 #include "hal_desc.h"
 #include "hif.h"
+#include "core.h"
 
 static const struct hal_srng_config hw_srng_config_template[] = {
 	/* TODO: max_rings can populated by querying HW capabilities */
@@ -196,8 +197,8 @@ static int ath11k_hal_alloc_cont_rdp(struct ath11k_base *ab)
 	size_t size;
 
 	size = sizeof(u32) * HAL_SRNG_RING_ID_MAX;
-	hal->rdp.vaddr = dma_alloc_coherent(ab->dev, size, &hal->rdp.paddr,
-					    GFP_KERNEL);
+	hal->rdp.vaddr = ath11k_core_dma_alloc_coherent(ab->dev, size, &hal->rdp.paddr,
+					    GFP_KERNEL | GFP_DMA32);
 	if (!hal->rdp.vaddr)
 		return -ENOMEM;
 
@@ -224,8 +225,8 @@ static int ath11k_hal_alloc_cont_wrp(struct ath11k_base *ab)
 	size_t size;
 
 	size = sizeof(u32) * HAL_SRNG_NUM_LMAC_RINGS;
-	hal->wrp.vaddr = dma_alloc_coherent(ab->dev, size, &hal->wrp.paddr,
-					    GFP_KERNEL);
+	hal->wrp.vaddr = ath11k_core_dma_alloc_coherent(ab->dev, size, &hal->wrp.paddr,
+					    GFP_KERNEL | GFP_DMA32);
 	if (!hal->wrp.vaddr)
 		return -ENOMEM;
 
