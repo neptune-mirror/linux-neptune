@@ -14,6 +14,7 @@
 #define PCIE_SOC_GLOBAL_RESET_V			1
 
 #define WLAON_WARM_SW_ENTRY			0x1f80504
+#define WLAON_RESET_DBG_SW_ENTRY		0x01F80508
 #define WLAON_SOC_RESET_CAUSE_REG		0x01f8060c
 
 #define PCIE_Q6_COOKIE_ADDR			0x01f80500
@@ -53,6 +54,65 @@
 #define WLAON_QFPROM_PWR_CTRL_REG		0x01f8031c
 #define QFPROM_PWR_CTRL_VDD4BLOW_MASK		0x4
 
+#define HWIO_PCIE_PCIE_BHI_VERSION_LOWER_ADDR           (0x1e0e200)
+#define HWIO_PCIE_PCIE_BHI_VERSION_UPPER_ADDR           (0x1e0e204)
+#define HWIO_PCIE_PCIE_BHI_IMGADDR_LOWER_ADDR           (0x1e0e208)
+#define HWIO_PCIE_PCIE_BHI_IMGADDR_UPPER_ADDR           (0x1e0e20c)
+#define HWIO_PCIE_PCIE_BHI_IMGSIZE_ADDR                 (0x1e0e210)
+#define HWIO_PCIE_PCIE_BHI_IMGTXDB_ADDR                 (0x1e0e218)
+#define HWIO_PCIE_PCIE_BHI_INTVEC_ADDR                  (0x1e0e220)
+#define HWIO_PCIE_PCIE_BHI_EXECENV_ADDR                 (0x1e0e228)
+#define HWIO_PCIE_PCIE_BHI_STATUS_ADDR                  (0x1e0e22c)
+#define HWIO_PCIE_PCIE_BHI_ERRCODE_ADDR                 (0x1e0e230)
+#define HWIO_PCIE_PCIE_BHI_ERRDBG1_ADDR                 (0x1e0e234)
+#define HWIO_PCIE_PCIE_BHI_ERRDBG2_ADDR                 (0x1e0e238)
+#define HWIO_PCIE_PCIE_BHI_ERRDBG3_ADDR                 (0x1e0e23c)
+#define HWIO_PCIE_PCIE_BHI_SERIALNUM_ADDR               (0x1e0e240)
+#define HWIO_PCIE_PCIE_BHI_SBLANTIROLLVER_ADDR          (0x1e0e244)
+#define HWIO_PCIE_PCIE_BHI_NUMSEG_ADDR                  (0x1e0e248)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_0_ADDR               (0x1e0e24c)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_1_ADDR               (0x1e0e250)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_2_ADDR               (0x1e0e254)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_3_ADDR               (0x1e0e258)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_4_ADDR               (0x1e0e25c)
+#define HWIO_PCIE_PCIE_BHI_MSMHWID_5_ADDR               (0x1e0e260)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_0_ADDR             (0x1e0e264)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_1_ADDR             (0x1e0e268)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_2_ADDR             (0x1e0e26c)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_3_ADDR             (0x1e0e270)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_4_ADDR             (0x1e0e274)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_5_ADDR             (0x1e0e278)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_6_ADDR             (0x1e0e27c)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_7_ADDR             (0x1e0e280)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_8_ADDR             (0x1e0e284)
+#define HWIO_PCIE_PCIE_BHI_OEMPKHASH_9_ADDR             (0x1e0e288)
+#define HWIO_PCIE_PCIE_BHI_TXVECDB_ADDR                 (0x1e0e360)
+#define HWIO_PCIE_PCIE_BHI_TXVECSTATUS_ADDR             (0x1e0e368)
+#define HWIO_PCIE_PCIE_BHI_RXVECDB_ADDR                 (0x1e0e394)
+#define HWIO_PCIE_PCIE_BHI_RXVECSTATUS_ADDR             (0x1e0e39c)
+
+#define QDSS_APB_DEC_CS_QDSSCSR_ETRIRQCTRL  (0x1C0106C)
+#define QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETF  (0x1C01070)
+#define QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR0  (0x1C01074)
+#define QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR1  (0x1C01078)
+#define Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_0 (0x00DA102C)
+#define Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_1 (0x00DA202C)
+#define Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_2 (0x00DA302C)
+
+struct cnss_pci_reg {
+	char *name;
+	u32 offset;
+	u32 value;
+};
+
+struct register_crash_data {
+	u8 *reg_buf;
+	size_t reg_buf_len;
+	u8 *reg_rddm_buf;
+	size_t reg_rddm_buf_len;
+};
+
+
 enum ath11k_pci_flags {
 	ATH11K_PCI_ASPM_RESTORE,
 };
@@ -72,6 +132,8 @@ struct ath11k_pci {
 	/* enum ath11k_pci_flags */
 	unsigned long flags;
 	u16 link_ctl;
+	struct register_crash_data reg_data;
+
 };
 
 static inline struct ath11k_pci *ath11k_pci_priv(struct ath11k_base *ab)
@@ -80,4 +142,5 @@ static inline struct ath11k_pci *ath11k_pci_priv(struct ath11k_base *ab)
 }
 
 int ath11k_pci_get_msi_irq(struct ath11k_base *ab, unsigned int vector);
+void ath11k_pci_register_dump(struct ath11k_pci *ab_pci);
 #endif

@@ -38,6 +38,124 @@ static const struct pci_device_id ath11k_pci_id_table[] = {
 
 MODULE_DEVICE_TABLE(pci, ath11k_pci_id_table);
 
+static struct cnss_pci_reg register_rddm_fail_debug[] = {
+	{"PCIE_BHI_VERSION_LOWER", HWIO_PCIE_PCIE_BHI_VERSION_LOWER_ADDR, 0},
+	{"PCIE_BHI_VERSION_UPPER", HWIO_PCIE_PCIE_BHI_VERSION_UPPER_ADDR, 0},
+	{"PCIE_BHI_IMGADDR_LOWER", HWIO_PCIE_PCIE_BHI_IMGADDR_LOWER_ADDR, 0},
+	{"PCIE_BHI_IMGADDR_UPPER", HWIO_PCIE_PCIE_BHI_IMGADDR_UPPER_ADDR, 0},
+	{"PCIE_BHI_IMGSIZE", HWIO_PCIE_PCIE_BHI_IMGSIZE_ADDR, 0},
+	{"PCIE_BHI_IMGTXDB", HWIO_PCIE_PCIE_BHI_IMGTXDB_ADDR, 0},
+	{"PCIE_BHI_INTVEC", HWIO_PCIE_PCIE_BHI_INTVEC_ADDR, 0},
+	{"PCIE_BHI_EXECENV", HWIO_PCIE_PCIE_BHI_EXECENV_ADDR, 0},
+	{"PCIE_BHI_STATUS", HWIO_PCIE_PCIE_BHI_STATUS_ADDR, 0},
+	{"PCIE_BHI_ERRCODE", HWIO_PCIE_PCIE_BHI_ERRCODE_ADDR, 0},
+	{"PCIE_BHI_ERRDBG1", HWIO_PCIE_PCIE_BHI_ERRDBG1_ADDR, 0},
+	{"PCIE_BHI_ERRDBG2", HWIO_PCIE_PCIE_BHI_ERRDBG2_ADDR, 0},
+	{"PCIE_BHI_ERRDBG3", HWIO_PCIE_PCIE_BHI_ERRDBG3_ADDR, 0},
+	{"PCIE_BHI_SERIALNUM", HWIO_PCIE_PCIE_BHI_SERIALNUM_ADDR, 0},
+	{"PCIE_BHI_SBLANTIROLLVER", HWIO_PCIE_PCIE_BHI_SBLANTIROLLVER_ADDR, 0},
+	{"PCIE_BHI_NUMSEG", HWIO_PCIE_PCIE_BHI_NUMSEG_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_0", HWIO_PCIE_PCIE_BHI_MSMHWID_0_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_1", HWIO_PCIE_PCIE_BHI_MSMHWID_1_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_2", HWIO_PCIE_PCIE_BHI_MSMHWID_2_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_3", HWIO_PCIE_PCIE_BHI_MSMHWID_3_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_4", HWIO_PCIE_PCIE_BHI_MSMHWID_4_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_5", HWIO_PCIE_PCIE_BHI_MSMHWID_5_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_0", HWIO_PCIE_PCIE_BHI_OEMPKHASH_0_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_1", HWIO_PCIE_PCIE_BHI_OEMPKHASH_1_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_2", HWIO_PCIE_PCIE_BHI_OEMPKHASH_2_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_3", HWIO_PCIE_PCIE_BHI_OEMPKHASH_3_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_4", HWIO_PCIE_PCIE_BHI_OEMPKHASH_4_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_5", HWIO_PCIE_PCIE_BHI_OEMPKHASH_5_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_6", HWIO_PCIE_PCIE_BHI_OEMPKHASH_6_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_7", HWIO_PCIE_PCIE_BHI_OEMPKHASH_7_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_8", HWIO_PCIE_PCIE_BHI_OEMPKHASH_8_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_9", HWIO_PCIE_PCIE_BHI_OEMPKHASH_9_ADDR, 0},
+	{"PCIE_BHI_TXVECDB", HWIO_PCIE_PCIE_BHI_TXVECDB_ADDR, 0},
+	{"PCIE_BHI_TXVECSTATUS", HWIO_PCIE_PCIE_BHI_TXVECSTATUS_ADDR, 0},
+	{"PCIE_BHI_RXVECDB", HWIO_PCIE_PCIE_BHI_RXVECDB_ADDR, 0},
+	{"PCIE_BHI_RXVECSTATUS", HWIO_PCIE_PCIE_BHI_RXVECSTATUS_ADDR, 0},
+	/* After dump this register, recovery will fail for QCA6490 */
+	//{"PCIE_WLAON_RESET_DBG_SW_ENTRY", WLAON_RESET_DBG_SW_ENTRY, 0},
+	{NULL},
+};
+
+static struct cnss_pci_reg register_to_dump[] = {
+	{"QDSS_APB_DEC_CS_QDSSCSR_ETRIRQCTRL", QDSS_APB_DEC_CS_QDSSCSR_ETRIRQCTRL, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETF", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETF, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR0", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR0, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR1", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR1, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_0", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_0, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_1", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_1, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_2", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_2, 0},
+	{NULL},
+};
+
+#define LINE_LEN_MAX 80
+
+static int ath11k_register_dump(struct ath11k_base *ab,
+				u8 **buf,
+				size_t *buf_len,
+				struct cnss_pci_reg *regs,
+				size_t num)
+{
+	u32 i;
+	u32 offset = 0;
+	size_t line_len;
+	ssize_t len;
+	char (*line_ptr)[LINE_LEN_MAX];
+
+	*buf_len = 0;
+
+	line_ptr = (char (*)[LINE_LEN_MAX])vzalloc(num * LINE_LEN_MAX);
+	if (!line_ptr)
+		return -ENOMEM;
+
+	for (i = 0; regs[i].name; i++) {
+		regs[i].value = ath11k_pcic_read32(ab, regs[i].offset);
+		ath11k_info(ab, "%s[0x%x] = 0x%x\n",
+			    regs[i].name, regs[i].offset, regs[i].value);
+		len = snprintf(line_ptr[i], LINE_LEN_MAX, "%s[0x%x] = 0x%x\n",
+			       regs[i].name, regs[i].offset, regs[i].value);
+		*buf_len += len;
+	}
+
+	ath11k_info(ab, "%s buf len=%lu\n", __func__, *buf_len);
+	*buf = vzalloc(*buf_len);
+	if (!*buf)
+		return -ENOMEM;
+
+	for (i = 0; i < num; ++i) {
+		line_len = strlen(line_ptr[i]);
+		memcpy(*buf + offset, line_ptr[i], line_len);
+		offset += line_len;
+	}
+
+	vfree(line_ptr);
+
+	return 0;
+}
+
+void ath11k_pci_register_dump(struct ath11k_pci *ab_pci)
+{
+	size_t num;
+	struct register_crash_data *crash_data = &ab_pci->reg_data;
+
+	num = sizeof(register_to_dump) / sizeof(struct cnss_pci_reg) - 1;
+	ath11k_register_dump(ab_pci->ab,
+			     &crash_data->reg_buf,
+			     &crash_data->reg_buf_len,
+			     register_to_dump,
+			     num);
+
+	num = sizeof(register_rddm_fail_debug) / sizeof(struct cnss_pci_reg) - 1;
+	ath11k_register_dump(ab_pci->ab,
+			     &crash_data->reg_rddm_buf,
+			     &crash_data->reg_rddm_buf_len,
+			     register_rddm_fail_debug,
+			     num);
+}
+
 static int ath11k_pci_bus_wake_up(struct ath11k_base *ab)
 {
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
