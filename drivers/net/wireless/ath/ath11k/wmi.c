@@ -9275,6 +9275,10 @@ int ath11k_wmi_send_coex_config(struct ath11k *ar,
 	cmd->config_arg4 = param->config_arg4;
 	cmd->config_arg5 = param->config_arg5;
 	cmd->config_arg6 = param->config_arg6;
+	ath11k_warn(ar->ab, "wmi send coex cfg vdev %d type %u args %u %u %u %u %u %u\n",
+			cmd->vdev_id, cmd->config_type, cmd->config_arg1,
+			cmd->config_arg2, cmd->config_arg3, cmd->config_arg4,
+			cmd->config_arg5, cmd->config_arg6);
 
 	return ath11k_wmi_cmd_send(wmi, skb, WMI_COEX_CONFIG_CMDID);
 }

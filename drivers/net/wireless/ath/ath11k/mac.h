@@ -175,4 +175,6 @@ int ath11k_mac_wait_tx_complete(struct ath11k *ar);
 int ath11k_mac_vif_set_keepalive(struct ath11k_vif *arvif,
 				 enum wmi_sta_keepalive_method method,
 				 u32 interval);
+int ath11k_mac_send_coex_config(struct ath11k *ar,
+				struct wmi_coex_config_params *param);
 #endif

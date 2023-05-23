@@ -9378,3 +9378,27 @@ int ath11k_mac_vif_set_keepalive(struct ath11k_vif *arvif,
 
 	return 0;
 }
+
+static int ath11k_mac_vif_send_coex_config(struct ath11k_vif *arvif,
+		struct wmi_coex_config_params *param)
+{
+	return ath11k_wmi_send_coex_config(arvif->ar, param);
+}
+
+int ath11k_mac_send_coex_config(struct ath11k *ar,
+		struct wmi_coex_config_params *param)
+{
+	struct ath11k_vif *arvif;
+	int ret;
+
+	lockdep_assert_held(&ar->conf_mutex);
+
+	list_for_each_entry(arvif, &ar->arvifs, list) {
+		param->vdev_id = arvif->vdev_id;
+		ret = ath11k_mac_vif_send_coex_config(arvif, param);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
