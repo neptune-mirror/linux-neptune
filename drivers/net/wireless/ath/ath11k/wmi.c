@@ -3966,6 +3966,7 @@ ath11k_wmi_copy_resource_config(struct wmi_resource_config *wmi_cfg,
 	wmi_cfg->sched_params = tg_cfg->sched_params;
 	wmi_cfg->twt_ap_pdev_count = tg_cfg->twt_ap_pdev_count;
 	wmi_cfg->twt_ap_sta_count = tg_cfg->twt_ap_sta_count;
+	wmi_cfg->host_service_flags = tg_cfg->host_service_flags;
 }
 
 static int ath11k_init_cmd_send(struct ath11k_pdev_wmi *wmi,
