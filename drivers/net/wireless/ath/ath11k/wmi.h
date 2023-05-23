@@ -5985,6 +5985,28 @@ enum wmi_sta_keepalive_method {
 #define WMI_STA_KEEPALIVE_INTERVAL_DEFAULT	30
 #define WMI_STA_KEEPALIVE_INTERVAL_DISABLE	0
 
+#define UNIT_TEST_MAX_NUM_ARGS    8
+
+struct unit_test_cmd {
+	u32 vdev_id;
+	u32 module_id;
+	u32 num_args;
+	u32 args[UNIT_TEST_MAX_NUM_ARGS];
+};
+
+struct wmi_unit_test_cmd_fixed_param {
+	u32 tlv_header;
+	u32 vdev_id;
+	u32 module_id;
+	u32 num_args;
+	u32 diag_token;
+	/**
+	 * TLV (tag length value) parameters follow the wmi_unit_test_cmd_fixed_param
+	 * structure. The TLV's are:
+	 *     u32 args[];
+	 */
+} __packed;
+
 int ath11k_wmi_cmd_send(struct ath11k_pdev_wmi *wmi, struct sk_buff *skb,
 			u32 cmd_id);
 struct sk_buff *ath11k_wmi_alloc_skb(struct ath11k_wmi_base *wmi_sc, u32 len);
@@ -6148,6 +6170,7 @@ int ath11k_wmi_scan_prob_req_oui(struct ath11k *ar,
 				 const u8 mac_addr[ETH_ALEN]);
 int ath11k_wmi_fw_dbglog_cfg(struct ath11k *ar, u32 *module_id_bitmap,
 			     struct ath11k_fw_dbglog *dbglog);
+int ath11k_wmi_set_unit_test(struct ath11k *ar, struct unit_test_cmd *unit_test);
 int ath11k_wmi_wow_config_pno(struct ath11k *ar, u32 vdev_id,
 			      struct wmi_pno_scan_req  *pno_scan);
 int ath11k_wmi_wow_del_pattern(struct ath11k *ar, u32 vdev_id, u32 pattern_id);

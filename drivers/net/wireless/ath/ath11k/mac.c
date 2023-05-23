@@ -23,6 +23,7 @@
 #include "debugfs_sta.h"
 #include "hif.h"
 #include "wow.h"
+#include "unitest.h"
 
 #define CHAN2G(_channel, _freq, _flags) { \
 	.band                   = NL80211_BAND_2GHZ, \
@@ -248,6 +249,10 @@ static const u32 ath11k_smps_map[] = {
 	[WLAN_HT_CAP_SM_PS_DYNAMIC] = WMI_PEER_SMPS_DYNAMIC,
 	[WLAN_HT_CAP_SM_PS_INVALID] = WMI_PEER_SMPS_PS_NONE,
 	[WLAN_HT_CAP_SM_PS_DISABLED] = WMI_PEER_SMPS_PS_NONE,
+};
+
+static struct wiphy_vendor_command ath11k_vendor_cmds[] = {
+	ath11k_unit_test_command,
 };
 
 static int ath11k_start_vdev_delay(struct ieee80211_hw *hw,
@@ -9097,6 +9102,8 @@ static int __ath11k_mac_register(struct ath11k *ar)
 	ar->hw->wiphy->iftype_ext_capab = ath11k_iftypes_ext_capa;
 	ar->hw->wiphy->num_iftype_ext_capab =
 		ARRAY_SIZE(ath11k_iftypes_ext_capa);
+	ar->hw->wiphy->vendor_commands = ath11k_vendor_cmds;
+	ar->hw->wiphy->n_vendor_commands = ARRAY_SIZE(ath11k_vendor_cmds);
 
 	if (ar->supports_6ghz) {
 		wiphy_ext_feature_set(ar->hw->wiphy,
