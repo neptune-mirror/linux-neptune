@@ -527,3 +527,18 @@ int ath11k_mhi_resume(struct ath11k_pci *ab_pci)
 
 	return 0;
 }
+
+
+int ath11k_mhi_force_rddm(struct ath11k_pci *ab_pci)
+{
+	struct ath11k_base *ab = ab_pci->ab;
+	int ret;
+
+	ret = mhi_force_rddm_mode(ab_pci->mhi_ctrl);
+	if (ret) {
+		ath11k_warn(ab, "failed to resume mhi: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
