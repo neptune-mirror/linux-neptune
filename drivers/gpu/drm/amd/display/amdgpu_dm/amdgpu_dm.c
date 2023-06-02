@@ -146,6 +146,9 @@ MODULE_FIRMWARE(FIRMWARE_NAVI12_DMCU);
 /* Number of bytes in PSP footer for firmware. */
 #define PSP_FOOTER_BYTES 0x100
 
+/* Maximum backlight level. */
+#define AMDGPU_MAX_BL_LEVEL 0xFFFF
+
 /**
  * DOC: overview
  *
@@ -2256,6 +2259,7 @@ static int detect_mst_link_for_all_connectors(struct drm_device *dev)
 			ret = drm_dp_mst_topology_mgr_set_mst(&aconnector->mst_mgr, true);
 			if (ret < 0) {
 				DRM_ERROR("DM_MST: Failed to start MST\n");
+				aconnector->mst_mgr.mst_state = false;
 				aconnector->dc_link->type =
 					dc_connection_single;
 				ret = dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
@@ -2323,6 +2327,7 @@ static void s3_handle_mst(struct drm_device *dev, bool suspend)
 	struct drm_dp_mst_topology_mgr *mgr;
 	int ret;
 	bool need_hotplug = false;
+	bool is_dp_alt_mode = false;
 
 	drm_connector_list_iter_begin(dev, &iter);
 	drm_for_each_connector_iter(connector, &iter) {
@@ -2346,9 +2351,21 @@ static void s3_handle_mst(struct drm_device *dev, bool suspend)
 
 			ret = drm_dp_mst_topology_mgr_resume(mgr, true);
 			if (ret < 0) {
-				dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
-					aconnector->dc_link);
-				need_hotplug = true;
+				aconnector->dc_link->mst_dpcd_fail_on_resume = true;
+				is_dp_alt_mode = wait_for_entering_dp_alt_mode(aconnector->dc_link);
+				if (is_dp_alt_mode) {
+					do {
+						ret = drm_dp_dpcd_read(mgr->aux, DP_DPCD_REV, mgr->dpcd, 1);
+					} while (ret != 1);
+					msleep(50);
+					ret = drm_dp_mst_topology_mgr_resume(mgr, true);
+				}
+
+				if (!is_dp_alt_mode || ret < 0) {
+					dm_helpers_dp_mst_stop_top_mgr(aconnector->dc_link->ctx,
+						aconnector->dc_link);
+					need_hotplug = true;
+				}
 			}
 		}
 	}
@@ -4000,7 +4017,7 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 	return 0;
 }
 
-#define AMDGPU_DM_DEFAULT_MIN_BACKLIGHT 12
+#define AMDGPU_DM_DEFAULT_MIN_BACKLIGHT 0
 #define AMDGPU_DM_DEFAULT_MAX_BACKLIGHT 255
 #define AUX_BL_DEFAULT_TRANSITION_TIME_MS 50
 
@@ -4018,11 +4035,27 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 	amdgpu_acpi_get_backlight_caps(&caps);
 	if (caps.caps_valid) {
 		dm->backlight_caps[bl_idx].caps_valid = true;
+
+		printk(KERN_NOTICE"VLV Successfully queried backlight range over ACPI: %d %d\n",
+		       (int) caps.min_input_signal, (int) caps.max_input_signal);
+
+		if ( caps.min_input_signal != AMDGPU_DM_DEFAULT_MIN_BACKLIGHT ||
+			caps.max_input_signal != AMDGPU_DM_DEFAULT_MAX_BACKLIGHT )
+		{
+			caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
+			caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
+
+			printk(KERN_NOTICE"VLV OVERRIDE backlight range: %d %d\n",
+			       (int) caps.min_input_signal, (int) caps.max_input_signal);
+		}
+
 		if (caps.aux_support)
 			return;
 		dm->backlight_caps[bl_idx].min_input_signal = caps.min_input_signal;
 		dm->backlight_caps[bl_idx].max_input_signal = caps.max_input_signal;
 	} else {
+		printk(KERN_NOTICE"VLV ACPI does not provide backlight range, using defaults: %d %d\n",
+		       AMDGPU_DM_DEFAULT_MIN_BACKLIGHT, AMDGPU_DM_DEFAULT_MAX_BACKLIGHT);
 		dm->backlight_caps[bl_idx].min_input_signal =
 				AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 		dm->backlight_caps[bl_idx].max_input_signal =
@@ -4031,6 +4064,9 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 #else
 	if (dm->backlight_caps[bl_idx].aux_support)
 		return;
+
+	printk(KERN_NOTICE"VLV Kernel built without ACPI. using backlight range defaults: %d %d\n",
+	       AMDGPU_DM_DEFAULT_MIN_BACKLIGHT, AMDGPU_DM_DEFAULT_MAX_BACKLIGHT);
 
 	dm->backlight_caps[bl_idx].min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 	dm->backlight_caps[bl_idx].max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
@@ -4063,7 +4099,7 @@ static u32 convert_brightness_from_user(const struct amdgpu_dm_backlight_caps *c
 	if (!get_brightness_range(caps, &min, &max))
 		return brightness;
 
-	// Rescale 0..255 to min..max
+	// Rescale 0..AMDGPU_MAX_BL_LEVEL to min..max
 	return min + DIV_ROUND_CLOSEST((max - min) * brightness,
 				       AMDGPU_MAX_BL_LEVEL);
 }
@@ -4078,7 +4114,7 @@ static u32 convert_brightness_to_user(const struct amdgpu_dm_backlight_caps *cap
 
 	if (brightness < min)
 		return 0;
-	// Rescale min..max to 0..255
+	// Rescale min..max to 0..AMDGPU_MAX_BL_LEVEL
 	return DIV_ROUND_CLOSEST(AMDGPU_MAX_BL_LEVEL * (brightness - min),
 				 max - min);
 }
@@ -4090,12 +4126,16 @@ static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	struct amdgpu_dm_backlight_caps caps;
 	struct dc_link *link;
 	u32 brightness;
+	u32 prev_brightness;
 	bool rc;
 
 	amdgpu_dm_update_backlight_caps(dm, bl_idx);
 	caps = dm->backlight_caps[bl_idx];
 
+	prev_brightness = dm->brightness[bl_idx];
 	dm->brightness[bl_idx] = user_brightness;
+	dm->actual_brightness[bl_idx] = user_brightness;
+
 	/* update scratch register */
 	if (bl_idx == 0)
 		amdgpu_atombios_scratch_regs_set_backlight_level(dm->adev, dm->brightness[bl_idx]);
@@ -4114,8 +4154,8 @@ static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 			DRM_DEBUG("DM: Failed to update backlight on eDP[%d]\n", bl_idx);
 	}
 
-	if (rc)
-		dm->actual_brightness[bl_idx] = user_brightness;
+	if (!rc)
+		dm->actual_brightness[bl_idx] = prev_brightness;
 }
 
 static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
@@ -4276,6 +4316,7 @@ static void setup_backlight_device(struct amdgpu_display_manager *dm,
 
 	amdgpu_dm_update_backlight_caps(dm, bl_idx);
 	dm->brightness[bl_idx] = AMDGPU_MAX_BL_LEVEL;
+	dm->actual_brightness[bl_idx] = AMDGPU_MAX_BL_LEVEL;
 	dm->backlight_link[bl_idx] = link;
 	dm->num_of_edps++;
 
@@ -8086,7 +8127,15 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		 * Only allow immediate flips for fast updates that don't
 		 * change memory domain, FB pitch, DCC state, rotation or
 		 * mirroring.
+		 *
+		 * dm_crtc_helper_atomic_check() only accepts async flips with
+		 * fast updates.
 		 */
+		if (crtc->state->async_flip &&
+		    acrtc_state->update_type != UPDATE_TYPE_FAST)
+			drm_warn_once(state->dev,
+				      "[PLANE:%d:%s] async flip with non-fast update\n",
+				      plane->base.id, plane->name);
 		bundle->flip_addrs[planes_count].flip_immediate =
 			crtc->state->async_flip &&
 			acrtc_state->update_type == UPDATE_TYPE_FAST &&
@@ -9842,6 +9891,28 @@ static int dm_check_crtc_cursor(struct drm_atomic_state *state,
 		    new_underlying_state->crtc_x + new_underlying_state->crtc_w >= new_crtc_state->mode.hdisplay &&
 		    new_underlying_state->crtc_y + new_underlying_state->crtc_h >= new_crtc_state->mode.vdisplay)
 			break;
+	}
+
+	if (new_underlying_state->rotation != new_cursor_state->rotation) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane rotation doesn't match underlying plane\n");
+		return -EINVAL;
+	}
+
+	/* In theory we could probably support YUV cursors when the underlying
+	 * plane uses a YUV format, but there's no use-case for it yet. */
+	if (new_underlying_state->fb && new_underlying_state->fb->format && new_underlying_state->fb->format->is_yuv) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane can't be used with YUV underlying plane\n");
+		return -EINVAL;
+	}
+
+	if (new_underlying_state->alpha != DRM_BLEND_ALPHA_OPAQUE) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane can't be used with non-opaque underlying plane\n");
+		return -EINVAL;
+	}
+
+	if (new_underlying_state->pixel_blend_mode != DRM_MODE_BLEND_PREMULTI) {
+		drm_dbg_atomic(crtc->dev, "Cursor plane can't be used with non-premultiplied underlying plane\n");
+		return -EINVAL;
 	}
 
 	return 0;
