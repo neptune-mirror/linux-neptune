@@ -482,13 +482,23 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 	enum mhi_state state;
 	enum mhi_pm_state pm_state = 0;
 	enum mhi_ee_type ee;
+	int ret;
+	bool can_wake;
 
-	mhi_device_get_sync(mhi_cntrl->mhi_dev);
+	can_wake = MHI_WAKE_DB_SET_VALID(mhi_cntrl->pm_state) &&
+	    MHI_WAKE_DB_CLEAR_VALID(mhi_cntrl->pm_state);
+
+	if (can_wake) {
+		ret = mhi_device_get_sync(mhi_cntrl->mhi_dev);
+		if (ret)
+			printk("%s %d: mhi get failed %d\n", __func__, __LINE__, ret);
+	}
 
 	write_lock_irq(&mhi_cntrl->pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
 		write_unlock_irq(&mhi_cntrl->pm_lock);
-		mhi_device_put(mhi_cntrl->mhi_dev);
+		if (can_wake)
+			mhi_device_put(mhi_cntrl->mhi_dev);
 		goto exit_intvec;
 	}
 
@@ -505,7 +515,8 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 					       MHI_PM_SYS_ERR_DETECT);
 	}
 	write_unlock_irq(&mhi_cntrl->pm_lock);
-	mhi_device_put(mhi_cntrl->mhi_dev);
+	if (can_wake)
+		mhi_device_put(mhi_cntrl->mhi_dev);
 
 	if (pm_state != MHI_PM_SYS_ERR_DETECT)
 		goto exit_intvec;
