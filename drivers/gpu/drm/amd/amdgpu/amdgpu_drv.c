@@ -194,6 +194,7 @@ int amdgpu_num_kcq = -1;
 int amdgpu_smartshift_bias;
 int amdgpu_use_xgmi_p2p = 1;
 int amdgpu_vcnfw_log;
+int amdgpu_indirect_sram = -1;
 int amdgpu_sg_display = -1; /* auto */
 int amdgpu_user_partt_mode = AMDGPU_AUTO_COMPUTE_PARTITION_MODE;
 
@@ -959,6 +960,14 @@ module_param_named(sg_display, amdgpu_sg_display, int, 0444);
 MODULE_PARM_DESC(smu_pptable_id,
 	"specify pptable id to be used (-1 = auto(default) value, 0 = use pptable from vbios, > 0 = soft pptable id)");
 module_param_named(smu_pptable_id, amdgpu_smu_pptable_id, int, 0444);
+
+/**
+ * DOC: indirect_sram (int)
+ * Allow users to force using (or not) the VCN indirect SRAM mode in the fw load
+ * code. Default is -1, meaning auto (aka, don't mess with driver's behavior).
+ */
+MODULE_PARM_DESC(indirect_sram, "Force VCN indirect SRAM (-1 = auto (default), 0 = disabled, 1 = enabled)");
+module_param_named(indirect_sram, amdgpu_indirect_sram, int, 0444);
 
 /**
  * DOC: partition_mode (int)
