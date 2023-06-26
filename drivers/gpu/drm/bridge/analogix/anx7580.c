@@ -271,95 +271,6 @@ static void anx7580_get_dp_vtotal(anx7580_t * anx, uint16_t * dp_vtotal)
 	*dp_vtotal = high << 8 | low;
 }
 
-static void anx7580_clear_interrupts( anx7580_t * anx )
-{
-	// clear the audio int mask so that we can service and clear interrupts
-	// due to the audio pll resetting.  this interrupt will mask future interrupts if not handled
-	anx7580_i2c_write_byte( anx, SLAVEID_DP_TOP, ADDR_INTR_MASK, ~AUDIO_INTR );
-	// from anx7530 android driver: clear OCM based interrupt interface?
-	// clear 01:90 and 01:91 by i2c write block funciton
-	anx7580_i2c_write_byte( anx, SLAVEID_SPI, INT_NOTIFY_MCU0, 0 );
-	anx7580_i2c_write_byte( anx, SLAVEID_SPI, INT_NOTIFY_MCU1, 0 );
-	// Clear SW and PLL interrupts, and unmask PLL interrupt
-	// otherwise PLL interrupt blocks future SW interrupts
-	anx7580_i2c_write_byte( anx, SLAVEID_DP_TOP, ADDR_SW_INTR_CTRL, 0 );
-}
-
-static irqreturn_t anx7580_irq_handler_top(int irq, void *dev_id)
-{
-	// handle irq in threaded handler for i2c functions
-    return IRQ_WAKE_THREAD;
-}
-
-// anx7580 interrupt handler
-// main purpose is to handle refresh rate changes
-static irqreturn_t anx7580_irq_handler( int irq, void *dev_id )
-{
-	uint16_t dp_vtotal_new;
-	uint8_t notify_reg[2];
-	int32_t vfp;
-	struct i2c_client *client = dev_id;
-    anx7580_t *anx = dev_get_drvdata( &client->dev );
-	anx7580_i2c_read_block( anx, SLAVEID_SPI, INT_NOTIFY_MCU0, 2, notify_reg );
-
-	//pr_info( "anx7580: got int %x %x\n", notify_reg[0], notify_reg[1]);
-
-	// video stream change, check msa for a change in video mode
-	if ( notify_reg[0] & VIDEO_INPUT_EMPTY  ) { 
-		// Do nothing here, we get this interrupt before the new mode is stable
-	} else if ( notify_reg[0] & VIDEO_STABLE ) {
-		anx7580_get_dp_vtotal( anx, &dp_vtotal_new );
-	    pr_info( "anx7580: vtotal old %d vtotal new %d\n", anx->dp_vtotal, dp_vtotal_new );
-		if( anx->dp_vtotal != dp_vtotal_new && dp_vtotal_new > 0 )
-		{
-			#define PANEL_VACT 1280
-			#define PANEL_VBP  22 /* for EV1 Panels TODO make this configurable */
-			vfp = dp_vtotal_new - PANEL_VACT - PANEL_VBP;
-			if (vfp)
-			{
-				pr_info( "anx7580: mode change detected, setting new VFP %d\n", vfp );
-				anx->dp_vtotal = dp_vtotal_new;
-				
-				// video mode vfp
-				anx7580_i2c_write_byte( anx, SLAVEID_PPS, REG_ADDR_V_F_PORCH_CFG_L, vfp & 0xff ); // [51]  Vfp <7:0>
-				anx7580_i2c_write_byte( anx, SLAVEID_PPS, REG_ADDR_V_F_PORCH_CFG_H, vfp >> 8 ); // [51]  Vfp <13:8>
-				// mipi vfp
-				anx7580_i2c_write_byte4( anx, SLAVEID_MIPI_PORT0, VID_VFP_LINES, vfp ); // [186] Vfp (lines)       
-				anx7580_mipi_reset( anx );
-			}
-		}
-	}
-	anx7580_clear_interrupts( anx );
-	return IRQ_HANDLED;
-}
-
-// on initial setup we sometimes miss the interrupt from the analogix
-// so we run a delayed work handler to clean up the interrupt status
-static void anx7580_delayed_work_handler(struct work_struct *work)
-{
-	// check to see if backlight is still in the correct mode
-	uint8_t int_reg;
-	uint8_t notify_reg[2];
-
-	anx7580_t *anx = container_of((struct delayed_work *)work, anx7580_t, work);
-	
-	anx7580_i2c_read_byte( anx, SLAVEID_DP_TOP, ADDR_SW_INTR_CTRL, &int_reg );
-	anx7580_i2c_read_block( anx, SLAVEID_SPI, INT_NOTIFY_MCU0, 2, notify_reg );
-	// if interrupt was set and we missed it, clear it and schedule another check back
-	// otherwise this would be handled in the interrupt
-	if ( int_reg || notify_reg[0] || notify_reg[1] ) {
-		anx7580_clear_interrupts( anx );
-		//pr_info("anx7580: schedule another check on in status %x\n", int_reg);
-		schedule_delayed_work(&anx->work, HZ/4);
-	}
-}
-
-static void anx7580_work_init(anx7580_t *anx)
-{
-	INIT_DELAYED_WORK(&anx->work, anx7580_delayed_work_handler);
-	schedule_delayed_work(&anx->work, HZ/4);
-}
-
 // sysfs interface 
 static ssize_t bmode_store(struct device *device,
 			 struct device_attribute *attr,
@@ -369,23 +280,17 @@ static ssize_t bmode_store(struct device *device,
 	unsigned int mode;
 	anx7580_t *anx = dev_get_drvdata(device);
 	if ( !anx ) {
-		printk( "anx7580: failed to get anx driver data\n" );
 		return 0;
 	}
 
     result = sscanf( buf, "%d", &mode );
 	if( result == 1 ) {
 		if ( mode == 1 ){
-			pr_info( "anx7580: setting high brightness mode\n" );
 			anx7580_panel_write_immediate( anx, 0x53, 0xE0 ); // high brightness mode
 		} else if (mode == 2){
-			pr_info( "anx7580: setting normal brightness mode in 32 frames\n" );
 			anx7580_panel_write_immediate( anx, 0x53, 0x28 ); // normal mode, update brightness within 32 frame
 		} else if (mode == 3){
-			pr_info( "anx7580: setting normal brightness mode in 1 frame\n" );
 			anx7580_panel_write_immediate( anx, 0x53, 0x20 ); // normal mode, update brightness within 32 frame
-		} else {
-			pr_info( "anx7580: brightness mode %d\n", mode );
 		}
 	}
 	return count;
@@ -398,7 +303,6 @@ static ssize_t bmode_show(struct device *device,
 	anx7580_t *anx = dev_get_drvdata( device );
 	// TODO return current brightness mode
 	bytes_copied = anx7580_dcs_read( anx, 0x53, 1, &brightness_mode_reg );
-	printk("anx7580 read %d bytes\n", bytes_copied);
 	if ( brightness_mode_reg == 0xE0 ) {
 		count = sprintf( buf, "High Brightness\n");
 	} else if ( brightness_mode_reg == 0x28 ) {
@@ -429,7 +333,6 @@ static ssize_t brightness_store(struct device *device,
 		cmd[1] = ( brightness & 0xFF00 ) >> 8;
 		cmd[2] = brightness & 0xFF;
 
-		pr_info("anx7580: setting %d brightness\n", brightness);
 		anx7580_panel_write_long( anx, cmd, 3 );
 	}
 	return count;
@@ -442,7 +345,6 @@ static ssize_t brightness_show( struct device *device, struct device_attribute *
 	anx7580_t *anx = dev_get_drvdata( device );
 	// TODO return current brightness mode
 	bytes_copied = anx7580_dcs_read( anx, 0x51, 2, brightness_reg );
-	printk( "anx7580 read %d bytes\n", bytes_copied );
 	if (bytes_copied) {
 		count = sprintf( buf, "Brightness %d\n", (int)(brightness_reg[0] << 8 | brightness_reg[1]) );
 	} else {
@@ -620,7 +522,7 @@ static int anx7580_probe(struct i2c_client *client,
 			      const struct i2c_device_id *id)
 {
 	anx7580_t *anx;
-	unsigned int i, irq;
+	unsigned int i;
 	int ret;
 
 	if ( !i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_I2C_BLOCK) ) {
@@ -649,21 +551,6 @@ static int anx7580_probe(struct i2c_client *client,
 		anx7580_get_dp_vtotal(anx, &anx->dp_vtotal);
 		pr_info("anx7580: initial dp vtotal %d\n", anx->dp_vtotal);
     }
-
-	// setup irq
-	irq = acpi_dev_gpio_irq_get( ACPI_COMPANION(&client->dev), 0 );
-	
-	if ( irq <= 0 ) {
-		pr_err( "anx7580: could not get acpi irq %d\n", irq );
-	} else {
-		pr_info( "anx7580: got irq %d\n", irq );
-		ret = devm_request_threaded_irq( &client->dev, irq, anx7580_irq_handler_top, anx7580_irq_handler,
-									IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "ANX7580_IRQ", client );
-		if ( ret )
-			pr_err( "anx7580: request interrupt failed with %d\n", ret );
-		anx7580_clear_interrupts( anx );
-		anx7580_work_init( anx );
-	}
 
 	for ( i=0; i < ARRAY_SIZE(anx7580_attrs); i++ )
 	{
