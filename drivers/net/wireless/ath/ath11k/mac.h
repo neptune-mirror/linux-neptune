@@ -177,4 +177,7 @@ int ath11k_mac_vif_set_keepalive(struct ath11k_vif *arvif,
 				 u32 interval);
 int ath11k_mac_send_coex_config(struct ath11k *ar,
 				struct wmi_coex_config_params *param);
+void ath11k_mac_fill_reg_tpc_info(struct ath11k *ar,
+				  struct ieee80211_vif *vif,
+				  struct ieee80211_chanctx_conf *ctx);
 #endif
