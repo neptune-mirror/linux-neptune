@@ -7585,7 +7585,7 @@ static void ath11k_mac_parse_tx_pwr_env(struct ath11k *ar,
 	struct ath11k_vif *arvif = (void *)vif->drv_priv;
 	struct ieee80211_bss_conf *bss_conf = &vif->bss_conf;
 	struct ieee80211_tx_pwr_env *single_tpe;
-	enum wmi_reg_6g_client_type client_type;
+	enum wmi_reg_6ghz_client_type client_type;
 	struct cur_regulatory_info *reg_info;
 	int i;
 	u8 pwr_count, pwr_interpret, pwr_category;

@@ -332,7 +332,7 @@ struct chan_power_info {
 struct ath11k_reg_tpc_power_info {
 	bool is_psd_power;
 	u8 eirp_power;
-	enum wmi_reg_6g_ap_type power_type_6g;
+	enum wmi_reg_6ghz_ap_type power_type_6g;
 	u8 num_pwr_levels;
 	u8 reg_max[IEEE80211_MAX_NUM_PWR_LEVEL];
 	u8 ap_constraint_power;
