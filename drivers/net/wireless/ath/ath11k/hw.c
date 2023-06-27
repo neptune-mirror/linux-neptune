@@ -851,6 +851,12 @@ bool ath11k_hw_supports_6g_cc_ext(struct ath11k *ar)
 			 ar->ab->wmi_ab.svc_map)) && ar->supports_6ghz;
 }
 
+bool ath11k_hw_supports_tpc_ext(struct ath11k *ar)
+{
+	return ath11k_hw_supports_6g_cc_ext(ar) &&
+	       test_bit(WMI_TLV_SERVICE_EXT_TPC_REG_SUPPORT, ar->ab->wmi_ab.svc_map);
+}
+
 const struct ath11k_hw_ops ipq8074_ops = {
 	.get_hw_mac_from_pdev_id = ath11k_hw_ipq8074_mac_from_pdev_id,
 	.wmi_init_config = ath11k_init_wmi_config_ipq8074,
