@@ -315,6 +315,8 @@ static inline int ath11k_hw_mac_id_to_srng_id(struct ath11k_hw_params *hw,
 	return 0;
 }
 
+bool ath11k_hw_supports_6g_cc_ext(struct ath11k *ar);
+
 struct ath11k_fw_ie {
 	__le32 id;
 	__le32 len;
