@@ -515,7 +515,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.tcl_ring_retry = true,
 		.tx_ring_size = DP_TCL_DATA_RING_SIZE,
 		.smp2p_wow_exit = false,
-		.coex_isolation = false,
+		.coex_isolation = true,
 	},
 	{
 		.name = "wcn6855 hw2.1",
