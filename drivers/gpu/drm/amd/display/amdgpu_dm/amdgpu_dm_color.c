@@ -968,7 +968,7 @@ __set_dm_plane_degamma(struct drm_plane_state *plane_state,
 		dc_plane_state->in_transfer_func->type =
 			TF_TYPE_PREDEFINED;
 
-		if (!mod_color_calculate_degamma_params(NULL,
+		if (!mod_color_calculate_degamma_params(color_caps,
 		    dc_plane_state->in_transfer_func, NULL, false))
 			return -ENOMEM;
 	}
