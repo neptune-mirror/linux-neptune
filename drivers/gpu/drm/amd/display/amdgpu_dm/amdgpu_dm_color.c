@@ -523,7 +523,8 @@ static int amdgpu_dm_atomic_blend_lut(const struct drm_color_lut *blend_lut,
 				       bool has_rom,
 				       enum dc_transfer_func_predefined tf,
 				       uint32_t blend_size,
-				       struct dc_transfer_func *func_blend)
+				       struct dc_transfer_func *func_blend,
+					   struct dc_color_caps *color_caps)
 {
 	int ret = 0;
 
@@ -538,7 +539,7 @@ static int amdgpu_dm_atomic_blend_lut(const struct drm_color_lut *blend_lut,
 		func_blend->tf = tf;
 		func_blend->sdr_ref_white_level = SDR_WHITE_LEVEL_INIT_VALUE;
 
-		ret = __set_input_tf(NULL, func_blend, blend_lut, blend_size);
+		ret = __set_input_tf(color_caps, func_blend, blend_lut, blend_size);
 	} else {
 		func_blend->type = TF_TYPE_BYPASS;
 		func_blend->tf = TRANSFER_FUNCTION_LINEAR;
@@ -1017,7 +1018,8 @@ amdgpu_dm_plane_set_color_properties(struct drm_plane_state *plane_state,
 
 	ret = amdgpu_dm_atomic_blend_lut(blend_lut, false,
 					 drm_tf_to_dc_tf(blend_tf),
-					 blend_size, dc_plane_state->blend_tf);
+					 blend_size, dc_plane_state->blend_tf,
+					 color_caps);
 	if (ret) {
 		drm_dbg_kms(plane_state->plane->dev,
 			    "setting plane %d gamma lut failed.\n",
