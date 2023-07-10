@@ -9484,6 +9484,7 @@ skip_modeset:
 	 * when a modeset is needed, to ensure it gets reprogrammed.
 	 */
 	if (dm_new_crtc_state->base.color_mgmt_changed ||
+		dm_old_crtc_state->regamma_tf != dm_new_conn_state->regamma_tf ||
 	    drm_atomic_crtc_needs_modeset(new_crtc_state)) {
 		if (!dm_state) {
 			ret = dm_atomic_get_state(state, &dm_state);
