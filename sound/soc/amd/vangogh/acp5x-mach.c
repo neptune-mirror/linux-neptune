@@ -465,6 +465,13 @@ static const struct dmi_system_id acp5x_vg_quirk_table[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Jupiter"),
 		}
 	},
+	{
+		.callback = acp5x_vg_quirk_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Valve"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Galileo"),
+		}
+	},
 	{}
 };
 
