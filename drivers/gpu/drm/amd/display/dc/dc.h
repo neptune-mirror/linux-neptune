@@ -1428,6 +1428,7 @@ struct dc_link {
 	bool sync_lt_in_progress;
 	bool skip_stream_reenable;
 	bool is_internal_display;
+	bool mst_dpcd_fail_on_resume;
 	/** @todo Rename. Flag an endpoint as having a programmable mapping to a DIG encoder. */
 	bool is_dig_mapping_flexible;
 	bool hpd_status; /* HPD status of link without physical HPD pin. */
@@ -1849,6 +1850,7 @@ bool dc_link_is_dp_sink_present(struct dc_link *link);
 void dc_link_set_drive_settings(struct dc *dc,
 				struct link_training_settings *lt_settings,
 				struct dc_link *link);
+bool wait_for_entering_dp_alt_mode(struct dc_link *link);
 
 /* Enable a test pattern in Link or PHY layer in an active link for compliance
  * test or debugging purpose. The test pattern will remain until next un-plug.
