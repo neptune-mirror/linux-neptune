@@ -1,0 +1,38 @@
+6.1/features/stable-updates:
+    a456e17438819ed77f63d16926f96101ca215f09 ("Linux 6.1.39")
+6.1/features/upstream:
+    5a5af82ba9ce2ab0dae8f932a7ea9787b1bf1985 ("drm/amdgpu: fix clearing mappings for BOs that are always valid in VM")
+6.1/features/amd-staging-drm-next:
+    e786aef0869c711a70680d315ac2b838f03448ed ("drm/amd/display: remove unused definition")
+6.1/features/acpi:
+    00ee498fe645228893d0f6d5a85b905fbf6949c5 ("ACPI: Make acpi_handle_list dynamically allocated")
+6.1/features/amd-drm-extra:
+    21d3d767f6fdf39befaf32c69876428507fffc71 ("amd/drm: override backlight min value from 12 -> 0")
+6.1/features/amd-indirect-sram:
+    1921c7f967fb9dcab1aa8101bf25b2adac0b1c40 ("drm/amdgpu/vcn: Add parameter to force (en/dis)abling indirect SRAM mode")
+6.1/features/backlight-notif:
+    b9c444cedd8a0a832324ccaaf4e4313f9139b1c3 ("drivers: video: backlight: Disable backlight notification events.")
+6.1/features/cirrus-shared-boost:
+    e26b5a7f1f87e12746c76b3ee9858488b7884515 ("HACK: cs35l41: Disable pm_runtime")
+6.1/features/gpu-reset:
+    b65228799e5ac96211b0e4c342d0a4478a1b6410 ("drm/amdgpu: schedule GPU reset event work function")
+6.1/features/iio:
+    67f9515d30107c9ae585779e2c55d2f61840a152 ("iio: light: ltrf216a: Return floating point values")
+6.1/features/mm-soft-dirty-file:
+    a325a7b546ec539ca7877f258bb59beff9ef41fc ("mm: Use UFFD_WP to make per-pte soft dirty tracking work reliably.")
+6.1/features/quirks:
+    cd98b05c243860ff40ba3461fe6f29994b6086ef ("mmc: core: add safe_trim_quirk attribute")
+6.1/features/setup-gitlabci:
+    26ffc0a8886d71126fcedc0aca1bfc7dfcdbb004 ("gitlab-ci: Enable DRM_AMD_COLOR_STEAMDECK")
+6.1/features/steamdeck-mfd:
+    6a4d2bea1e5b5aa150e11a40b2ac4098de3c6491 ("hwmon: steamdeck-hwmon: Add support for max battery level/rate")
+6.1/features/tcp-timewait:
+    ef76035f50a1147a0d39b3d9c1b80b92a2961028 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.1/features/tsc:
+    9c1c58aa42c05f479c913bcbfae134e43c21029a ("x86: revert extra time added to check for tsc wraps")
+6.1/features/usb:
+    42c03cb9688e004b3ba2f433a616881f04eded36 ("usb: dwc3: Fix "linux,extcon-name"")
+6.1/features/hid:
+    841916866116fa6ec45d3fb5f271ae5498475e14 ("Input: xpad - Add GameSir VID for Xbox One controllers")
+6.1/features/amd-color-mgmt:
+    542e0795127db42f7ab7aa4383ace67e57d33c40 ("drm/amd/display: Typo fix for color_mgmt_changed hack")
