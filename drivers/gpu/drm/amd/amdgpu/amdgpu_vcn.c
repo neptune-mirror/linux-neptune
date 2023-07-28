@@ -189,6 +189,12 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 		}
 	}
 
+	if (amdgpu_indirect_sram >= 0) {
+		adev->vcn.indirect_sram = (bool)amdgpu_indirect_sram;
+		dev_warn(adev->dev, "Forcibly set indirect SRAM status to: %d\n",
+			 amdgpu_indirect_sram);
+	}
+
 	r = request_firmware(&adev->vcn.fw, fw_name, adev->dev);
 	if (r) {
 		dev_err(adev->dev, "amdgpu_vcn: Can't load firmware \"%s\"\n",
