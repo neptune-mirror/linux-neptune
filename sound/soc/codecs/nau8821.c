@@ -193,7 +193,7 @@ static const struct reg_default nau8821_reg_defaults[] = {
 	{ NAU8821_R73_RDAC, 0x0008 },
 	{ NAU8821_R74_MIC_BIAS, 0x0006 },
 	{ NAU8821_R76_BOOST, 0x0 },
-	{ NAU8821_R77_FEPGA, 0x0 },
+	{ NAU8821_R77_FEPGA, 0x22 },
 	{ NAU8821_R7E_PGA_GAIN, 0x0 },
 	{ NAU8821_R7F_POWER_UP_CONTROL, 0x0 },
 	{ NAU8821_R80_CHARGE_PUMP, 0x0 },
