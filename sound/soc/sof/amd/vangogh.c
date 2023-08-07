@@ -137,7 +137,6 @@ int sof_vangogh_ops_init(struct snd_sof_dev *sdev)
 
 	sof_vangogh_ops.drv = vangogh_sof_dai;
 	sof_vangogh_ops.num_drv = ARRAY_SIZE(vangogh_sof_dai);
-	sof_vangogh_ops.load_firmware = acp_sof_load_firmware;
 
 	return 0;
 }

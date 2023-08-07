@@ -41,7 +41,6 @@
 #define DSP_FW_RUN_ENABLE			0x01
 #define ACP_SHA_RUN				0x01
 #define ACP_SHA_RESET				0x02
-#define ACP_SHA_HEADER				0x01
 #define ACP_DMA_CH_RST				0x01
 #define ACP_DMA_CH_GRACEFUL_RST_EN		0x10
 #define ACP_ATU_CACHE_INVALID			0x01
@@ -80,8 +79,6 @@
 #define AMD_STACK_DUMP_SIZE			32
 
 #define SRAM1_SIZE				0x13A000
-
-#define FW_SIGNATURE				0x100
 
 enum clock_source {
 	ACP_CLOCK_96M = 0,
@@ -178,7 +175,6 @@ struct sof_amd_acp_desc {
 /* Common device data struct for ACP devices */
 struct acp_dev_data {
 	struct snd_sof_dev  *dev;
-	const struct firmware *fw_dbin;
 	/* DMIC device */
 	struct platform_device *dmic_dev;
 	unsigned int fw_bin_size;
@@ -192,7 +188,6 @@ struct acp_dev_data {
 	struct acp_dsp_stream stream_buf[ACP_MAX_STREAM];
 	struct acp_dsp_stream *dtrace_stream;
 	struct pci_dev *smn_dev;
-	bool signed_fw_image;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
@@ -212,7 +207,6 @@ int amd_sof_acp_remove(struct snd_sof_dev *sdev);
 /* DSP Loader callbacks */
 int acp_sof_dsp_run(struct snd_sof_dev *sdev);
 int acp_dsp_pre_fw_run(struct snd_sof_dev *sdev);
-int acp_sof_load_firmware(struct snd_sof_dev *sdev);
 int acp_get_bar_index(struct snd_sof_dev *sdev, u32 type);
 
 /* Block IO callbacks */
