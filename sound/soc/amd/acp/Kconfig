@@ -64,7 +64,6 @@ config SND_SOC_AMD_MACH_COMMON
 	select SND_SOC_NAU8821
 	select SND_SOC_CS35L41_SPI
 	select SND_SOC_CS35L41_I2C
-	select SND_SOC_MAX98388
 	help
 	  This option enables common Machine driver module for ACP.
 
