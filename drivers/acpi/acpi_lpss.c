@@ -561,7 +561,7 @@ static struct device *acpi_lpss_find_device(const char *hid, const char *uid)
 
 static bool acpi_lpss_dep(struct acpi_device *adev, acpi_handle handle)
 {
-	struct acpi_handle_list dep_devices;
+	struct acpi_handle_list *dep_devices;
 	acpi_status status;
 	int i;
 
@@ -575,11 +575,14 @@ static bool acpi_lpss_dep(struct acpi_device *adev, acpi_handle handle)
 		return false;
 	}
 
-	for (i = 0; i < dep_devices.count; i++) {
-		if (dep_devices.handles[i] == handle)
+	for (i = 0; i < dep_devices->count; i++) {
+		if (dep_devices->handles[i] == handle) {
+			kfree(dep_devices);
 			return true;
+		}
 	}
 
+	kfree(dep_devices);
 	return false;
 }
 
