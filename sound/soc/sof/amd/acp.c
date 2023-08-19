@@ -16,6 +16,11 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 
+#include <linux/fs.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
+
 #include "../ops.h"
 #include "acp.h"
 #include "acp-dsp-offset.h"
@@ -482,6 +487,92 @@ int amd_sof_acp_resume(struct snd_sof_dev *sdev)
 }
 EXPORT_SYMBOL_NS(amd_sof_acp_resume, SND_SOC_SOF_AMD_COMMON);
 
+static int acp_get_oem_strings(struct snd_sof_dev *sdev)
+{
+	const struct dmi_device *dev = NULL;
+	struct file *fp;
+	struct acp_oem_str *oem_strings;
+	int line = 0;
+	int Max_left_ch_id = 0x01000006;
+	int Max_right_ch_id = 0x02000006;
+	int Max_amb_temp_id = 0x03000008;
+	char *Max_amb_temp_val;
+	char str[5][30];
+	static unsigned int dsm_calib_data[18];
+
+	dsm_calib_data[0] = 0x03;
+	dsm_calib_data[1] = 0x040;
+	dsm_calib_data[2] = 0x464f53;	// hdr magic id
+	dsm_calib_data[3] = 0x0;		// IPC type - 0 for IPC3 and 1 for IPC4
+	dsm_calib_data[4] = 0x1c;		// Size of payload
+	dsm_calib_data[5] = 0x3017000;	// ABI version
+	/* reserved[4] */
+	dsm_calib_data[6] = 0x0;
+	dsm_calib_data[7] = 0x0;
+	dsm_calib_data[8] = 0x0;
+	dsm_calib_data[9] = 0x0;
+	dsm_calib_data[10] = 0x18;		// data blob size
+
+	oem_strings = devm_kcalloc(sdev->dev, MAX_OEM_STRINGS, sizeof(oem_strings), GFP_KERNEL);
+	if (!oem_strings)
+		return -ENOMEM;
+
+	pr_err("DEBUG: %s ########### Trying to OEM strings \n", __func__);
+
+	while ((dev = dmi_find_device(DMI_DEV_TYPE_OEM_STRING, NULL, dev))) {
+		if (sscanf(dev->name, "%s", str[line]) <= 5) {
+			switch (line) {
+			case 0:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 1:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 2:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 3:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 4:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			default:
+				break;
+			}
+			++line;
+		}
+	}
+	for (int i=1; i<=MAX_OEM_STRINGS; i++)
+		pr_err("DEBUG: oem_str[%d][%s] \n", i, oem_strings[i]);
+
+	dsm_calib_data[0+11] = CHANGE_ENDIANNESS(Max_left_ch_id);
+	dsm_calib_data[2+11] = CHANGE_ENDIANNESS(Max_right_ch_id);
+	dsm_calib_data[4+11] = CHANGE_ENDIANNESS(Max_amb_temp_id);
+
+	sscanf(&oem_strings[1].name[13], "%x", &dsm_calib_data[1+11]);
+	dsm_calib_data[1+11] = CHANGE_ENDIANNESS(dsm_calib_data[1+11]);
+
+	Max_amb_temp_val = devm_kasprintf(sdev->dev, GFP_KERNEL,"%0.8s", &oem_strings[3].name[2]);
+	sscanf(Max_amb_temp_val, "%x", &dsm_calib_data[3+11]);
+	dsm_calib_data[3+11] = CHANGE_ENDIANNESS(dsm_calib_data[3+11]);
+
+	sscanf(&oem_strings[3].name[13], "%x", &dsm_calib_data[5+11]);
+	dsm_calib_data[5+11] = CHANGE_ENDIANNESS(dsm_calib_data[5+11]);
+
+	fp = filp_open("/lib/firmware/amd/sof/dsmcalib.bin", O_RDWR | O_CREAT, 0666);
+	if (IS_ERR(fp)) {
+			pr_err("DEBUG: failed to create file \n");
+			return -1;
+	}
+	dev_err(sdev->dev,"DEBUG: /lib/firmware/amd/sof/dsmcalib.bin created \n");
+
+	kernel_write(fp, &dsm_calib_data, 18 * sizeof(int), 0);
+	filp_close(fp, NULL);
+
+	return 0;
+}
+
 int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 {
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
@@ -562,6 +653,8 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 
 		dev_dbg(sdev->dev, "fw_code_bin:%s, fw_data_bin:%s\n", adata->fw_code_bin,
 			adata->fw_data_bin);
+
+		acp_get_oem_strings(sdev);
 	}
 	adata->enable_fw_debug = enable_fw_debug;
 	acp_memory_init(sdev);

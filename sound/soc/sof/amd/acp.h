@@ -16,6 +16,10 @@
 #include "../sof-priv.h"
 #include "../sof-audio.h"
 
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+
 #define ACP_MAX_STREAM	8
 
 #define ACP_DSP_BAR	0
@@ -86,6 +90,13 @@
 #define PROBE_STATUS_BIT			BIT(31)
 
 #define ACP_FIRMWARE_SIGNATURE			0x100
+
+#define MAX_OEM_STRINGS			0x05
+#define CHANGE_ENDIANNESS(val)   ((((uint32_t)(val) & 0xff000000) >> 24) \
+                               | (((uint32_t)(val) & 0x00ff0000) >> 8) \
+                               | (((uint32_t)(val) & 0x0000ff00) << 8)  \
+                               | (((uint32_t)(val) & 0x000000ff) << 24))
+
 
 enum clock_source {
 	ACP_CLOCK_96M = 0,
@@ -206,6 +217,10 @@ struct acp_dev_data {
 	struct pci_dev *smn_dev;
 	struct acp_dsp_stream *probe_stream;
 	bool enable_fw_debug;
+};
+
+struct acp_oem_str {
+	const char *name;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
