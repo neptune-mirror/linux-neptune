@@ -501,10 +501,10 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	static unsigned int dsm_calib_data[18];
 
 	dsm_calib_data[0] = 0x03;
-	dsm_calib_data[1] = 0x040;
+	dsm_calib_data[1] = 0x044;
 	dsm_calib_data[2] = 0x464f53;	// hdr magic id
 	dsm_calib_data[3] = 0x0;		// IPC type - 0 for IPC3 and 1 for IPC4
-	dsm_calib_data[4] = 0x1c;		// Size of payload
+	dsm_calib_data[4] = 0x20;		// Size of payload
 	dsm_calib_data[5] = 0x3017000;	// ABI version
 	/* reserved[4] */
 	dsm_calib_data[6] = 0x0;
@@ -512,6 +512,7 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	dsm_calib_data[8] = 0x0;
 	dsm_calib_data[9] = 0x0;
 	dsm_calib_data[10] = 0x18;		// data blob size
+	dsm_calib_data[11] = 0x18;
 
 	oem_strings = devm_kcalloc(sdev->dev, MAX_OEM_STRINGS, sizeof(oem_strings), GFP_KERNEL);
 	if (!oem_strings)
@@ -546,19 +547,19 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	for (int i=1; i<=MAX_OEM_STRINGS; i++)
 		pr_err("DEBUG: oem_str[%d][%s] \n", i, oem_strings[i]);
 
-	dsm_calib_data[0+11] = CHANGE_ENDIANNESS(Max_left_ch_id);
-	dsm_calib_data[2+11] = CHANGE_ENDIANNESS(Max_right_ch_id);
-	dsm_calib_data[4+11] = CHANGE_ENDIANNESS(Max_amb_temp_id);
+	dsm_calib_data[12] = CHANGE_ENDIANNESS(Max_left_ch_id);
+	dsm_calib_data[14] = CHANGE_ENDIANNESS(Max_right_ch_id);
+	dsm_calib_data[16] = CHANGE_ENDIANNESS(Max_amb_temp_id);
 
-	sscanf(&oem_strings[1].name[13], "%x", &dsm_calib_data[1+11]);
-	dsm_calib_data[1+11] = CHANGE_ENDIANNESS(dsm_calib_data[1+11]);
+	sscanf(&oem_strings[1].name[13], "%x", &dsm_calib_data[13]);
+	dsm_calib_data[13] = CHANGE_ENDIANNESS(dsm_calib_data[13]);
 
 	Max_amb_temp_val = devm_kasprintf(sdev->dev, GFP_KERNEL,"%0.8s", &oem_strings[3].name[2]);
-	sscanf(Max_amb_temp_val, "%x", &dsm_calib_data[3+11]);
-	dsm_calib_data[3+11] = CHANGE_ENDIANNESS(dsm_calib_data[3+11]);
+	sscanf(Max_amb_temp_val, "%x", &dsm_calib_data[17]);
+	dsm_calib_data[17] = CHANGE_ENDIANNESS(dsm_calib_data[17]);
 
-	sscanf(&oem_strings[3].name[13], "%x", &dsm_calib_data[5+11]);
-	dsm_calib_data[5+11] = CHANGE_ENDIANNESS(dsm_calib_data[5+11]);
+	sscanf(&oem_strings[3].name[13], "%x", &dsm_calib_data[15]);
+	dsm_calib_data[15] = CHANGE_ENDIANNESS(dsm_calib_data[15]);
 
 	fp = filp_open("/lib/firmware/amd/sof/dsmcalib.bin", O_RDWR | O_CREAT, 0666);
 	if (IS_ERR(fp)) {
@@ -567,7 +568,7 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	}
 	dev_err(sdev->dev,"DEBUG: /lib/firmware/amd/sof/dsmcalib.bin created \n");
 
-	kernel_write(fp, &dsm_calib_data, 18 * sizeof(int), 0);
+	kernel_write(fp, &dsm_calib_data, 19 * sizeof(int), 0);
 	filp_close(fp, NULL);
 
 	return 0;
