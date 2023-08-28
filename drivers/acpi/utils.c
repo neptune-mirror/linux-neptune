@@ -333,17 +333,16 @@ acpi_status
 acpi_evaluate_reference(acpi_handle handle,
 			acpi_string pathname,
 			struct acpi_object_list *arguments,
-			struct acpi_handle_list **out)
+			struct acpi_handle_list *list)
 {
 	acpi_status status = AE_OK;
-	struct acpi_handle_list *list = NULL;
 	union acpi_object *package = NULL;
 	union acpi_object *element = NULL;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 	u32 i = 0;
 
 
-	if (!out) {
+	if (!list) {
 		return AE_BAD_PARAMETER;
 	}
 
@@ -371,8 +370,7 @@ acpi_evaluate_reference(acpi_handle handle,
 		goto end;
 	}
 
-	list = kmalloc(package->package.count * sizeof(list->handles[0]) + sizeof(*list), GFP_KERNEL);
-	if (!list) {
+	if (package->package.count > ACPI_MAX_HANDLES) {
 		kfree(package);
 		return AE_NO_MEMORY;
 	}
@@ -402,12 +400,12 @@ acpi_evaluate_reference(acpi_handle handle,
 	}
 
       end:
-	if (ACPI_FAILURE(status) && list) {
-		kfree(list);
+	if (ACPI_FAILURE(status)) {
+		list->count = 0;
+		//kfree(list->handles);
 	}
 
 	kfree(buffer.pointer);
-	*out = list;
 
 	return status;
 }

@@ -12,9 +12,11 @@
 #include <linux/device.h>
 #include <linux/property.h>
 
+/* TBD: Make dynamic */
+#define ACPI_MAX_HANDLES	10
 struct acpi_handle_list {
 	u32 count;
-	acpi_handle handles[];
+	acpi_handle handles[ACPI_MAX_HANDLES];
 };
 
 /* acpi_utils.h */
@@ -29,7 +31,7 @@ acpi_status
 acpi_evaluate_reference(acpi_handle handle,
 			acpi_string pathname,
 			struct acpi_object_list *arguments,
-			struct acpi_handle_list **list);
+			struct acpi_handle_list *list);
 acpi_status
 acpi_evaluate_ost(acpi_handle handle, u32 source_event, u32 status_code,
 		  struct acpi_buffer *status_buf);
@@ -65,18 +67,6 @@ acpi_evaluate_dsm_typed(acpi_handle handle, const guid_t *guid, u64 rev,
 	}
 
 	return obj;
-}
-
-static inline bool
-acpi_handle_list_equal(struct acpi_handle_list *a, struct acpi_handle_list *b)
-{
-	if (!a || !b)
-		return false;
-
-	if (a->count != b->count)
-		return false;
-
-	return !memcmp(a->handles, b->handles, a->count * sizeof(acpi_handle));
 }
 
 #define	ACPI_INIT_DSM_ARGV4(cnt, eles)			\

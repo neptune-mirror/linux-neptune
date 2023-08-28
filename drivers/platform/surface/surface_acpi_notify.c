@@ -738,7 +738,7 @@ do {										\
 
 static bool is_san_consumer(struct platform_device *pdev, acpi_handle handle)
 {
-	struct acpi_handle_list *dep_devices;
+	struct acpi_handle_list dep_devices;
 	acpi_handle supplier = ACPI_HANDLE(&pdev->dev);
 	acpi_status status;
 	int i;
@@ -752,14 +752,11 @@ static bool is_san_consumer(struct platform_device *pdev, acpi_handle handle)
 		return false;
 	}
 
-	for (i = 0; i < dep_devices->count; i++) {
-		if (dep_devices->handles[i] == supplier) {
-			kfree(dep_devices);
+	for (i = 0; i < dep_devices.count; i++) {
+		if (dep_devices.handles[i] == supplier)
 			return true;
-		}
 	}
 
-	kfree(dep_devices);
 	return false;
 }
 
