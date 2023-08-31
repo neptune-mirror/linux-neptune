@@ -7180,8 +7180,11 @@ static int gfx_v10_0_hw_fini(void *handle)
 	return 0;
 }
 
+static int gfx_v10_0_set_powergating_state(void *handle,
+					  enum amd_powergating_state state);
 static int gfx_v10_0_suspend(void *handle)
 {
+	gfx_v10_0_set_powergating_state(handle, AMD_CG_STATE_UNGATE);
 	return gfx_v10_0_hw_fini(handle);
 }
 
