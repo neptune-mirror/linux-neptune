@@ -180,6 +180,24 @@ int amdgpu_dpm_set_mp1_state(struct amdgpu_device *adev,
 	return ret;
 }
 
+int amdgpu_dpm_set_rlc_state(struct amdgpu_device *adev, bool en)
+{
+	int ret = 0;
+	const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+
+	if (pp_funcs && pp_funcs->system_features_control) {
+		mutex_lock(&adev->pm.mutex);
+
+		ret = pp_funcs->system_features_control(
+				adev->powerplay.pp_handle,
+				en);
+
+		mutex_unlock(&adev->pm.mutex);
+	}
+
+	return ret;
+}
+
 bool amdgpu_dpm_is_baco_supported(struct amdgpu_device *adev)
 {
 	const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
