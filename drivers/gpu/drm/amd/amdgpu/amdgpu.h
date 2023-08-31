@@ -1104,6 +1104,8 @@ struct amdgpu_device {
 	bool                            dc_enabled;
 	/* Mask of active clusters */
 	uint32_t			aid_mask;
+
+	bool				csib_initialized;
 };
 
 static inline struct amdgpu_device *drm_to_adev(struct drm_device *ddev)
