@@ -547,19 +547,19 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	for (int i=1; i<=MAX_OEM_STRINGS; i++)
 		pr_err("DEBUG: oem_str[%d][%s] \n", i, oem_strings[i]);
 
-	dsm_calib_data[12] = CHANGE_ENDIANNESS(Max_left_ch_id);
-	dsm_calib_data[14] = CHANGE_ENDIANNESS(Max_right_ch_id);
-	dsm_calib_data[16] = CHANGE_ENDIANNESS(Max_amb_temp_id);
+	dsm_calib_data[12] = Max_left_ch_id;
+	dsm_calib_data[14] = Max_right_ch_id;
+	dsm_calib_data[16] = Max_amb_temp_id;
 
 	sscanf(&oem_strings[1].name[13], "%x", &dsm_calib_data[13]);
-	dsm_calib_data[13] = CHANGE_ENDIANNESS(dsm_calib_data[13]);
+	// dsm_calib_data[13] = CHANGE_ENDIANNESS(dsm_calib_data[13]);
 
 	Max_amb_temp_val = devm_kasprintf(sdev->dev, GFP_KERNEL,"%0.8s", &oem_strings[3].name[2]);
 	sscanf(Max_amb_temp_val, "%x", &dsm_calib_data[17]);
-	dsm_calib_data[17] = CHANGE_ENDIANNESS(dsm_calib_data[17]);
+	// dsm_calib_data[17] = CHANGE_ENDIANNESS(dsm_calib_data[17]);
 
 	sscanf(&oem_strings[3].name[13], "%x", &dsm_calib_data[15]);
-	dsm_calib_data[15] = CHANGE_ENDIANNESS(dsm_calib_data[15]);
+	// dsm_calib_data[15] = CHANGE_ENDIANNESS(dsm_calib_data[15]);
 
 	fp = filp_open("/lib/firmware/amd/sof/dsmcalib.bin", O_RDWR | O_CREAT, 0666);
 	if (IS_ERR(fp)) {
