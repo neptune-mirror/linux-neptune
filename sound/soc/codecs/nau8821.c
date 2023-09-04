@@ -408,6 +408,12 @@ static const struct soc_enum nau8821_decay_time_enum =
 	SOC_ENUM_SINGLE(NAU8821_R39_ADC_DRC_ATKDCY, NAU8821_DRC_DCY_ADC_SFT,
 		ARRAY_SIZE(nau8821_decay_time), nau8821_decay_time);
 
+static const char * const nau8821_pga_smute_step[] = {
+	"128", "32", "16", "1" };
+
+static SOC_ENUM_SINGLE_DECL(nau8821_pga_smute_step_enum, NAU8821_R31_MUTE_CTRL,
+		   NAU8821_PGA_SMUTE_STEP_SFT, nau8821_pga_smute_step);
+
 static const DECLARE_TLV_DB_MINMAX_MUTE(adc_vol_tlv, -6600, 2400);
 static const DECLARE_TLV_DB_MINMAX_MUTE(sidetone_vol_tlv, -4200, 0);
 static const DECLARE_TLV_DB_MINMAX(hp_vol_tlv, -900, 0);
@@ -457,6 +463,22 @@ static const struct snd_kcontrol_new nau8821_controls[] = {
 		nau8821_biq_coeff_get, nau8821_biq_coeff_put),
 	SOC_SINGLE("ADC Phase Switch", NAU8821_R1B_TDM_CTRL,
 		NAU8821_ADCPHS_SFT, 1, 0),
+
+	SOC_ENUM("Analog Attn Mute Step Select", nau8821_pga_smute_step_enum),
+	SOC_SINGLE("DAC Slow Soft Unmute Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_DAC_SLOW_UM_SFT, 1, 0),
+	SOC_SINGLE("DAC Zero Crossing Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_DAC_ZC_UP_EN_SFT, 1, 0),
+	SOC_SINGLE("Auto Mute Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_DAC_AUTO_MUTE_EN_SFT, 1, 0),
+	SOC_SINGLE("Auto Mute Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_DAC_AUTO_MUTE_CTRL_SFT, 1, 0),
+	SOC_SINGLE("DAC Limiter Output Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_DAC_SOFT_MUTE_CTRL_SFT, 1, 0),
+	SOC_SINGLE("ADC Zero Crossing Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_ADC_ZC_UP_EN_SFT, 1, 0),
+	SOC_SINGLE("ADC Soft Mute Enable Control", NAU8821_R31_MUTE_CTRL,
+		   NAU8821_ADC_SMUTE_EN_SFT, 1, 0),
 };
 
 static const struct snd_kcontrol_new nau8821_dmic_mode_switch =
@@ -979,8 +1001,12 @@ static int nau8821_digital_mute(struct snd_soc_dai *dai, int mute,
 	if (mute)
 		val = NAU8821_DAC_SOFT_MUTE;
 
-	return regmap_update_bits(nau8821->regmap,
+	int ret = regmap_update_bits(nau8821->regmap,
 		NAU8821_R31_MUTE_CTRL, NAU8821_DAC_SOFT_MUTE, val);
+
+	regmap_read(nau8821->regmap, NAU8821_R31_MUTE_CTRL, &val);
+	dev_notice(nau8821->dev, "** digital_mute(%d), reg=0x%x\n", mute, val);
+	return ret;
 }
 
 static const struct snd_soc_dai_ops nau8821_dai_ops = {
