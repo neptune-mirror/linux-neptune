@@ -33,6 +33,10 @@
 #include "amdgpu_dm_mst_types.h"
 #include "amdgpu_dm_hdcp.h"
 
+#ifdef CONFIG_DRM_AMD_DC_HDCP
+#include "amdgpu_dm_hdcp.h"
+#endif
+
 #include "dc.h"
 #include "dm_helpers.h"
 
