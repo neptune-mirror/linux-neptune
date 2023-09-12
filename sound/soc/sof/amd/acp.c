@@ -505,8 +505,8 @@ static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 	dsm_calib_data[0] = 0x03;
 	dsm_calib_data[1] = 0x044;
 	dsm_calib_data[2] = 0x464f53;	// hdr magic id
-	dsm_calib_data[3] = 0x0;		// IPC type - 0 for IPC3 and 1 for IPC4
-	dsm_calib_data[4] = 0x20;		// Size of payload
+	dsm_calib_data[3] = 0x1;	// IPC type - 0 for IPC3 and 1 for IPC4
+	dsm_calib_data[4] = 0x20;	// Size of payload
 	dsm_calib_data[5] = 0x3017000;	// ABI version
 	/* reserved[4] */
 	dsm_calib_data[6] = 0x0;
