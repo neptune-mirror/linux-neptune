@@ -1,0 +1,40 @@
+6.1/features/stable-updates:
+    59b13c2b647e464dd85622c89d7f16c15d681e96 ("Linux 6.1.52")
+6.1/features/upstream:
+    d6b36fa14b05526d537ed5ec237ecc077d4e2e27 ("drm/amd/display: ensure async flips are only accepted for fast updates")
+6.1/features/amd-staging-drm-next:
+    e786aef0869c711a70680d315ac2b838f03448ed ("drm/amd/display: remove unused definition")
+6.1/features/acpi:
+    79c8690d0153a6ef2eea461a92c903efd22b6786 ("ACPI: utils: Make acpi_handle_list dynamically allocated")
+6.1/features/amd-asoc-fixup:
+    9185a24cc5f7f3a0890836801b41c7bc08eb0781 ("Revert "ASoC: amd: Add new dmi entries to config entry"")
+6.1/features/amd-drm-extra:
+    a7249215f71f45d7b4ba94557e00310a3dbec977 ("drm/amd/display: check attr flag before set cursor degamma on DCN3+")
+6.1/features/amd-indirect-sram:
+    1921c7f967fb9dcab1aa8101bf25b2adac0b1c40 ("drm/amdgpu/vcn: Add parameter to force (en/dis)abling indirect SRAM mode")
+6.1/features/backlight-notif:
+    b9c444cedd8a0a832324ccaaf4e4313f9139b1c3 ("drivers: video: backlight: Disable backlight notification events.")
+6.1/features/cirrus-shared-boost:
+    e26b5a7f1f87e12746c76b3ee9858488b7884515 ("HACK: cs35l41: Disable pm_runtime")
+6.1/features/gpu-reset:
+    b65228799e5ac96211b0e4c342d0a4478a1b6410 ("drm/amdgpu: schedule GPU reset event work function")
+6.1/features/iio:
+    67f9515d30107c9ae585779e2c55d2f61840a152 ("iio: light: ltrf216a: Return floating point values")
+6.1/features/mm-soft-dirty-file:
+    a325a7b546ec539ca7877f258bb59beff9ef41fc ("mm: Use UFFD_WP to make per-pte soft dirty tracking work reliably.")
+6.1/features/quirks:
+    a4904c47fcd7fc9152b6b04409feac1130e2033d ("PCI: Prevent xHCI driver from claiming AMD VanGogh USB3 DRD device")
+6.1/features/setup-gitlabci:
+    26ffc0a8886d71126fcedc0aca1bfc7dfcdbb004 ("gitlab-ci: Enable DRM_AMD_COLOR_STEAMDECK")
+6.1/features/steamdeck-mfd:
+    6a4d2bea1e5b5aa150e11a40b2ac4098de3c6491 ("hwmon: steamdeck-hwmon: Add support for max battery level/rate")
+6.1/features/tcp-timewait:
+    ef76035f50a1147a0d39b3d9c1b80b92a2961028 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.1/features/tsc:
+    9c1c58aa42c05f479c913bcbfae134e43c21029a ("x86: revert extra time added to check for tsc wraps")
+6.1/features/usb:
+    42c03cb9688e004b3ba2f433a616881f04eded36 ("usb: dwc3: Fix "linux,extcon-name"")
+6.1/features/hid:
+    024256b114215ebca2e233b0e5d36f94f608214f ("Input: xpad - add GameSir T4 Kaleid Controller support")
+6.1/features/amd-color-mgmt:
+    33fac8160be8a2f2723c8e2f2c4e43ab5406a3ec ("HACK: add KConfig to enable driver-specific color mgmt props")
