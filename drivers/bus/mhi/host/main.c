@@ -483,12 +483,9 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 	enum mhi_pm_state pm_state = 0;
 	enum mhi_ee_type ee;
 
-	mhi_device_get_sync(mhi_cntrl->mhi_dev);
-
 	write_lock_irq(&mhi_cntrl->pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
 		write_unlock_irq(&mhi_cntrl->pm_lock);
-		mhi_device_put(mhi_cntrl->mhi_dev);
 		goto exit_intvec;
 	}
 
@@ -505,7 +502,6 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 					       MHI_PM_SYS_ERR_DETECT);
 	}
 	write_unlock_irq(&mhi_cntrl->pm_lock);
-	mhi_device_put(mhi_cntrl->mhi_dev);
 
 	if (pm_state != MHI_PM_SYS_ERR_DETECT)
 		goto exit_intvec;
