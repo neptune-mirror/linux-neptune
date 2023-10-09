@@ -576,13 +576,10 @@ static bool acpi_lpss_dep(struct acpi_device *adev, acpi_handle handle)
 	}
 
 	for (i = 0; i < dep_devices.count; i++) {
-		if (dep_devices.handles[i] == handle) {
-			kfree(dep_devices.handles);
+		if (dep_devices.handles[i] == handle)
 			return true;
-		}
 	}
 
-	kfree(dep_devices.handles);
 	return false;
 }
 
