@@ -816,12 +816,10 @@ static int steam_register(struct steam_device *steam)
 	spin_lock_irqsave(&steam->lock, flags);
 	client_opened = steam->client_opened;
 	spin_unlock_irqrestore(&steam->lock, flags);
-	if (!client_opened)
+	if (!client_opened) {
 		steam_set_lizard_mode(steam, lizard_mode);
-
-	if (!client_opened)
 		ret = steam_input_register(steam);
-	else
+	} else
 		ret = 0;
 
 	return ret;
@@ -977,11 +975,10 @@ static void steam_client_ll_close(struct hid_device *hdev)
 	connected = steam->connected && !steam->client_opened;
 	spin_unlock_irqrestore(&steam->lock, flags);
 
-	if (connected)
+	if (connected) {
 		steam_set_lizard_mode(steam, lizard_mode);
-
-	if (connected)
 		steam_input_register(steam);
+	}
 }
 
 static int steam_client_ll_raw_request(struct hid_device *hdev,
