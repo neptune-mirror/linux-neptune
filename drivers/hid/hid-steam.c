@@ -1631,6 +1631,10 @@ static const struct hid_device_id steam_controllers[] = {
 		USB_DEVICE_ID_STEAM_CONTROLLER_WIRELESS),
 	  .driver_data = STEAM_QUIRK_WIRELESS
 	},
+	{ /* Bluetooth Steam Controller */
+	  HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_VALVE,
+		USB_DEVICE_ID_STEAM_CONTROLLER_BLUETOOTH)
+	},
 	{ /* Steam Deck */
 	  HID_USB_DEVICE(USB_VENDOR_ID_VALVE,
 		USB_DEVICE_ID_STEAM_DECK),
