@@ -4,7 +4,7 @@ variables:
   LINUX_FIRMWARE_URL: "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
   LINUX_FIRMWARE_DL_DIR: "dl/linux-firmware"
   ROOTFS_NAME: "stretch.img"
-  ROOTFS_IMAGE_URL: "https://gitlab.steamos.cloud/api/v4/projects/kernel-research%2Frootfs/jobs/128684/artifacts"
+  ROOTFS_IMAGE_URL: "https://gitlab.steamos.cloud/api/v4/projects/kernel-research%2Frootfs/jobs/129183/artifacts"
   GIT_AUTHOR_NAME: "Gitlab-ci"
   GIT_AUTHOR_EMAIL: "gitlab@gitlab.steamos.cloud"
   TAG: CI_${CI_PIPELINE_ID}_${CI_COMMIT_SHORT_SHA}
