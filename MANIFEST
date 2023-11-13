@@ -1,0 +1,42 @@
+6.1/features/stable-updates:
+    4a61839152cc3e9e00ac059d73a28d148d622b30 ("Linux 6.1.61")
+6.1/features/upstream:
+    2fd1a9a1373d76594b5514ab5f3d0798aa99410c ("drm/amd/display: Fix blend LUT programming")
+6.1/features/amd-staging-drm-next:
+    e786aef0869c711a70680d315ac2b838f03448ed ("drm/amd/display: remove unused definition")
+6.1/features/acpi:
+    2d5ef7a477c608e76c292d093237014c29c3718b ("ACPI: utils: Dynamically determine acpi_handle_list size")
+6.1/features/amd-asoc-fixup:
+    9185a24cc5f7f3a0890836801b41c7bc08eb0781 ("Revert "ASoC: amd: Add new dmi entries to config entry"")
+6.1/features/amd-drm-extra:
+    ab62d87ac85e4f6beb819716892e6d46690ef9bf ("Disable modes with >1200 MHz Pixel clocks when connected via dock")
+6.1/features/backlight-notif:
+    b9c444cedd8a0a832324ccaaf4e4313f9139b1c3 ("drivers: video: backlight: Disable backlight notification events.")
+6.1/features/cirrus-shared-boost:
+    e26b5a7f1f87e12746c76b3ee9858488b7884515 ("HACK: cs35l41: Disable pm_runtime")
+6.1/features/gpu-reset:
+    b65228799e5ac96211b0e4c342d0a4478a1b6410 ("drm/amdgpu: schedule GPU reset event work function")
+6.1/features/hacks:
+    d6935e6d62b35ec14d2187c2cfdc19934d66db6d ("(NOT-FOR-UPSTREAM) PM: suspend: Disable s2idle on Steam Deck")
+6.1/features/iio:
+    67f9515d30107c9ae585779e2c55d2f61840a152 ("iio: light: ltrf216a: Return floating point values")
+6.1/features/lazy-rcu:
+    274d5fa699c82c16e8b8d745f99d1591be57930f ("net: Use call_rcu_hurry() for dst_release()")
+6.1/features/mm-soft-dirty-file:
+    a325a7b546ec539ca7877f258bb59beff9ef41fc ("mm: Use UFFD_WP to make per-pte soft dirty tracking work reliably.")
+6.1/features/quirks:
+    a4904c47fcd7fc9152b6b04409feac1130e2033d ("PCI: Prevent xHCI driver from claiming AMD VanGogh USB3 DRD device")
+6.1/features/setup-gitlabci:
+    5cf49b36efcff9c86b8a9efb9baa52d202dba5da ("gitlab-ci: Update ROOTFS_IMAGE_URL")
+6.1/features/steamdeck-mfd:
+    cf6bdfd6474392bcf62a259db78a500924363843 ("mfd: steamdeck: Expose controller board power in sysfs")
+6.1/features/tcp-timewait:
+    ef76035f50a1147a0d39b3d9c1b80b92a2961028 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.1/features/tsc:
+    9c1c58aa42c05f479c913bcbfae134e43c21029a ("x86: revert extra time added to check for tsc wraps")
+6.1/features/usb:
+    42c03cb9688e004b3ba2f433a616881f04eded36 ("usb: dwc3: Fix "linux,extcon-name"")
+6.1/features/hid:
+    cceb53aa8383c97a956f8a50388446cd36f5e7af ("HID: hid-steam: Add gamepad-only mode switched to by holding options")
+6.1/features/amd-color-mgmt:
+    2bd7acdc20f821a40ef9be90ec4951f9254a1dd8 ("drm/amd/display: Remove erroneous color_mgmt_changed check in amdgpu_dm_plane_set_color_properties")
