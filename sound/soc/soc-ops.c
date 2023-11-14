@@ -10,7 +10,7 @@
 // Author: Liam Girdwood <lrg@slimlogic.co.uk>
 //         with code, comments and ideas from :-
 //         Richard Purdie <richard@openedhand.com>
-#define DEBUG
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>

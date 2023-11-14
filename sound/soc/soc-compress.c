@@ -7,7 +7,7 @@
 // Authors: Namarta Kohli <namartax.kohli@intel.com>
 //          Ramesh Babu K V <ramesh.babu@linux.intel.com>
 //          Vinod Koul <vinod.koul@linux.intel.com>
-#define DEBUG
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>

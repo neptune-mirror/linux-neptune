@@ -3,7 +3,7 @@
 // soc-apci.c - support for ACPI enumeration.
 //
 // Copyright (c) 2013-15, Intel Corporation.
-#define DEBUG
+
 #include <linux/export.h>
 #include <linux/module.h>
 #include <sound/soc-acpi.h>

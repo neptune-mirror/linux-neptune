@@ -410,14 +410,6 @@
 #define NAU8821_DAC_CAPACITOR_MSB		(0x1 << 1)
 #define NAU8821_DAC_CAPACITOR_LSB		0x1
 
-/* MUTE_MIC_L_N (0x6b) */
-#define NAU8821_MUTE_MICNL_SFT          5
-#define NAU8821_MUTE_MICNL_MASK         (0x1 << NAU8821_MUTE_MICNL_SFT)
-#define NAU8821_MUTE_MICNR_SFT          4
-#define NAU8821_MUTE_MICNR_MASK         (0x1 << NAU8821_MUTE_MICNR_SFT)
-#define NAU8821_MUTE_MICRP_SFT          2
-#define NAU8821_MUTE_MICRP_MASK         (0x1 << NAU8821_MUTE_MICRP_SFT)
-
 /* ANALOG_ADC_1 (0x71) */
 #define NAU8821_MICDET_EN_SFT		0
 #define NAU8821_MICDET_MASK		0x1
@@ -533,6 +525,7 @@ struct nau8821 {
 	int jack_eject_debounce;
 	int fs;
 	int dmic_clk_threshold;
+	int key_enable;
 };
 
 int nau8821_enable_jack_detect(struct snd_soc_component *component,

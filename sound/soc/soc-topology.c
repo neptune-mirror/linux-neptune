@@ -19,7 +19,7 @@
 //
 //  This file only manages the core ALSA and ASoC components, all other bespoke
 //  firmware topology data is passed to component drivers for bespoke handling.
-#define DEBUG
+
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/list.h>

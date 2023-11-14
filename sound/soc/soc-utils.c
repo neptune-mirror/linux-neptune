@@ -6,7 +6,7 @@
 //
 // Author: Mark Brown <broonie@opensource.wolfsonmicro.com>
 //         Liam Girdwood <lrg@slimlogic.co.uk>
-#define DEBUG
+
 #include <linux/platform_device.h>
 #include <linux/export.h>
 #include <linux/math.h>

@@ -8,7 +8,6 @@
 // Mark Brown <broonie@opensource.wolfsonmicro.com>
 // Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 //
-#define DEBUG
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <sound/soc.h>

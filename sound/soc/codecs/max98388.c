@@ -946,8 +946,6 @@ static int max98388_i2c_probe(struct i2c_client *i2c,
 
 	struct max98388_priv *max98388 = NULL;
 
-	pr_info("%s", __func__);
-
 	max98388 = devm_kzalloc(&i2c->dev, sizeof(*max98388), GFP_KERNEL);
 
 	if (!max98388) {
