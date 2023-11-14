@@ -2047,17 +2047,6 @@ static const struct amdgpu_asic_type_quirk asic_type_quirks[] = {
 	{0x67FF, 0xE7, CHIP_POLARIS10},
 	{0x67FF, 0xF3, CHIP_POLARIS10},
 	{0x67FF, 0xF7, CHIP_POLARIS10},
-	/* differentiate between Sienna_Cichlid and new asics with the same DID */
-	{0x73BF, 0x18, CHIP_IP_DISCOVERY},
-	{0x73BF, 0x19, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD2, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD4, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD5, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD6, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD8, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xD9, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xDA, CHIP_IP_DISCOVERY},
-	{0x73BF, 0xDB, CHIP_IP_DISCOVERY},
 };
 
 static const struct drm_driver amdgpu_kms_driver;
