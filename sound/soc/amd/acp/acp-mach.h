@@ -44,6 +44,7 @@ enum codec_endpoints {
 	NAU8825,
 	CS35L41,
 	MAX98388,
+	NAU8821,
 };
 
 enum platform_end_point {
