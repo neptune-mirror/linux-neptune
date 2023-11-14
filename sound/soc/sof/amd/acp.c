@@ -3,7 +3,7 @@
 // This file is provided under a dual BSD/GPLv2 license. When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2021 Advanced Micro Devices, Inc. All rights reserved.
+// Copyright(c) 2021, 2023 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Authors: Vijendar Mukunda <Vijendar.Mukunda@amd.com>
 //	    Ajit Kumar Pandey <AjitKumar.Pandey@amd.com>
@@ -16,9 +16,34 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 
+#include <linux/fs.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
+
 #include "../ops.h"
 #include "acp.h"
 #include "acp-dsp-offset.h"
+
+#define SECURED_FIRMWARE 1
+
+static bool enable_fw_debug;
+module_param(enable_fw_debug, bool, 0444);
+MODULE_PARM_DESC(enable_fw_debug, "Enable Firmware debug");
+
+const struct dmi_system_id acp_sof_quirk_table[] = {
+	{
+		/* Valve Jupiter device */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Valve"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Galileo"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Sephiroth"),
+		},
+		.driver_data = (void *)SECURED_FIRMWARE,
+	},
+	{}
+};
+EXPORT_SYMBOL_GPL(acp_sof_quirk_table);
 
 static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
 {
@@ -217,6 +242,7 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 			      unsigned int image_length)
 {
 	struct snd_sof_dev *sdev = adata->dev;
+	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
 	unsigned int tx_count, fw_qualifier, val;
 	int ret;
 
@@ -238,7 +264,9 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 		}
 	}
 
-	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DMA_INCLUDE_HDR, ACP_SHA_HEADER);
+	if (adata->signed_fw_image)
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DMA_INCLUDE_HDR, ACP_SHA_HEADER);
+
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DMA_STRT_ADDR, start_addr);
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DMA_DESTINATION_ADDR, dest_addr);
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_MSG_LENGTH, image_length);
@@ -252,9 +280,12 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 		return ret;
 	}
 
-	ret = psp_send_cmd(adata, MBOX_ACP_SHA_DMA_COMMAND);
-	if (ret)
-		return ret;
+	/* psp_send_cmd only required for renoir platform (rev - 3) */
+	if (desc->rev == 3) {
+		ret = psp_send_cmd(adata, MBOX_ACP_SHA_DMA_COMMAND);
+		if (ret)
+			return ret;
+	}
 
 	ret = snd_sof_dsp_read_poll_timeout(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER,
 					    fw_qualifier, fw_qualifier & DSP_FW_RUN_ENABLE,
@@ -319,15 +350,9 @@ static irqreturn_t acp_irq_thread(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = context;
 	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
-	unsigned int val, count = ACP_HW_SEM_RETRY_COUNT;
+	unsigned int count = ACP_HW_SEM_RETRY_COUNT;
 
-	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->ext_intr_stat);
-	if (val & ACP_SHA_STAT) {
-		/* Clear SHA interrupt raised by PSP */
-		snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->ext_intr_stat, val);
-		return IRQ_HANDLED;
-	}
-
+	spin_lock_irq(&sdev->ipc_lock);
 	while (snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset)) {
 		/* Wait until acquired HW Semaphore lock or timeout */
 		count--;
@@ -340,6 +365,7 @@ static irqreturn_t acp_irq_thread(int irq, void *context)
 	sof_ops(sdev)->irq_thread(irq, sdev);
 	/* Unlock or Release HW Semaphore */
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset, 0x0);
+	spin_unlock_irq(&sdev->ipc_lock);
 
 	return IRQ_HANDLED;
 };
@@ -352,9 +378,9 @@ static irqreturn_t acp_irq_handler(int irq, void *dev_id)
 	unsigned int val;
 
 	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET);
-	if (val) {
-		val |= ACP_DSP_TO_HOST_IRQ;
-		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET, val);
+	if (val & ACP_DSP_TO_HOST_IRQ) {
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET,
+				  ACP_DSP_TO_HOST_IRQ);
 		return IRQ_WAKE_THREAD;
 	}
 
@@ -409,6 +435,9 @@ static int acp_reset(struct snd_sof_dev *sdev)
 		dev_err(sdev->dev, "timeout in releasing reset\n");
 
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->acp_clkmux_sel, ACP_CLOCK_ACLK);
+	if (desc->ext_intr_enb)
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->ext_intr_enb, 0x01);
+
 	return ret;
 }
 
@@ -446,7 +475,6 @@ EXPORT_SYMBOL_NS(amd_sof_acp_suspend, SND_SOC_SOF_AMD_COMMON);
 
 int amd_sof_acp_resume(struct snd_sof_dev *sdev)
 {
-	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
 	int ret;
 
 	ret = acp_init(sdev);
@@ -455,51 +483,106 @@ int amd_sof_acp_resume(struct snd_sof_dev *sdev)
 		return ret;
 	}
 
-	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->acp_clkmux_sel, ACP_CLOCK_ACLK);
-
 	ret = acp_memory_init(sdev);
 
 	return ret;
 }
 EXPORT_SYMBOL_NS(amd_sof_acp_resume, SND_SOC_SOF_AMD_COMMON);
 
-static void acp_set_window_offset(struct snd_sof_dev *sdev,
-				  struct pci_dev *pci)
+static int acp_get_oem_strings(struct snd_sof_dev *sdev)
 {
-	switch (pci->revision) {
-	case 0x50:
-		sdev->dsp_box.offset = 0;
-		sdev->dsp_box.size = BOX_SIZE_1024;
+	const struct dmi_device *dev = NULL;
+	struct file *fp;
+	struct acp_oem_str *oem_strings;
+	int line = 0;
+	int Max_left_ch_id = 0x01000006;
+	int Max_right_ch_id = 0x02000006;
+	int Max_amb_temp_id = 0x03000008;
+	char *Max_amb_temp_val;
+	char str[5][30];
+	static unsigned int dsm_calib_data[18];
 
-		sdev->host_box.offset = sdev->dsp_box.offset + sdev->dsp_box.size;
-		sdev->host_box.size = BOX_SIZE_1024;
+	dsm_calib_data[0] = 0x03;
+	dsm_calib_data[1] = 0x044;
+	dsm_calib_data[2] = 0x464f53;	// hdr magic id
+	dsm_calib_data[3] = 0x1;	// IPC type - 0 for IPC3 and 1 for IPC4
+	dsm_calib_data[4] = 0x20;	// Size of payload
+	dsm_calib_data[5] = 0x3017000;	// ABI version
+	/* reserved[4] */
+	dsm_calib_data[6] = 0x0;
+	dsm_calib_data[7] = 0x0;
+	dsm_calib_data[8] = 0x0;
+	dsm_calib_data[9] = 0x0;
+	dsm_calib_data[10] = 0x18;		// data blob size
+	dsm_calib_data[11] = 0x18;
 
-		sdev->debug_box.offset = sdev->host_box.offset + sdev->host_box.size;
-		sdev->debug_box.size = BOX_SIZE_1024;
+	oem_strings = devm_kcalloc(sdev->dev, MAX_OEM_STRINGS, sizeof(oem_strings), GFP_KERNEL);
+	if (!oem_strings)
+		return -ENOMEM;
 
-		sdev->dsp_oops_offset = sdev->debug_box.offset + sdev->debug_box.size;
+	pr_err("DEBUG: %s ########### Trying to OEM strings \n", __func__);
 
-		sdev->stream_box.offset = sdev->dsp_oops_offset + BOX_SIZE_1024;
-		sdev->stream_box.size = BOX_SIZE_1024;
-		break;
-	default:
-		sdev->dsp_box.offset = 0;
-		sdev->dsp_box.size = BOX_SIZE_512;
-
-		sdev->host_box.offset = sdev->dsp_box.offset + sdev->dsp_box.size;
-		sdev->host_box.size = BOX_SIZE_512;
-
-		sdev->debug_box.offset = sdev->host_box.offset + sdev->host_box.size;
-		sdev->debug_box.size = BOX_SIZE_1024;
-
-		break;
+	while ((dev = dmi_find_device(DMI_DEV_TYPE_OEM_STRING, NULL, dev))) {
+		if (sscanf(dev->name, "%s", str[line]) <= 5) {
+			switch (line) {
+			case 0:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 1:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 2:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 3:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			case 4:
+				oem_strings[MAX_OEM_STRINGS - line].name = str[line];
+				break;
+			default:
+				break;
+			}
+			++line;
+		}
 	}
+	for (int i=1; i<=MAX_OEM_STRINGS; i++)
+		pr_err("DEBUG: oem_str[%d][%s] \n", i, oem_strings[i]);
+
+	dsm_calib_data[12] = Max_left_ch_id;
+	dsm_calib_data[14] = Max_right_ch_id;
+	dsm_calib_data[16] = Max_amb_temp_id;
+
+	sscanf(&oem_strings[1].name[13], "%x", &dsm_calib_data[13]);
+	// dsm_calib_data[13] = CHANGE_ENDIANNESS(dsm_calib_data[13]);
+
+	Max_amb_temp_val = devm_kasprintf(sdev->dev, GFP_KERNEL,"%0.8s", &oem_strings[3].name[2]);
+	sscanf(Max_amb_temp_val, "%x", &dsm_calib_data[17]);
+	// dsm_calib_data[17] = CHANGE_ENDIANNESS(dsm_calib_data[17]);
+
+	sscanf(&oem_strings[3].name[13], "%x", &dsm_calib_data[15]);
+	// dsm_calib_data[15] = CHANGE_ENDIANNESS(dsm_calib_data[15]);
+
+	fp = filp_open("/lib/firmware/amd/sof/dsmcalib.bin", O_RDWR | O_CREAT, 0666);
+	if (IS_ERR(fp)) {
+			pr_err("DEBUG: failed to create file \n");
+			return -1;
+	}
+	dev_err(sdev->dev,"DEBUG: /lib/firmware/amd/sof/dsmcalib.bin created \n");
+
+	kernel_write(fp, &dsm_calib_data, 19 * sizeof(int), 0);
+	filp_close(fp, NULL);
+
+	return 0;
 }
+
 int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 {
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
+	struct snd_sof_pdata *plat_data = sdev->pdata;
 	struct acp_dev_data *adata;
 	const struct sof_amd_acp_desc *chip;
+	const struct dmi_system_id *dmi_id;
 	unsigned int addr;
 	int ret;
 
@@ -551,7 +634,32 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	if (ret < 0)
 		goto free_ipc_irq;
 
-	acp_set_window_offset(sdev, pci);
+	sdev->dsp_box.offset = 0;
+	sdev->dsp_box.size = BOX_SIZE_512;
+
+	sdev->host_box.offset = sdev->dsp_box.offset + sdev->dsp_box.size;
+	sdev->host_box.size = BOX_SIZE_512;
+
+	sdev->debug_box.offset = sdev->host_box.offset + sdev->host_box.size;
+	sdev->debug_box.size = BOX_SIZE_1024;
+
+	adata->signed_fw_image = false;
+	dmi_id = dmi_first_match(acp_sof_quirk_table);
+	if (dmi_id && dmi_id->driver_data) {
+		adata->fw_code_bin = kasprintf(GFP_KERNEL, "%s/sof-%s-code.bin",
+					       plat_data->fw_filename_prefix,
+					       chip->name);
+		adata->fw_data_bin = kasprintf(GFP_KERNEL, "%s/sof-%s-data.bin",
+					       plat_data->fw_filename_prefix,
+					       chip->name);
+		adata->signed_fw_image = dmi_id->driver_data;
+
+		dev_dbg(sdev->dev, "fw_code_bin:%s, fw_data_bin:%s\n", adata->fw_code_bin,
+			adata->fw_data_bin);
+
+		acp_get_oem_strings(sdev);
+	}
+	adata->enable_fw_debug = enable_fw_debug;
 	acp_memory_init(sdev);
 
 	acp_dsp_stream_init(sdev);

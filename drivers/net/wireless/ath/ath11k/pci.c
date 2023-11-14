@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2019-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -15,9 +15,10 @@
 #include "mhi.h"
 #include "debug.h"
 #include "pcic.h"
+#include "coredump.h"
 
 #define ATH11K_PCI_BAR_NUM		0
-#define ATH11K_PCI_DMA_MASK		32
+#define ATH11K_PCI_DMA_MASK		36
 
 #define TCSR_SOC_HW_VERSION		0x0224
 #define TCSR_SOC_HW_VERSION_MAJOR_MASK	GENMASK(11, 8)
@@ -27,6 +28,8 @@
 #define QCN9074_DEVICE_ID		0x1104
 #define WCN6855_DEVICE_ID		0x1103
 
+#define SUB_VERSION	0x1910010
+
 static const struct pci_device_id ath11k_pci_id_table[] = {
 	{ PCI_VDEVICE(QCOM, QCA6390_DEVICE_ID) },
 	{ PCI_VDEVICE(QCOM, WCN6855_DEVICE_ID) },
@@ -35,6 +38,124 @@ static const struct pci_device_id ath11k_pci_id_table[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, ath11k_pci_id_table);
+
+static struct cnss_pci_reg register_rddm_fail_debug[] = {
+	{"PCIE_BHI_VERSION_LOWER", HWIO_PCIE_PCIE_BHI_VERSION_LOWER_ADDR, 0},
+	{"PCIE_BHI_VERSION_UPPER", HWIO_PCIE_PCIE_BHI_VERSION_UPPER_ADDR, 0},
+	{"PCIE_BHI_IMGADDR_LOWER", HWIO_PCIE_PCIE_BHI_IMGADDR_LOWER_ADDR, 0},
+	{"PCIE_BHI_IMGADDR_UPPER", HWIO_PCIE_PCIE_BHI_IMGADDR_UPPER_ADDR, 0},
+	{"PCIE_BHI_IMGSIZE", HWIO_PCIE_PCIE_BHI_IMGSIZE_ADDR, 0},
+	{"PCIE_BHI_IMGTXDB", HWIO_PCIE_PCIE_BHI_IMGTXDB_ADDR, 0},
+	{"PCIE_BHI_INTVEC", HWIO_PCIE_PCIE_BHI_INTVEC_ADDR, 0},
+	{"PCIE_BHI_EXECENV", HWIO_PCIE_PCIE_BHI_EXECENV_ADDR, 0},
+	{"PCIE_BHI_STATUS", HWIO_PCIE_PCIE_BHI_STATUS_ADDR, 0},
+	{"PCIE_BHI_ERRCODE", HWIO_PCIE_PCIE_BHI_ERRCODE_ADDR, 0},
+	{"PCIE_BHI_ERRDBG1", HWIO_PCIE_PCIE_BHI_ERRDBG1_ADDR, 0},
+	{"PCIE_BHI_ERRDBG2", HWIO_PCIE_PCIE_BHI_ERRDBG2_ADDR, 0},
+	{"PCIE_BHI_ERRDBG3", HWIO_PCIE_PCIE_BHI_ERRDBG3_ADDR, 0},
+	{"PCIE_BHI_SERIALNUM", HWIO_PCIE_PCIE_BHI_SERIALNUM_ADDR, 0},
+	{"PCIE_BHI_SBLANTIROLLVER", HWIO_PCIE_PCIE_BHI_SBLANTIROLLVER_ADDR, 0},
+	{"PCIE_BHI_NUMSEG", HWIO_PCIE_PCIE_BHI_NUMSEG_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_0", HWIO_PCIE_PCIE_BHI_MSMHWID_0_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_1", HWIO_PCIE_PCIE_BHI_MSMHWID_1_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_2", HWIO_PCIE_PCIE_BHI_MSMHWID_2_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_3", HWIO_PCIE_PCIE_BHI_MSMHWID_3_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_4", HWIO_PCIE_PCIE_BHI_MSMHWID_4_ADDR, 0},
+	{"PCIE_BHI_MSMHWID_5", HWIO_PCIE_PCIE_BHI_MSMHWID_5_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_0", HWIO_PCIE_PCIE_BHI_OEMPKHASH_0_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_1", HWIO_PCIE_PCIE_BHI_OEMPKHASH_1_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_2", HWIO_PCIE_PCIE_BHI_OEMPKHASH_2_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_3", HWIO_PCIE_PCIE_BHI_OEMPKHASH_3_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_4", HWIO_PCIE_PCIE_BHI_OEMPKHASH_4_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_5", HWIO_PCIE_PCIE_BHI_OEMPKHASH_5_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_6", HWIO_PCIE_PCIE_BHI_OEMPKHASH_6_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_7", HWIO_PCIE_PCIE_BHI_OEMPKHASH_7_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_8", HWIO_PCIE_PCIE_BHI_OEMPKHASH_8_ADDR, 0},
+	{"PCIE_BHI_OEMPKHASH_9", HWIO_PCIE_PCIE_BHI_OEMPKHASH_9_ADDR, 0},
+	{"PCIE_BHI_TXVECDB", HWIO_PCIE_PCIE_BHI_TXVECDB_ADDR, 0},
+	{"PCIE_BHI_TXVECSTATUS", HWIO_PCIE_PCIE_BHI_TXVECSTATUS_ADDR, 0},
+	{"PCIE_BHI_RXVECDB", HWIO_PCIE_PCIE_BHI_RXVECDB_ADDR, 0},
+	{"PCIE_BHI_RXVECSTATUS", HWIO_PCIE_PCIE_BHI_RXVECSTATUS_ADDR, 0},
+	/* After dump this register, recovery will fail for QCA6490 */
+	//{"PCIE_WLAON_RESET_DBG_SW_ENTRY", WLAON_RESET_DBG_SW_ENTRY, 0},
+	{NULL},
+};
+
+static struct cnss_pci_reg register_to_dump[] = {
+	{"QDSS_APB_DEC_CS_QDSSCSR_ETRIRQCTRL", QDSS_APB_DEC_CS_QDSSCSR_ETRIRQCTRL, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETF", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETF, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR0", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR0, 0},
+	{"QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR1", QDSS_APB_DEC_CS_QDSSCSR_PRESERVEETR1, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_0", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_0, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_1", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_1, 0},
+	{"Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_2", Q6SS_PRIVCSR_QDSP6SS_QTMR_V1_CNTP_CTL_2, 0},
+	{NULL},
+};
+
+#define LINE_LEN_MAX 80
+
+static int ath11k_register_dump(struct ath11k_base *ab,
+				u8 **buf,
+				size_t *buf_len,
+				struct cnss_pci_reg *regs,
+				size_t num)
+{
+	u32 i;
+	u32 offset = 0;
+	size_t line_len;
+	ssize_t len;
+	char (*line_ptr)[LINE_LEN_MAX];
+
+	*buf_len = 0;
+
+	line_ptr = (char (*)[LINE_LEN_MAX])vzalloc(num * LINE_LEN_MAX);
+	if (!line_ptr)
+		return -ENOMEM;
+
+	for (i = 0; regs[i].name; i++) {
+		regs[i].value = ath11k_pcic_read32(ab, regs[i].offset);
+		ath11k_info(ab, "%s[0x%x] = 0x%x\n",
+			    regs[i].name, regs[i].offset, regs[i].value);
+		len = snprintf(line_ptr[i], LINE_LEN_MAX, "%s[0x%x] = 0x%x\n",
+			       regs[i].name, regs[i].offset, regs[i].value);
+		*buf_len += len;
+	}
+
+	ath11k_info(ab, "%s buf len=%lu\n", __func__, *buf_len);
+	*buf = vzalloc(*buf_len);
+	if (!*buf)
+		return -ENOMEM;
+
+	for (i = 0; i < num; ++i) {
+		line_len = strlen(line_ptr[i]);
+		memcpy(*buf + offset, line_ptr[i], line_len);
+		offset += line_len;
+	}
+
+	vfree(line_ptr);
+
+	return 0;
+}
+
+void ath11k_pci_register_dump(struct ath11k_pci *ab_pci)
+{
+	size_t num;
+	struct register_crash_data *crash_data = &ab_pci->reg_data;
+
+	num = sizeof(register_to_dump) / sizeof(struct cnss_pci_reg) - 1;
+	ath11k_register_dump(ab_pci->ab,
+			     &crash_data->reg_buf,
+			     &crash_data->reg_buf_len,
+			     register_to_dump,
+			     num);
+
+	num = sizeof(register_rddm_fail_debug) / sizeof(struct cnss_pci_reg) - 1;
+	ath11k_register_dump(ab_pci->ab,
+			     &crash_data->reg_rddm_buf,
+			     &crash_data->reg_rddm_buf_len,
+			     register_rddm_fail_debug,
+			     num);
+}
 
 static int ath11k_pci_bus_wake_up(struct ath11k_base *ab)
 {
@@ -107,7 +228,12 @@ static u32 ath11k_pci_window_read32(struct ath11k_base *ab, u32 offset)
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
 	u32 window_start, val;
 
-	window_start = ath11k_pci_get_window_start(ab, offset);
+	if (ab->hw_params.static_window_map)
+        	window_start = ath11k_pci_get_window_start(ab, offset);
+      	else
+        	window_start = ATH11K_PCI_WINDOW_START;
+
+	//window_start = ath11k_pci_get_window_start(ab, offset);
 
 	if (window_start == ATH11K_PCI_WINDOW_START) {
 		spin_lock_bh(&ab_pci->window_lock);
@@ -667,17 +793,19 @@ static int ath11k_pci_start(struct ath11k_base *ab)
 {
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
 
-	/* TODO: for now don't restore ASPM in case of single MSI
-	 * vector as MHI register reading in M2 causes system hang.
-	 */
-	if (test_bit(ATH11K_FLAG_MULTI_MSI_VECTORS, &ab->dev_flags))
-		ath11k_pci_aspm_restore(ab_pci);
-	else
-		ath11k_info(ab, "leaving PCI ASPM disabled to avoid MHI M2 problems\n");
+	ath11k_pci_aspm_restore(ab_pci);
 
 	ath11k_pcic_start(ab);
 
 	return 0;
+}
+
+static int ath11k_pci_force_rddm(struct ath11k_base *ab)
+{
+	struct ath11k_pci *ar_pci;
+
+	ar_pci = ath11k_pci_priv(ab);
+	return ath11k_mhi_force_rddm(ar_pci);
 }
 
 static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
@@ -698,6 +826,7 @@ static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
 	.ce_irq_enable = ath11k_pci_hif_ce_irq_enable,
 	.ce_irq_disable = ath11k_pci_hif_ce_irq_disable,
 	.get_ce_msi_idx = ath11k_pcic_get_ce_msi_idx,
+	.target_crash = ath11k_pci_force_rddm,
 };
 
 static void ath11k_pci_read_hw_version(struct ath11k_base *ab, u32 *major, u32 *minor)
@@ -731,6 +860,8 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 	u32 soc_hw_version_major, soc_hw_version_minor, addr;
 	const struct ath11k_pci_ops *pci_ops;
 	int ret;
+	u32 sub_version;
+	int ops_init = 0;
 
 	ab = ath11k_core_alloc(&pdev->dev, sizeof(*ab_pci), ATH11K_BUS_PCI);
 
@@ -746,8 +877,10 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 	ab_pci->ab = ab;
 	ab_pci->pdev = pdev;
 	ab->hif.ops = &ath11k_pci_hif_ops;
+	ab->fw_mode = ATH11K_FIRMWARE_MODE_NORMAL;
 	pci_set_drvdata(pdev, ab);
 	spin_lock_init(&ab_pci->window_lock);
+	INIT_WORK(&ab_pci->rddm_worker, ath11k_mhi_pm_rddm_worker);
 
 	/* Set fixed_mem_region to true for platforms support reserved memory
 	 * from DT. If memory is reserved from DT for FW, ath11k driver need not
@@ -776,8 +909,8 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 	case QCA6390_DEVICE_ID:
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
 					   &soc_hw_version_minor);
-		switch (soc_hw_version_major) {
-		case 2:
+ 		switch (soc_hw_version_major) {
+ 		case 2:
 			ab->hw_rev = ATH11K_HW_QCA6390_HW20;
 			break;
 		default:
@@ -797,6 +930,13 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		ab->id.bdf_search = ATH11K_BDF_SEARCH_BUS_AND_BOARD;
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
 					   &soc_hw_version_minor);
+		pci_ops = &ath11k_pci_ops_qca6390;
+		ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
+		if (ret) {
+			ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
+			goto err_pci_free_region;
+		}
+		ops_init = 1;
 		switch (soc_hw_version_major) {
 		case 2:
 			switch (soc_hw_version_minor) {
@@ -806,7 +946,19 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 				break;
 			case 0x10:
 			case 0x11:
-				ab->hw_rev = ATH11K_HW_WCN6855_HW21;
+				//ab->hw_rev = ATH11K_HW_WCN6855_HW21;
+				sub_version = ath11k_pcic_read32(ab, SUB_VERSION);
+				ath11k_dbg(ab, ATH11K_DBG_PCI, "sub_version 0x%x\n", sub_version);
+				switch (sub_version) {
+				case 0x1019A0E1:
+				case 0x1019B0E1:
+				case 0x1019C0E1:
+				case 0x1019D0E1:
+					ab->hw_rev = ATH11K_HW_QCA206X_HW21;
+					break;
+				default:
+					ab->hw_rev = ATH11K_HW_WCN6855_HW21;
+				}
 				break;
 			default:
 				goto unsupported_wcn6855_soc;
@@ -820,7 +972,6 @@ unsupported_wcn6855_soc:
 			goto err_pci_free_region;
 		}
 
-		pci_ops = &ath11k_pci_ops_qca6390;
 		break;
 	default:
 		dev_err(&pdev->dev, "Unknown PCI device found: 0x%x\n",
@@ -829,11 +980,13 @@ unsupported_wcn6855_soc:
 		goto err_pci_free_region;
 	}
 
-	ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
-	if (ret) {
-		ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
-		goto err_pci_free_region;
-	}
+	if(ops_init == 1){
+		ret = ath11k_pcic_register_pci_ops(ab, pci_ops);
+		if (ret) {
+			ath11k_err(ab, "failed to register PCI ops: %d\n", ret);
+			goto err_pci_free_region;
+		}
+ 	}
 
 	ret = ath11k_pcic_init_msi_config(ab);
 	if (ret) {
@@ -851,10 +1004,16 @@ unsupported_wcn6855_soc:
 	if (ret)
 		goto err_pci_disable_msi;
 
+	ret = ath11k_pci_set_irq_affinity_hint(ab_pci, cpumask_of(0));
+	if (ret) {
+		ath11k_err(ab, "failed to set irq affinity %d\n", ret);
+		goto err_pci_disable_msi;
+	}
+
 	ret = ath11k_mhi_register(ab_pci);
 	if (ret) {
 		ath11k_err(ab, "failed to register mhi: %d\n", ret);
-		goto err_pci_disable_msi;
+		goto err_irq_affinity_cleanup;
 	}
 
 	ret = ath11k_hal_srng_init(ab);
@@ -875,12 +1034,6 @@ unsupported_wcn6855_soc:
 		goto err_ce_free;
 	}
 
-	ret = ath11k_pci_set_irq_affinity_hint(ab_pci, cpumask_of(0));
-	if (ret) {
-		ath11k_err(ab, "failed to set irq affinity %d\n", ret);
-		goto err_free_irq;
-	}
-
 	/* kernel may allocate a dummy vector before request_irq and
 	 * then allocate a real vector when request_irq is called.
 	 * So get msi_data here again to avoid spurious interrupt
@@ -889,18 +1042,15 @@ unsupported_wcn6855_soc:
 	ret = ath11k_pci_config_msi_data(ab_pci);
 	if (ret) {
 		ath11k_err(ab, "failed to config msi_data: %d\n", ret);
-		goto err_irq_affinity_cleanup;
+		goto err_free_irq;
 	}
 
 	ret = ath11k_core_init(ab);
 	if (ret) {
 		ath11k_err(ab, "failed to init core: %d\n", ret);
-		goto err_irq_affinity_cleanup;
+		goto err_free_irq;
 	}
 	return 0;
-
-err_irq_affinity_cleanup:
-	ath11k_pci_set_irq_affinity_hint(ab_pci, NULL);
 
 err_free_irq:
 	ath11k_pcic_free_irq(ab);
@@ -913,6 +1063,9 @@ err_hal_srng_deinit:
 
 err_mhi_unregister:
 	ath11k_mhi_unregister(ab_pci);
+
+err_irq_affinity_cleanup:
+	ath11k_pci_set_irq_affinity_hint(ab_pci, NULL);
 
 err_pci_disable_msi:
 	ath11k_pci_free_msi(ab_pci);
@@ -1017,6 +1170,7 @@ static struct pci_driver ath11k_pci_driver = {
 static int ath11k_pci_init(void)
 {
 	int ret;
+	u32 sub_version;
 
 	ret = pci_register_driver(&ath11k_pci_driver);
 	if (ret)

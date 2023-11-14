@@ -3,7 +3,7 @@
 // This file is provided under a dual BSD/GPLv2 license. When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2022 Advanced Micro Devices, Inc. All rights reserved.
+// Copyright(c) 2023 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Authors: Venkata Prasad Potturu <venkataprasad.potturu@amd.com>
 
@@ -23,11 +23,11 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
-#define ACP5x_REG_START		0x1240000
-#define ACP5x_REG_END		0x125C000
+#define ACP5X_FUTURE_REG_ACLK_0 0x1864
 
 static const struct sof_amd_acp_desc vangogh_chip_info = {
 	.rev		= 5,
+	.name		= "vangogh",
 	.host_bridge_id = HOST_BRIDGE_VGH,
 	.pgfsm_base	= ACP5X_PGFSM_BASE,
 	.ext_intr_stat	= ACP5X_EXT_INTR_STAT,
@@ -35,11 +35,11 @@ static const struct sof_amd_acp_desc vangogh_chip_info = {
 	.sram_pte_offset = ACP5X_SRAM_PTE_OFFSET,
 	.hw_semaphore_offset = ACP5X_AXI2DAGB_SEM_0,
 	.acp_clkmux_sel = ACP5X_CLKMUX_SEL,
-	.fusion_dsp_offset = ACP5X_DSP_FUSION_RUNSTALL,
+	.probe_reg_offset = ACP5X_FUTURE_REG_ACLK_0,
 };
 
 static const struct sof_dev_desc vangogh_desc = {
-	.machines		= snd_soc_acpi_amd_vgh_sof_machines,
+	.machines		= snd_soc_acpi_amd_vangogh_sof_machines,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -64,6 +64,9 @@ static const struct sof_dev_desc vangogh_desc = {
 static int acp_pci_vgh_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 {
 	unsigned int flag;
+
+	if (pci->revision != ACP_VANGOGH_PCI_ID)
+		return -ENODEV;
 
 	flag = snd_amd_acp_find_config(pci);
 	if (flag != FLAG_AMD_SOF && flag != FLAG_AMD_SOF_ONLY_DMIC)
@@ -91,6 +94,9 @@ static struct pci_driver snd_sof_pci_amd_vgh_driver = {
 	.id_table = vgh_pci_ids,
 	.probe = acp_pci_vgh_probe,
 	.remove = acp_pci_vgh_remove,
+	.driver = {
+		.pm = &sof_pci_pm,
+	},
 };
 module_pci_driver(snd_sof_pci_amd_vgh_driver);
 

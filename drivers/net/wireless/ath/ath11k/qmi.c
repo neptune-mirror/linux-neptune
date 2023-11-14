@@ -1971,6 +1971,51 @@ static void ath11k_qmi_free_target_mem_chunk(struct ath11k_base *ab)
 	}
 }
 
+static size_t ath11k_qmi_get_remote_buf_len(struct fw_remote_mem *fw_mem)
+{
+	unsigned int i;
+	size_t len = 0;
+
+	for (i = 0; i < ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01; i++) {
+		if (fw_mem[i].vaddr && fw_mem[i].size)
+			len += fw_mem[i].size;
+	}
+	return len;
+}
+
+int ath11k_qmi_remote_dump(struct ath11k_base *ab)
+{
+	struct fw_remote_crash_data *crash_data = &ab->remote_crash_data;
+	struct fw_remote_mem *fw_mem = ab->remote_mem;
+	u8 i;
+	u32 offset = 0;
+
+	crash_data->remote_buf_len = ath11k_qmi_get_remote_buf_len(fw_mem);
+	ath11k_info(ab, "%s remote buffer len=%lu\n", __func__, crash_data->remote_buf_len);
+	crash_data->remote_buf = vzalloc(crash_data->remote_buf_len);
+	if (!crash_data->remote_buf)
+		return -ENOMEM;
+
+	for (i = 0; i < ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01; i++) {
+		if (fw_mem[i].vaddr && fw_mem[i].size) {
+			ath11k_info(ab, "remote mem: 0x%p, size: 0x%lx\n", fw_mem[i].vaddr,
+				    fw_mem[i].size);
+			memcpy(crash_data->remote_buf + offset, fw_mem[i].vaddr, fw_mem[i].size);
+			offset += fw_mem[i].size;
+		}
+	}
+	return 0;
+}
+EXPORT_SYMBOL(ath11k_qmi_remote_dump);
+
+static void ath11k_qmi_set_remote_mem(struct fw_remote_mem *fw_mem,
+				      void *vaddr, size_t size,
+				      uint32_t segnum)
+{
+	fw_mem[segnum].vaddr = vaddr;
+	fw_mem[segnum].size = size;
+}
+
 static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 {
 	int i;
@@ -1995,10 +2040,10 @@ static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 			chunk->vaddr = NULL;
 		}
 
-		chunk->vaddr = dma_alloc_coherent(ab->dev,
+		chunk->vaddr = ath11k_core_dma_alloc_coherent(ab->dev,
 						  chunk->size,
 						  &chunk->paddr,
-						  GFP_KERNEL | __GFP_NOWARN);
+						  GFP_KERNEL | __GFP_NOWARN | GFP_DMA32);
 		if (!chunk->vaddr) {
 			if (ab->qmi.mem_seg_count <= ATH11K_QMI_FW_MEM_REQ_SEGMENT_CNT) {
 				ath11k_dbg(ab, ATH11K_DBG_QMI,
@@ -2015,6 +2060,15 @@ static int ath11k_qmi_alloc_target_mem_chunk(struct ath11k_base *ab)
 				   chunk->type);
 			return -EINVAL;
 		}
+
+		if (chunk->type == QMI_WLANFW_MEM_TYPE_DDR_V01) {
+			ath11k_qmi_set_remote_mem(ab->remote_mem,
+						  chunk->vaddr,
+						  chunk->size,
+						  i);
+			ath11k_info(ab, "vaddr=0x%p size=0x%x\n", chunk->vaddr, chunk->size);
+		}
+
 		chunk->prev_type = chunk->type;
 		chunk->prev_size = chunk->size;
 	}
@@ -2510,9 +2564,9 @@ static int ath11k_qmi_m3_load(struct ath11k_base *ab)
 	if (m3_mem->vaddr || m3_mem->size)
 		goto skip_m3_alloc;
 
-	m3_mem->vaddr = dma_alloc_coherent(ab->dev,
+	m3_mem->vaddr = ath11k_core_dma_alloc_coherent(ab->dev,
 					   fw->size, &m3_mem->paddr,
-					   GFP_KERNEL);
+					   GFP_KERNEL  | GFP_DMA32);
 	if (!m3_mem->vaddr) {
 		ath11k_err(ab, "failed to allocate memory for M3 with size %zu\n",
 			   fw->size);
@@ -3169,6 +3223,9 @@ static void ath11k_qmi_driver_event_work(struct work_struct *work)
 		case ATH11K_QMI_EVENT_SERVER_EXIT:
 			set_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
 			set_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
+
+			if (!ab->is_reset)
+				ath11k_core_pre_reconfigure_recovery(ab);
 			break;
 		case ATH11K_QMI_EVENT_REQUEST_MEM:
 			ret = ath11k_qmi_event_mem_request(qmi);
@@ -3268,6 +3325,9 @@ int ath11k_qmi_init_service(struct ath11k_base *ab)
 	INIT_LIST_HEAD(&ab->qmi.event_list);
 	spin_lock_init(&ab->qmi.event_lock);
 	INIT_WORK(&ab->qmi.event_work, ath11k_qmi_driver_event_work);
+
+	memset(ab->remote_mem, 0,
+	       sizeof(struct fw_remote_mem) * ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01);
 
 	ret = qmi_add_lookup(&ab->qmi.handle, ATH11K_QMI_WLFW_SERVICE_ID_V01,
 			     ATH11K_QMI_WLFW_SERVICE_VERS_V01,

@@ -35,10 +35,10 @@ static struct snd_soc_jack vg_headset;
 #define RT5682_PLL_FREQ (48000 * 512)
 #define DUAL_CHANNEL	2
 #define FOUR_CHANNEL	4
+#define MAX98388_CODEC_DAI	"max98388-aif1"
 #define NAU8821_CODEC_DAI	"nau8821-hifi"
 #define NAU8821_BCLK		1536000
 #define NAU8821_FREQ_OUT	12288000
-#define MAX98388_CODEC_DAI	"max98388-aif1"
 
 #define TDM_MODE_ENABLE 1
 
@@ -725,7 +725,7 @@ static int acp_card_max98388_init(struct snd_soc_pcm_runtime *rtd)
 		return -EINVAL;
 
 	ret = snd_soc_dapm_new_controls(&card->dapm, max98388_widgets,
-						ARRAY_SIZE(max98388_widgets));
+					ARRAY_SIZE(max98388_widgets));
 
 	if (ret) {
 		dev_err(rtd->dev, "unable to add widget dapm controls, ret %d\n", ret);
@@ -737,7 +737,7 @@ static int acp_card_max98388_init(struct snd_soc_pcm_runtime *rtd)
 }
 
 static int acp_max98388_hw_params(struct snd_pcm_substream *substream,
-				    struct snd_pcm_hw_params *params)
+				  struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
@@ -755,7 +755,7 @@ static int acp_max98388_hw_params(struct snd_pcm_substream *substream,
 	return ret;
 }
 
-static const struct snd_soc_ops acp_card_max98388_ops = {
+static const struct snd_soc_ops acp_max98388_ops = {
 	.startup = acp_card_max98388_startup,
 	.hw_params = acp_max98388_hw_params,
 };
@@ -1160,6 +1160,8 @@ SND_SOC_DAILINK_DEF(sof_hs,
 		    DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-hs")));
 SND_SOC_DAILINK_DEF(sof_hs_virtual,
 	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-hs-virtual")));
+SND_SOC_DAILINK_DEF(sof_bt,
+		    DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-bt")));
 SND_SOC_DAILINK_DEF(sof_dmic,
 	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-dmic")));
 SND_SOC_DAILINK_DEF(pdm_dmic,
@@ -1217,6 +1219,8 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 	int i = 0, num_links = 0;
 
 	if (drv_data->hs_cpu_id)
+		num_links++;
+	if (drv_data->bt_cpu_id)
 		num_links++;
 	if (drv_data->amp_cpu_id)
 		num_links++;
@@ -1303,6 +1307,7 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].platforms = sof_component;
 		links[i].num_platforms = ARRAY_SIZE(sof_component);
 		links[i].dpcm_playback = 1;
+		links[i].dpcm_capture = 1;
 		links[i].nonatomic = true;
 		links[i].no_pcm = 1;
 		if (!drv_data->amp_codec_id) {
@@ -1335,6 +1340,7 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].platforms = sof_component;
 		links[i].num_platforms = ARRAY_SIZE(sof_component);
 		links[i].dpcm_playback = 1;
+		links[i].dpcm_capture = 1;
 		links[i].nonatomic = true;
 		links[i].no_pcm = 1;
 		if (!drv_data->amp_codec_id) {
@@ -1351,7 +1357,7 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		if (drv_data->amp_codec_id == MAX98388) {
 			links[i].codecs = max98388;
 			links[i].num_codecs = ARRAY_SIZE(max98388);
-			links[i].ops = &acp_card_max98388_ops;
+			links[i].ops = &acp_max98388_ops;
 			links[i].init = acp_card_max98388_init;
 			card->codec_conf = max98388_conf;
 			card->num_configs = ARRAY_SIZE(max98388_conf);
@@ -1371,6 +1377,26 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 			card->codec_conf = cs35l41_conf;
 			card->num_configs = ARRAY_SIZE(cs35l41_conf);
 			links[i].ops = &acp_cs35l41_ops;
+		}
+		i++;
+	}
+
+	if (drv_data->bt_cpu_id == I2S_BT) {
+		links[i].name = "acp-bt-codec";
+		links[i].id = BT_BE_ID;
+		links[i].cpus = sof_bt;
+		links[i].num_cpus = ARRAY_SIZE(sof_bt);
+		links[i].platforms = sof_component;
+		links[i].num_platforms = ARRAY_SIZE(sof_component);
+		links[i].dpcm_playback = 1;
+		links[i].dpcm_capture = 1;
+		links[i].nonatomic = true;
+		links[i].no_pcm = 1;
+		if (!drv_data->bt_codec_id) {
+			/* Use dummy codec if codec id not specified */
+			links[i].codecs = dummy_codec;
+			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].num_codecs = 1;
 		}
 		i++;
 	}

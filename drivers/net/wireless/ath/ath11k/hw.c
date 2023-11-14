@@ -100,6 +100,7 @@ static void ath11k_init_wmi_config_qca6390(struct ath11k_base *ab,
 	config->num_wow_filters = 0x16;
 	config->num_keep_alive_pattern = 0;
 	config->flag1 |= WMI_RSRC_CFG_FLAG1_BSS_CHANNEL_INFO_64;
+	config->host_service_flags |= WMI_RSRC_CFG_HOST_SERVICE_FLAG_NAN_IFACE_SUPPORT;
 }
 
 static void ath11k_hw_ipq8074_reo_setup(struct ath11k_base *ab)
@@ -842,6 +843,18 @@ static u32 ath11k_hw_wcn6750_get_tcl_ring_selector(struct sk_buff *skb)
 	 * an out of order arrival of the packets at the receiver.
 	 */
 	return skb_get_hash(skb);
+}
+
+bool ath11k_hw_supports_6g_cc_ext(struct ath11k *ar)
+{
+	return (test_bit(WMI_TLV_SERVICE_REG_CC_EXT_EVENT_SUPPORT,
+			 ar->ab->wmi_ab.svc_map)) && ar->supports_6ghz;
+}
+
+bool ath11k_hw_supports_tpc_ext(struct ath11k *ar)
+{
+	return ath11k_hw_supports_6g_cc_ext(ar) &&
+	       test_bit(WMI_TLV_SERVICE_EXT_TPC_REG_SUPPORT, ar->ab->wmi_ab.svc_map);
 }
 
 const struct ath11k_hw_ops ipq8074_ops = {

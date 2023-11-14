@@ -324,6 +324,7 @@ static void ath11k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
 				    enum mhi_callback cb)
 {
 	struct ath11k_base *ab = dev_get_drvdata(mhi_cntrl->cntrl_dev);
+	struct ath11k_pci *ar_pci = ath11k_pci_priv(ab);
 
 	ath11k_dbg(ab, ATH11K_DBG_BOOT, "mhi notify status reason %s\n",
 		   ath11k_mhi_op_callback_to_str(cb));
@@ -334,7 +335,7 @@ static void ath11k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
 		break;
 	case MHI_CB_EE_RDDM:
 		if (!(test_bit(ATH11K_FLAG_UNREGISTERING, &ab->dev_flags)))
-			queue_work(ab->workqueue_aux, &ab->reset_work);
+			queue_work(ab->workqueue_aux, &ar_pci->rddm_worker);
 		break;
 	default:
 		break;
@@ -414,7 +415,7 @@ int ath11k_mhi_register(struct ath11k_pci *ab_pci)
 			goto free_controller;
 	} else {
 		mhi_ctrl->iova_start = 0;
-		mhi_ctrl->iova_stop = 0xFFFFFFFF;
+		mhi_ctrl->iova_stop = 0xFFFFFFFFF;
 	}
 
 	mhi_ctrl->rddm_size = RDDM_DUMP_SIZE;
@@ -434,6 +435,7 @@ int ath11k_mhi_register(struct ath11k_pci *ab_pci)
 	case ATH11K_HW_QCA6390_HW20:
 	case ATH11K_HW_WCN6855_HW20:
 	case ATH11K_HW_WCN6855_HW21:
+	case ATH11K_HW_QCA206X_HW21:
 		ath11k_mhi_config = &ath11k_mhi_config_qca6390;
 		break;
 	default:
@@ -518,6 +520,21 @@ int ath11k_mhi_resume(struct ath11k_pci *ab_pci)
 	 * the MHI state while resuming.
 	 */
 	ret = mhi_pm_resume_force(ab_pci->mhi_ctrl);
+	if (ret) {
+		ath11k_warn(ab, "failed to resume mhi: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+
+int ath11k_mhi_force_rddm(struct ath11k_pci *ab_pci)
+{
+	struct ath11k_base *ab = ab_pci->ab;
+	int ret;
+
+	ret = mhi_force_rddm_mode(ab_pci->mhi_ctrl);
 	if (ret) {
 		ath11k_warn(ab, "failed to resume mhi: %d", ret);
 		return ret;

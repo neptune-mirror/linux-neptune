@@ -468,6 +468,78 @@ static const struct file_operations fops_bcn_stats = {
 	.llseek = default_llseek,
 };
 
+static ssize_t ath11k_debugfs_write_coex_config(struct file *file,
+		const char __user *user_buf,
+		size_t count, loff_t *ppos)
+{
+	struct ath11k_base *ab = file->private_data;
+	struct ath11k *ar = ath11k_ab_to_ar(ab, 0);
+	char buf[64] = {0};
+	ssize_t ret;
+	int rc;
+	u32 config_type, config_arg1;
+	char sep[] = " ";
+	char *token, *cur;
+	struct wmi_coex_config_params param;
+
+	if (*ppos != 0 || count >= sizeof(buf) || count == 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, ppos, user_buf, count);
+	if (ret < 0)
+		goto out;
+
+	/* drop the possible '\n' from the end */
+	if (buf[*ppos - 1] == '\n')
+		buf[*ppos - 1] = '\0';
+
+	ath11k_info(ab, "%s: %s\n", __func__, buf);
+	ret = count;
+	cur = buf;
+
+	token = strsep(&cur, sep);
+	rc = kstrtou32(token, 0, &config_type);
+	if (rc) {
+		ath11k_warn(ab, "%s convert error: config_type %s\n", __func__, token);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	token = strim(cur);
+	rc = kstrtou32(token, 0, &config_arg1);
+	if (rc) {
+		ath11k_warn(ab, "%s convert error: config_arg1 %s\n", __func__, token);
+		ret = -EFAULT;
+		goto out;
+	}
+
+
+	memset(&param, 0, sizeof(struct wmi_coex_config_params));
+	param.config_type = config_type;
+	param.config_arg1 = config_arg1;
+
+	mutex_lock(&ar->conf_mutex);
+
+	rc = ath11k_mac_send_coex_config(ar, &param);
+	if (rc) {
+		ath11k_warn(ab, "failed to send coex config using debugfs %d\n", rc);
+		ret = -EFAULT;
+	}
+
+	mutex_unlock(&ar->conf_mutex);
+out:
+	return ret;
+}
+
+static const struct file_operations fops_coex_config = {
+	.write = ath11k_debugfs_write_coex_config,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
 static ssize_t ath11k_read_simulate_fw_crash(struct file *file,
 					     char __user *user_buf,
 					     size_t count, loff_t *ppos)
@@ -531,6 +603,10 @@ static ssize_t ath11k_write_simulate_fw_crash(struct file *file,
 	} else if (!strcmp(buf, "hw-restart")) {
 		ath11k_info(ab, "user requested hw restart\n");
 		queue_work(ab->workqueue_aux, &ab->reset_work);
+		ret = 0;
+	} else if (!strcmp(buf, "mhi-rddm")) {
+		ath11k_info(ab, "force target rddm\n");
+		ath11k_hif_force_rddm(ab);
 		ret = 0;
 	} else {
 		ret = -EINVAL;
@@ -957,9 +1033,12 @@ static ssize_t ath11k_read_sram_dump(struct file *file,
 
 static int ath11k_release_sram_dump(struct inode *inode, struct file *file)
 {
+	struct ath11k_base *ab = inode->i_private;
 	vfree(file->private_data);
 	file->private_data = NULL;
 
+	debugfs_create_file("coex_config", 0600, ab->debugfs_soc, ab,
+			    &fops_coex_config);
 	return 0;
 }
 

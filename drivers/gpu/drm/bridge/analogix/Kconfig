@@ -13,6 +13,12 @@ config DRM_ANALOGIX_ANX6345
 	  ANX6345 transforms the LVTTL RGB output of an
 	  application processor to eDP or DisplayPort.
 
+config DRM_ANALOGIX_ANX7580
+	tristate "Analogix ANX7580 Decoder"
+	depends on I2C
+	help
+	  Support for the Analogix ANX7580 to MIPI DSI bridge.
+
 config DRM_ANALOGIX_ANX78XX
 	tristate "Analogix ANX78XX bridge"
 	select DRM_ANALOGIX_DP

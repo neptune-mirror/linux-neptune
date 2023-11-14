@@ -318,6 +318,7 @@ out_free_pages:
 	__dma_direct_free_pages(dev, page, size);
 	return NULL;
 }
+EXPORT_SYMBOL(dma_direct_alloc);
 
 void dma_direct_free(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t dma_addr, unsigned long attrs)

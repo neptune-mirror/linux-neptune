@@ -115,6 +115,17 @@ static const struct ath11k_msi_config ath11k_msi_config[] = {
 		},
 		.hw_rev = ATH11K_HW_WCN6750_HW10,
 	},
+	{
+		.total_vectors = 32,
+		.total_users = 4,
+		.users = (struct ath11k_msi_user[]) {
+			{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
+			{ .name = "CE", .num_vectors = 10, .base_vector = 3 },
+			{ .name = "WAKE", .num_vectors = 1, .base_vector = 13 },
+			{ .name = "DP", .num_vectors = 18, .base_vector = 14 },
+		},
+		.hw_rev = ATH11K_HW_QCA206X_HW21,
+	},
 };
 
 int ath11k_pcic_init_msi_config(struct ath11k_base *ab)
@@ -218,9 +229,16 @@ int ath11k_pcic_read(struct ath11k_base *ab, void *buf, u32 start, u32 end)
 	if (wakeup_required && ab->pci.ops->wakeup) {
 		ret = ab->pci.ops->wakeup(ab);
 		if (ret) {
-			ath11k_warn(ab, "failed to wakeup for read from 0x%x: %d\n",
-				    start, ret);
-			return ret;
+			ath11k_warn(ab,
+				    "wakeup failed, data may be invalid: %d",
+				    ret);
+			/* Even though wakeup() failed, continue processing rather
+			 * than returning because some parts of the data may still
+			 * be valid and useful in some cases, e.g. could give us
+			 * some clues on firmware crash.
+			 * Mislead due to invalid data could be avoided because we
+			 * are aware of the wakeup failure.
+			 */
 		}
 	}
 
@@ -453,18 +471,17 @@ void ath11k_pcic_ext_irq_enable(struct ath11k_base *ab)
 {
 	int i;
 
-	set_bit(ATH11K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags);
-
 	for (i = 0; i < ATH11K_EXT_IRQ_GRP_NUM_MAX; i++) {
 		struct ath11k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
 
 		if (!irq_grp->napi_enabled) {
-			dev_set_threaded(&irq_grp->napi_ndev, true);
 			napi_enable(&irq_grp->napi);
 			irq_grp->napi_enabled = true;
 		}
 		ath11k_pcic_ext_grp_enable(irq_grp);
 	}
+
+	set_bit(ATH11K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags);
 }
 EXPORT_SYMBOL(ath11k_pcic_ext_irq_enable);
 
@@ -592,7 +609,10 @@ static int ath11k_pcic_ext_irq_config(struct ath11k_base *ab)
 			ath11k_dbg(ab, ATH11K_DBG_PCI,
 				   "irq:%d group:%d\n", irq, i);
 
-			irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY);
+			if (!test_bit(ATH11K_FLAG_MULTI_MSI_VECTORS, &ab->dev_flags))
+				irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY | IRQ_MOVE_PCNTXT);
+			else
+				irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY);
 			ret = request_irq(irq, ath11k_pcic_ext_interrupt_handler,
 					  irq_flags, "DP_EXT_IRQ", irq_grp);
 			if (ret) {
@@ -642,6 +662,8 @@ int ath11k_pcic_config_irq(struct ath11k_base *ab)
 
 		tasklet_setup(&ce_pipe->intr_tq, ath11k_pcic_ce_tasklet);
 
+		if (!test_bit(ATH11K_FLAG_MULTI_MSI_VECTORS, &ab->dev_flags))
+			irq_set_status_flags(irq, IRQ_MOVE_PCNTXT);
 		ret = request_irq(irq, ath11k_pcic_ce_interrupt_handler,
 				  irq_flags, irq_name[irq_idx], ce_pipe);
 		if (ret) {

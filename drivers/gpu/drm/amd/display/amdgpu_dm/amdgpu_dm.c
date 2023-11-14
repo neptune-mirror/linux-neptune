@@ -147,7 +147,7 @@ MODULE_FIRMWARE(FIRMWARE_NAVI12_DMCU);
 #define PSP_FOOTER_BYTES 0x100
 
 /* Maximum backlight level. */
-#define AMDGPU_MAX_BL_LEVEL 0xFFFF
+#define AMDGPU_MAX_BL_LEVEL 0xFFF
 
 /**
  * DOC: overview
@@ -7349,7 +7349,8 @@ static int amdgpu_dm_connector_get_modes(struct drm_connector *connector)
 				drm_add_modes_noedid(connector, 1920, 1080);
 	} else {
 		amdgpu_dm_connector_ddc_get_modes(connector, edid);
-		amdgpu_dm_connector_add_common_modes(encoder, connector);
+		if (connector->connector_type != DRM_MODE_CONNECTOR_eDP)
+			amdgpu_dm_connector_add_common_modes(encoder, connector);
 		amdgpu_dm_connector_add_freesync_modes(connector, edid);
 	}
 	amdgpu_dm_fbc_init(connector);

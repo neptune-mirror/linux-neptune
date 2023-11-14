@@ -158,7 +158,7 @@ struct ath11k_vif *ath11k_mac_get_vif_up(struct ath11k_base *ab);
 
 struct ath11k *ath11k_mac_get_ar_by_vdev_id(struct ath11k_base *ab, u32 vdev_id);
 struct ath11k *ath11k_mac_get_ar_by_pdev_id(struct ath11k_base *ab, u32 pdev_id);
-
+enum wmi_vdev_type ath11k_mac_get_ar_vdev_type(struct ath11k *ar);
 void ath11k_mac_drain_tx(struct ath11k *ar);
 void ath11k_mac_peer_cleanup_all(struct ath11k *ar);
 int ath11k_mac_tx_mgmt_pending_free(int buf_id, void *skb, void *ctx);
@@ -175,4 +175,9 @@ int ath11k_mac_wait_tx_complete(struct ath11k *ar);
 int ath11k_mac_vif_set_keepalive(struct ath11k_vif *arvif,
 				 enum wmi_sta_keepalive_method method,
 				 u32 interval);
+int ath11k_mac_send_coex_config(struct ath11k *ar,
+				struct wmi_coex_config_params *param);
+void ath11k_mac_fill_reg_tpc_info(struct ath11k *ar,
+				  struct ieee80211_vif *vif,
+				  struct ieee80211_chanctx_conf *ctx);
 #endif

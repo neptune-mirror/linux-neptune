@@ -83,23 +83,14 @@ static struct acp_card_drvdata sof_rt5682s_hs_rt1019_data = {
 	.tdm_mode = false,
 };
 
-static struct acp_card_drvdata sof_nau8821_cs35l41_data = {
-	.hs_cpu_id = I2S_SP,
-	.amp_cpu_id = I2S_HS,
-	.dmic_cpu_id = NONE,
-	.hs_codec_id = NAU8821,
-	.amp_codec_id = CS35L41,
-	.dmic_codec_id = NONE,
-	.soc_mclk = true,
-	.tdm_mode = false,
-};
-
 static struct acp_card_drvdata sof_nau8821_max98388_data = {
 	.hs_cpu_id = I2S_SP,
 	.amp_cpu_id = I2S_HS,
+	.bt_cpu_id	= I2S_BT,
 	.dmic_cpu_id = NONE,
 	.hs_codec_id = NAU8821,
 	.amp_codec_id = MAX98388,
+	.bt_codec_id = NONE,
 	.dmic_codec_id = NONE,
 	.soc_mclk = true,
 	.tdm_mode = false,
@@ -189,10 +180,6 @@ static const struct platform_device_id board_ids[] = {
 		.driver_data = (kernel_ulong_t)&sof_rt5682s_hs_rt1019_data
 	},
 	{
-		.name = "nau8821-cs3",
-		.driver_data = (kernel_ulong_t)&sof_nau8821_cs35l41_data
-	},
-	{
 		.name = "nau8821-max",
 		.driver_data = (kernel_ulong_t)&sof_nau8821_max98388_data
 	},
@@ -217,6 +204,5 @@ MODULE_ALIAS("platform:rt5682s-max");
 MODULE_ALIAS("platform:rt5682s-rt1019");
 MODULE_ALIAS("platform:nau8825-max");
 MODULE_ALIAS("platform:rt5682s-hs-rt1019");
-MODULE_ALIAS("platform:nau8821-cs3");
 MODULE_ALIAS("platform:nau8821-max");
 MODULE_LICENSE("GPL v2");

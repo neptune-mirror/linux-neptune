@@ -3,7 +3,7 @@
  * This file is provided under a dual BSD/GPLv2 license. When using or
  * redistributing this file, you may do so under either license.
  *
- * Copyright(c) 2021 Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright(c) 2021, 2023 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Author: Ajit Kumar Pandey <AjitKumar.Pandey@amd.com>
  */
@@ -11,8 +11,14 @@
 #ifndef __SOF_AMD_ACP_H
 #define __SOF_AMD_ACP_H
 
+#include <linux/dmi.h>
+
 #include "../sof-priv.h"
 #include "../sof-audio.h"
+
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
 
 #define ACP_MAX_STREAM	8
 
@@ -58,6 +64,7 @@
 #define ACP_DSP_TO_HOST_IRQ			0x04
 
 #define ACP_RN_PCI_ID				0x01
+#define ACP_VANGOGH_PCI_ID			0x50
 #define ACP_RMB_PCI_ID				0x6F
 
 #define HOST_BRIDGE_CZN				0x1630
@@ -80,8 +87,16 @@
 #define AMD_STACK_DUMP_SIZE			32
 
 #define SRAM1_SIZE				0x13A000
+#define PROBE_STATUS_BIT			BIT(31)
 
-#define FW_SIGNATURE				0x100
+#define ACP_FIRMWARE_SIGNATURE			0x100
+
+#define MAX_OEM_STRINGS			0x05
+#define CHANGE_ENDIANNESS(val)   ((((uint32_t)(val) & 0xff000000) >> 24) \
+                               | (((uint32_t)(val) & 0x00ff0000) >> 8) \
+                               | (((uint32_t)(val) & 0x0000ff00) << 8)  \
+                               | (((uint32_t)(val) & 0x000000ff) << 24))
+
 
 enum clock_source {
 	ACP_CLOCK_96M = 0,
@@ -161,18 +176,23 @@ struct acp_dsp_stream {
 	int active;
 	unsigned int reg_offset;
 	size_t posn_offset;
+	struct snd_compr_stream *cstream;
+	u64 cstream_posn;
 };
 
 struct sof_amd_acp_desc {
 	unsigned int rev;
+	const char *name;
 	unsigned int host_bridge_id;
 	u32 pgfsm_base;
+	u32 ext_intr_enb;
 	u32 ext_intr_stat;
 	u32 dsp_intr_base;
 	u32 sram_pte_offset;
 	u32 hw_semaphore_offset;
 	u32 acp_clkmux_sel;
 	u32 fusion_dsp_offset;
+	u32 probe_reg_offset;
 };
 
 /* Common device data struct for ACP devices */
@@ -183,16 +203,24 @@ struct acp_dev_data {
 	struct platform_device *dmic_dev;
 	unsigned int fw_bin_size;
 	unsigned int fw_data_bin_size;
+	const char *fw_code_bin;
+	const char *fw_data_bin;
 	u32 fw_bin_page_count;
 	dma_addr_t sha_dma_addr;
 	u8 *bin_buf;
 	dma_addr_t dma_addr;
 	u8 *data_buf;
+	bool signed_fw_image;
 	struct dma_descriptor dscr_info[ACP_MAX_DESC];
 	struct acp_dsp_stream stream_buf[ACP_MAX_STREAM];
 	struct acp_dsp_stream *dtrace_stream;
 	struct pci_dev *smn_dev;
-	bool signed_fw_image;
+	struct acp_dsp_stream *probe_stream;
+	bool enable_fw_debug;
+};
+
+struct acp_oem_str {
+	const char *name;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
@@ -212,7 +240,7 @@ int amd_sof_acp_remove(struct snd_sof_dev *sdev);
 /* DSP Loader callbacks */
 int acp_sof_dsp_run(struct snd_sof_dev *sdev);
 int acp_dsp_pre_fw_run(struct snd_sof_dev *sdev);
-int acp_sof_load_firmware(struct snd_sof_dev *sdev);
+int acp_sof_load_signed_firmware(struct snd_sof_dev *sdev);
 int acp_get_bar_index(struct snd_sof_dev *sdev, u32 type);
 
 /* Block IO callbacks */
@@ -226,7 +254,7 @@ irqreturn_t acp_sof_ipc_irq_thread(int irq, void *context);
 int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_sof_pcm_stream *sps,
 			 void *p, size_t sz);
 int acp_set_stream_data_offset(struct snd_sof_dev *sdev,
-			       struct snd_pcm_substream *substream,
+			       struct snd_sof_pcm_stream *sps,
 			       size_t posn_offset);
 int acp_sof_ipc_send_msg(struct snd_sof_dev *sdev,
 			 struct snd_sof_ipc_msg *msg);
@@ -283,4 +311,10 @@ static inline const struct sof_amd_acp_desc *get_chip_info(struct snd_sof_pdata 
 
 	return desc->chip_info;
 }
+
+int acp_probes_register(struct snd_sof_dev *sdev);
+void acp_probes_unregister(struct snd_sof_dev *sdev);
+
+extern struct snd_soc_acpi_mach snd_soc_acpi_amd_vangogh_sof_machines[];
+extern const struct dmi_system_id acp_sof_quirk_table[];
 #endif
