@@ -925,7 +925,7 @@ static int platform_clock_control(struct snd_soc_dapm_widget *w,
 
 static const struct snd_soc_dapm_widget nau8821_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone jack", NULL),
-	SND_SOC_DAPM_MIC("Headset mic", NULL),
+	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Int Mic", NULL),
 	SND_SOC_DAPM_SUPPLY("Platform Clock", SND_SOC_NOPM, 0, 0,
 			    platform_clock_control, SND_SOC_DAPM_PRE_PMU |
@@ -936,11 +936,11 @@ static const struct snd_soc_dapm_route nau8821_audio_route[] = {
 	/* HP jack connectors - unknown if we have jack detection */
 	{ "Headphone jack", NULL, "HPOL" },
 	{ "Headphone jack", NULL, "HPOR" },
-	{ "MICL", NULL, "Headset mic" },
-	{ "MICR", NULL, "Headset mic" },
+	{ "MICL", NULL, "Headset Mic" },
+	{ "MICR", NULL, "Headset Mic" },
 	{ "DMIC", NULL, "Int Mic" },
 	{ "Headphone jack", NULL, "Platform Clock" },
-	{ "Headset mic", NULL, "Platform Clock" },
+	{ "Headset Mic", NULL, "Platform Clock" },
 	{ "Int Mic", NULL, "Platform Clock" },
 };
 
