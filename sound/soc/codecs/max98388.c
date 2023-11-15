@@ -855,7 +855,15 @@ static struct snd_soc_dai_driver max98388_dai[] = {
 static int max98388_suspend(struct device *dev)
 {
 	struct max98388_priv *max98388 = dev_get_drvdata(dev);
-
+        #ifdef MUTE_DEBUG
+	int ret;
+	int reg = 0;
+	regcache_cache_bypass(max98363->regmap, true);
+	ret = regmap_read(max98388->regmap, 0x2001, &reg);
+                pr_info("[$$$MUTE_DEBUG] %s 0x2001: %x", __func__, reg);
+	ret = regmap_read(max98388->regmap, 0x2002, &reg);
+                pr_info("[$$$MUTE_DEBUG] %s 0x2002: %x", __func__, reg);
+	#endif
 	regcache_cache_only(max98388->regmap, true);
 	regcache_mark_dirty(max98388->regmap);
 
@@ -865,10 +873,23 @@ static int max98388_suspend(struct device *dev)
 static int max98388_resume(struct device *dev)
 {
 	struct max98388_priv *max98388 = dev_get_drvdata(dev);
+        
+	#ifdef MUTE_DEBUG
+	int ret;
+	int reg = 0;
+	#endif
 
 	regcache_cache_only(max98388->regmap, false);
 	max98388_reset(max98388, dev);
 	regcache_sync(max98388->regmap);
+
+	#ifdef MUTE_DEBUG
+	regcache_cache_bypass(max98363->regmap, true);
+	ret = regmap_read(max98388->regmap, 0x2001, &reg);
+                pr_info("[$$$MUTE_DEBUG] %s 0x2001: %x", __func__, reg);
+	ret = regmap_read(max98388->regmap, 0x2002, &reg);
+                pr_info("[$$$MUTE_DEBUG] %s 0x2002: %x", __func__, reg);
+	#endif
 
 	return 0;
 }
