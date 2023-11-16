@@ -821,6 +821,7 @@ static bool max98388_readable_register(struct device *dev,
 static bool max98388_volatile_reg(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
+	case MAX98388_R2000_SW_RESET:
 	case MAX98388_R2001_INT_RAW1 ... MAX98388_R2005_INT_STATE2:
 	case MAX98388_R210F_GLOBAL_EN:
 	case MAX98388_R22FF_REV_ID:
