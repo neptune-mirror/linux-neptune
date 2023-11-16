@@ -868,7 +868,9 @@ static int max98388_resume(struct device *dev)
 	struct max98388_priv *max98388 = dev_get_drvdata(dev);
 
 	regcache_cache_only(max98388->regmap, false);
+	msleep(1);
 	max98388_reset(max98388, dev);
+	msleep(1);
 	regcache_sync(max98388->regmap);
 
 	return 0;
