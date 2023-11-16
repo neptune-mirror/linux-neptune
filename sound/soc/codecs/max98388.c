@@ -19,7 +19,7 @@
 #include <sound/tlv.h>
 #include "max98388.h"
 
-static struct reg_default max98388_reg[] = {
+static struct reg_default max98388_reg[]= {
 	{MAX98388_R2000_SW_RESET, 0x00},
 	{MAX98388_R2001_INT_RAW1, 0x00},
 	{MAX98388_R2002_INT_RAW2, 0x00},
@@ -821,8 +821,8 @@ static bool max98388_readable_register(struct device *dev,
 static bool max98388_volatile_reg(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
+	case MAX98388_R2000_SW_RESET:
 	case MAX98388_R2001_INT_RAW1 ... MAX98388_R2005_INT_STATE2:
-	case MAX98388_R210F_GLOBAL_EN:
 	case MAX98388_R22FF_REV_ID:
 		return true;
 	default:
@@ -868,7 +868,6 @@ static int max98388_resume(struct device *dev)
 
 	regcache_cache_only(max98388->regmap, false);
 	max98388_reset(max98388, dev);
-	msleep(10);
 	regcache_sync(max98388->regmap);
 
 	return 0;
