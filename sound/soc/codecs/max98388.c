@@ -881,7 +881,7 @@ static int max98388_resume(struct device *dev)
 
 	regcache_cache_only(max98388->regmap, false);
 	max98388_reset(max98388, dev);
-	msleep(2);
+	msleep(10);
 	regcache_sync(max98388->regmap);
 
 	#ifdef MUTE_DEBUG
