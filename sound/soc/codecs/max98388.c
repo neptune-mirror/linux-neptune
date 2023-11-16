@@ -407,6 +407,21 @@ void max98388_reset(struct max98388_priv *max98388, struct device *dev)
 				  MAX98388_R22FF_REV_ID, &reg);
 		if (!ret) {
 			dev_info(dev, "Reset completed (retry:%d)\n", count);
+			
+	                /* Power on device */
+	                if (gpio_is_valid(max98388->reset_gpio)) {
+		              ret = devm_gpio_request(&i2c->dev, max98388->reset_gpio,
+					"MAX98388_RESET");
+			if (ret) {
+				dev_err(&i2c->dev, "%s: Failed to request gpio %d\n",
+					__func__, max98388->reset_gpio);
+				return -EINVAL;
+			}
+			gpio_direction_output(max98388->reset_gpio, 0);
+			msleep(50);
+			gpio_direction_output(max98388->reset_gpio, 1);
+			msleep(20);
+			}
 			return;
 		}
 		count++;
