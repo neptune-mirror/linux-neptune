@@ -392,14 +392,14 @@ void max98388_reset(struct max98388_priv *max98388, struct device *dev)
 	int ret, reg, count;
 
 	/* Software Reset */
-	ret = regmap_write(max98388->regmap,
+	regmap_write(max98388->regmap,
 				 MAX98388_R2000_SW_RESET,
 				 MAX98388_SOFT_RESET,
 				 MAX98388_SOFT_RESET);
 	msleep(5);
-	if (ret)
+       /*if (ret)
 		dev_err(dev, "Reset command failed. (ret:%d)\n", ret);
-
+       */
 	count = 0;
 	while (count < 3) {
 		usleep_range(10000, 11000);
