@@ -394,7 +394,6 @@ void max98388_reset(struct max98388_priv *max98388, struct device *dev)
 	/* Software Reset */
 	regmap_write(max98388->regmap,
 				 MAX98388_R2000_SW_RESET,
-				 MAX98388_SOFT_RESET,
 				 MAX98388_SOFT_RESET);
 	msleep(5);
        /*if (ret)
