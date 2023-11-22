@@ -2770,7 +2770,7 @@ static int dm_resume(void *handle)
 	struct dc_state *dc_state;
 	int i, r, j;
 
-	printk("[Josh Resume] START of dm_resume\n");
+//	printk("[Josh Resume] START of dm_resume\n");
 
 	if (amdgpu_in_reset(adev)) {
 		dc_state = dm->cached_dc_state;
@@ -2915,7 +2915,7 @@ static int dm_resume(void *handle)
 		}
 		dm_new_crtc_state->base.color_mgmt_changed = true;
 
-		printk("[Josh Resume] I see a CRTC: %d!\n", i);
+//		printk("[Josh Resume] I see a CRTC: %d!\n", i);
 	}
 
 	for_each_new_plane_in_state(dm->cached_state, plane, new_plane_state, i) {
@@ -2925,22 +2925,22 @@ static int dm_resume(void *handle)
 			dc_plane_state_release(dm_new_plane_state->dc_state);
 			dm_new_plane_state->dc_state = NULL;
 		}
-		printk("[Josh Resume] I see a plane: %d! Here's what I think it is, but I might be wrong cause I'm forgetful >.<\n", i);
-		printk("[Josh Resume]     Degamma TF: %d\n", (int)dm_new_plane_state->degamma_tf);
-		printk("[Josh Resume]     Shaper TF: %d\n", (int)dm_new_plane_state->shaper_tf);
-		printk("[Josh Resume]     Blend TF: %d\n", (int)dm_new_plane_state->blend_tf);
-		printk("[Josh Resume]     Has Degamma LUT? %d\n", dm_new_plane_state->degamma_lut != NULL ? 1 : 0);
-		printk("[Josh Resume]     Has Shaper LUT? %d\n", dm_new_plane_state->shaper_lut != NULL ? 1 : 0);
-		printk("[Josh Resume]     Has Blend LUT? %d\n", dm_new_plane_state->blend_lut != NULL ? 1 : 0);
-		printk("[Josh Resume]     Has 3D LUT? %d\n", dm_new_plane_state->lut3d != NULL ? 1 : 0);
-		printk("[Josh Resume]     Has CTM? %d\n", dm_new_plane_state->ctm != NULL ? 1 : 0);
+//		printk("[Josh Resume] I see a plane: %d! Here's what I think it is, but I might be wrong cause I'm forgetful >.<\n", i);
+//		printk("[Josh Resume]     Degamma TF: %d\n", (int)dm_new_plane_state->degamma_tf);
+//		printk("[Josh Resume]     Shaper TF: %d\n", (int)dm_new_plane_state->shaper_tf);
+//		printk("[Josh Resume]     Blend TF: %d\n", (int)dm_new_plane_state->blend_tf);
+//		printk("[Josh Resume]     Has Degamma LUT? %d\n", dm_new_plane_state->degamma_lut != NULL ? 1 : 0);
+//		printk("[Josh Resume]     Has Shaper LUT? %d\n", dm_new_plane_state->shaper_lut != NULL ? 1 : 0);
+//		printk("[Josh Resume]     Has Blend LUT? %d\n", dm_new_plane_state->blend_lut != NULL ? 1 : 0);
+//		printk("[Josh Resume]     Has 3D LUT? %d\n", dm_new_plane_state->lut3d != NULL ? 1 : 0);
+//		printk("[Josh Resume]     Has CTM? %d\n", dm_new_plane_state->ctm != NULL ? 1 : 0);
 	}
 
-	printk("[Josh Resume] AMDGPU calling into drm_atomic_helper_resume!\n");
+//	printk("[Josh Resume] AMDGPU calling into drm_atomic_helper_resume!\n");
 
 	drm_atomic_helper_resume(ddev, dm->cached_state);
 
-	printk("[Josh Resume] AMDGPU DONE with drm_atomic_helper_resume!\n");
+//	printk("[Josh Resume] AMDGPU DONE with drm_atomic_helper_resume!\n");
 
 	dm->cached_state = NULL;
 
@@ -2948,7 +2948,7 @@ static int dm_resume(void *handle)
 
 	amdgpu_dm_smu_write_watermarks_table(adev);
 
-	printk("[Josh Resume] END of dm_resume\n");
+//	printk("[Josh Resume] END of dm_resume\n");
 
 	return 0;
 }
