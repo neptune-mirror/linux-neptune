@@ -61,7 +61,7 @@ static DECLARE_SWAIT_QUEUE_HEAD(s2idle_wait_head);
 
 enum s2idle_states __read_mostly s2idle_state;
 static DEFINE_RAW_SPINLOCK(s2idle_lock);
-static bool s2idle_unsupported;
+bool s2idle_unsupported;
 
 /**
  * pm_suspend_default_s2idle - Check if suspend-to-idle is the default suspend.
@@ -650,3 +650,5 @@ int pm_suspend(suspend_state_t state)
 	return error;
 }
 EXPORT_SYMBOL(pm_suspend);
+
+core_param(s2idle_unsupported, s2idle_unsupported, bool, 0644);
