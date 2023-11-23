@@ -53,13 +53,11 @@ static void steamdeck_usb_role_work(struct work_struct *work)
 
 	/*
 	 * For "connect" events our role is determined by a bit in
-	 * PDCS, for "disconnect" we switch to being a gadget
-	 * unconditionally. The thinking for the latter is we don't
-	 * want to start acting as a USB host until we get
-	 * confirmation from the firmware that we are a USB host
+	 * PDCS, for "disconnect" we switch to being in host mode
+	 * unconditionally.
 	 */
 	usb_host = (pdcs & ACPI_STEAMDECK_PORT_CONNECT) ?
-		pdcs & ACPI_STEAMDECK_CUR_DATA_ROLE : false;
+		pdcs & ACPI_STEAMDECK_CUR_DATA_ROLE : true;
 
 	dev_dbg(sd->dev, "USB role is %s\n", usb_host ? "host" : "device");
 	WARN_ON(extcon_set_state_sync(sd->edev, EXTCON_USB_HOST,
