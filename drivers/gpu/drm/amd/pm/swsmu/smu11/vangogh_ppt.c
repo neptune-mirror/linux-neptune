@@ -1044,29 +1044,76 @@ failed:
 static int vangogh_get_power_profile_mode(struct smu_context *smu,
 					   char *buf)
 {
-	uint32_t i, size = 0;
+	DpmActivityMonitorCoeffExt_t *activity_monitor_external;
+	uint32_t i, j, size = 0;
 	int16_t workload_type = 0;
+	int result = 0;
 
 	if (!buf)
 		return -EINVAL;
 
+	activity_monitor_external = kcalloc(PP_SMC_POWER_PROFILE_COUNT,
+					    sizeof(*activity_monitor_external),
+					    GFP_KERNEL);
+	if (!activity_monitor_external)
+		return -ENOMEM;
+
+	size += sysfs_emit_at(buf, size, "                              ");
+	for (i = 0; i < PP_SMC_POWER_PROFILE_COUNT; i++)
+		size += sysfs_emit_at(buf, size, "%-14s%s", amdgpu_pp_profile_name[i],
+			(i == smu->power_profile_mode) ? "* " : "  ");
+
+	size += sysfs_emit_at(buf, size, "\n");
+
 	for (i = 0; i < PP_SMC_POWER_PROFILE_COUNT; i++) {
-		/*
-		 * Conv PP_SMC_POWER_PROFILE* to WORKLOAD_PPLIB_*_BIT
-		 * Not all profile modes are supported on vangogh.
-		 */
+		/* conv PP_SMC_POWER_PROFILE* to WORKLOAD_PPLIB_*_BIT */
 		workload_type = smu_cmn_to_asic_specific_index(smu,
 							       CMN2ASIC_MAPPING_WORKLOAD,
 							       i);
-
-		if (workload_type < 0)
+		if (workload_type == -ENOTSUPP)
 			continue;
+		else if (workload_type < 0) {
+			result = -EINVAL;
+			goto out;
+		}
 
-		size += sysfs_emit_at(buf, size, "%2d %14s%s\n",
-			i, amdgpu_pp_profile_name[i], (i == smu->power_profile_mode) ? "*" : " ");
+		result = smu_cmn_update_table(smu,
+					  SMU_TABLE_ACTIVITY_MONITOR_COEFF, workload_type,
+					  (void *)(&activity_monitor_external[i]), false);
+		if (result) {
+			dev_err(smu->adev->dev, "[%s] Failed to get activity monitor!", __func__);
+			goto out;
+		}
 	}
 
-	return size;
+#define PRINT_DPM_MONITOR(field)									\
+do {													\
+	size += sysfs_emit_at(buf, size, "%-30s", #field);						\
+	for (j = 0; j < PP_SMC_POWER_PROFILE_COUNT; j++)						\
+		size += sysfs_emit_at(buf, size, "%-16d", activity_monitor_external[j].field);		\
+	size += sysfs_emit_at(buf, size, "\n");								\
+} while (0)
+
+	PRINT_DPM_MONITOR(ActiveHystLimit);
+	PRINT_DPM_MONITOR(IdleHystLimit);
+	PRINT_DPM_MONITOR(FPS);
+	PRINT_DPM_MONITOR(MinActiveFreqType);
+	PRINT_DPM_MONITOR(MinActiveFreq.value);
+	PRINT_DPM_MONITOR(MinActiveFreq.numFractionalBits);
+	PRINT_DPM_MONITOR(PD_Data_limit.value);
+	PRINT_DPM_MONITOR(PD_Data_limit.numFractionalBits);
+	PRINT_DPM_MONITOR(PD_Data_time_constant.value);
+	PRINT_DPM_MONITOR(PD_Data_time_constant.numFractionalBits);
+	PRINT_DPM_MONITOR(PD_Data_error_coeff.value);
+	PRINT_DPM_MONITOR(PD_Data_error_coeff.numFractionalBits);
+	PRINT_DPM_MONITOR(PD_Data_error_rate_coeff.value);
+	PRINT_DPM_MONITOR(PD_Data_error_rate_coeff.numFractionalBits);
+#undef PRINT_DPM_MONITOR
+
+	result = size;
+out:
+	kfree(activity_monitor_external);
+	return result;
 }
 
 static int vangogh_set_power_profile_mode(struct smu_context *smu, long *input, uint32_t size)
