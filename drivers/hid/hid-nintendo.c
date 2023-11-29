@@ -514,7 +514,7 @@ static int __joycon_hid_send(struct hid_device *hdev, u8 *data, size_t len)
 	return ret;
 }
 
-static void joycon_wait_for_input_report(struct joycon_ctlr *ctlr)
+static noinline void joycon_wait_for_input_report(struct joycon_ctlr *ctlr)
 {
 	int ret;
 
@@ -992,7 +992,7 @@ static int joycon_enable_imu(struct joycon_ctlr *ctlr)
 	return joycon_send_subcmd(ctlr, req, 1, HZ);
 }
 
-static s32 joycon_map_stick_val(struct joycon_stick_cal *cal, s32 val)
+static inline s32 joycon_map_stick_val(struct joycon_stick_cal *cal, s32 val)
 {
 	s32 center = cal->center;
 	s32 min = cal->min;
@@ -1001,9 +1001,11 @@ static s32 joycon_map_stick_val(struct joycon_stick_cal *cal, s32 val)
 
 	if (val > center) {
 		new_val = (val - center) * JC_MAX_STICK_MAG;
+		if ((max - center) == 0) { pr_err("nintendo HID: max-center == 0\n"); }
 		new_val /= (max - center);
 	} else {
 		new_val = (center - val) * -JC_MAX_STICK_MAG;
+		if ((center - min) == 0) { pr_err("nintendo HID: center-min == 0\n"); }
 		new_val /= (center - min);
 	}
 	new_val = clamp(new_val, (s32)-JC_MAX_STICK_MAG, (s32)JC_MAX_STICK_MAG);
@@ -1031,7 +1033,7 @@ static void joycon_input_report_parse_imu_data(struct joycon_ctlr *ctlr,
 	}
 }
 
-static void joycon_parse_imu_report(struct joycon_ctlr *ctlr,
+static inline void joycon_parse_imu_report(struct joycon_ctlr *ctlr,
 				    struct joycon_input_report *rep)
 {
 	struct joycon_imu_data imu_data[3] = {0}; /* 3 reports per packet */
@@ -1228,7 +1230,7 @@ static void joycon_parse_imu_report(struct joycon_ctlr *ctlr,
 	}
 }
 
-static void joycon_parse_report(struct joycon_ctlr *ctlr,
+static noinline void joycon_parse_report(struct joycon_ctlr *ctlr,
 				struct joycon_input_report *rep)
 {
 	struct input_dev *dev = ctlr->input;
@@ -2067,7 +2069,7 @@ static int joycon_ctlr_read_handler(struct joycon_ctlr *ctlr, u8 *data,
 	return 0;
 }
 
-static int joycon_ctlr_handle_event(struct joycon_ctlr *ctlr, u8 *data,
+static noinline int joycon_ctlr_handle_event(struct joycon_ctlr *ctlr, u8 *data,
 							      int size)
 {
 	int ret = 0;
@@ -2132,6 +2134,8 @@ static int nintendo_hid_probe(struct hid_device *hdev,
 	struct joycon_ctlr *ctlr;
 
 	hid_dbg(hdev, "probe - start\n");
+
+	hid_info(hdev, "debug module (hid-nintendo) for github #1070\n");
 
 	ctlr = devm_kzalloc(&hdev->dev, sizeof(*ctlr), GFP_KERNEL);
 	if (!ctlr) {
