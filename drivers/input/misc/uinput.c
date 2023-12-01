@@ -710,8 +710,12 @@ static __poll_t uinput_poll(struct file *file, poll_table *wait)
 static int uinput_release(struct inode *inode, struct file *file)
 {
 	struct uinput_device *udev = file->private_data;
+	int retval = mutex_lock_interruptible(&udev->mutex);
+	if (retval)
+		return retval;
 
 	uinput_destroy_device(udev);
+	mutex_unlock(&udev->mutex);
 	kfree(udev);
 
 	return 0;
