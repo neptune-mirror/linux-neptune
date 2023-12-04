@@ -533,7 +533,7 @@ unsigned long get_taint(void)
 void add_taint(unsigned flag, enum lockdep_ok lockdep_ok)
 {
 	if (true) {
-		pr_warn("add_taint() triggered, ignoring\n");
+		pr_warn("[EMIL] add_taint() triggered, ignoring\n");
 		return;
 	}
 
