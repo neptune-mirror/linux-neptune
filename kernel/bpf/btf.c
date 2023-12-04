@@ -7118,12 +7118,20 @@ static int btf_module_notify(struct notifier_block *nb, unsigned long op,
 			kfree(btf_mod);
 			if (!IS_ENABLED(CONFIG_MODULE_ALLOW_BTF_MISMATCH))
 				err = PTR_ERR(btf);
+			if (true) {
+				pr_warn("[EMIL] btf_parse_module failed, continuing. Expect crashes\n");
+				err = 0;
+			}
 			goto out;
 		}
 		err = btf_alloc_id(btf);
 		if (err) {
 			btf_free(btf);
 			kfree(btf_mod);
+			if (true) {
+				pr_warn("[EMIL] btf_alloc_id failed, continuing. Expect crashes\n");
+				err = 0;
+			}
 			goto out;
 		}
 
