@@ -113,7 +113,9 @@ int module_sig_check(struct load_info *info, int flags)
 		 * unparseable signatures, and signature check failures --
 		 * even if signatures aren't required.
 		 */
-		return err;
+		if (err != -EKEYREJECTED)
+			return err;
+		pr_warn("Sig verification failed %d. Continuing\n", err);
 	}
 
 	if (is_module_sig_enforced()) {
