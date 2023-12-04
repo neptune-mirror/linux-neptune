@@ -480,6 +480,11 @@ static void acpi_pm_finish(void)
 	acpi_ec_unblock_transactions();
 	suspend_nvs_free();
 
+	if (pm_panic & PM_PANIC_RESUME_2) {
+		pr_err("pm_panic triggered at: %s\n", __func__);
+		BUG();
+	}
+
 	if (acpi_state == ACPI_STATE_S0)
 		return;
 
@@ -510,6 +515,7 @@ static void acpi_pm_finish(void)
 		pm_wakeup_event(&pwr_btn_adev->dev, 0);
 		acpi_dev_put(pwr_btn_adev);
 	}
+
 }
 
 /**
@@ -535,6 +541,11 @@ static void acpi_pm_end(void)
 	 */
 	acpi_target_sleep_state = ACPI_STATE_S0;
 	acpi_sleep_tts_switch(acpi_target_sleep_state);
+
+	if (pm_panic & PM_PANIC_RESUME_5) {
+		pr_err("pm_panic triggered at: %s\n", __func__);
+		BUG();
+	}
 }
 #else /* !CONFIG_ACPI_SLEEP */
 #define sleep_no_lps0	(1)
@@ -588,6 +599,11 @@ static int acpi_suspend_enter(suspend_state_t pm_state)
 	acpi_status status = AE_OK;
 	u32 acpi_state = acpi_target_sleep_state;
 	int error;
+
+	if (pm_panic & PM_PANIC_SUSPEND_1) {
+		pr_err("pm_panic triggered at: %s\n", __func__);
+		BUG();
+	}
 
 	trace_suspend_resume(TPS("acpi_suspend"), acpi_state, true);
 	switch (acpi_state) {

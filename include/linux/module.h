@@ -41,6 +41,18 @@ struct modversion_info {
 struct module;
 struct exception_table_entry;
 
+/*
+ * Induce an artificial panic at some paths of suspend/resume
+ * in order to determine a specific point of breakage.
+ */
+#define PM_PANIC_SUSPEND_0	1 << 0 /* amdgpu_device_suspend() */
+#define PM_PANIC_SUSPEND_1	1 << 1 /* acpi_suspend_enter() */
+#define PM_PANIC_RESUME_2	1 << 2 /* acpi_pm_finish() */
+#define PM_PANIC_RESUME_3	1 << 3 /* amdgpu_device_resume() - begin */
+#define PM_PANIC_RESUME_4	1 << 4 /* amdgpu_device_resume() - end */
+#define PM_PANIC_RESUME_5	1 << 5 /* acpi_pm_end() */
+extern unsigned int pm_panic; /* see kernel/panic.c */
+
 struct module_kobject {
 	struct kobject kobj;
 	struct module *mod;

@@ -50,6 +50,9 @@ static unsigned int __read_mostly sysctl_oops_all_cpu_backtrace;
 #define sysctl_oops_all_cpu_backtrace 0
 #endif /* CONFIG_SMP */
 
+unsigned int pm_panic;
+EXPORT_SYMBOL_GPL(pm_panic);
+
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
 static unsigned long tainted_mask =
 	IS_ENABLED(CONFIG_RANDSTRUCT) ? (1 << TAINT_RANDSTRUCT) : 0;
@@ -763,6 +766,7 @@ EXPORT_SYMBOL(__stack_chk_fail);
 
 #endif
 
+core_param(pm_panic, pm_panic, uint, 0644);
 core_param(panic, panic_timeout, int, 0644);
 core_param(panic_print, panic_print, ulong, 0644);
 core_param(pause_on_oops, pause_on_oops, int, 0644);

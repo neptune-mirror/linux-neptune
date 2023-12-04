@@ -4367,20 +4367,20 @@ int amdgpu_device_suspend(struct drm_device *dev, bool fbcon)
 	int r = 0;
 
 	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
+		goto SRET;
 
 	adev->in_suspend = true;
 
 	/* Evict the majority of BOs before grabbing the full access */
 	r = amdgpu_device_evict_resources(adev);
 	if (r)
-		return r;
+		goto SRET;
 
 	if (amdgpu_sriov_vf(adev)) {
 		amdgpu_virt_fini_data_exchange(adev);
 		r = amdgpu_virt_request_full_gpu(adev, false);
 		if (r)
-			return r;
+			goto SRET;
 	}
 
 	if (amdgpu_acpi_smart_shift_update(dev, AMDGPU_SS_DEV_D3))
@@ -4401,7 +4401,7 @@ int amdgpu_device_suspend(struct drm_device *dev, bool fbcon)
 
 	r = amdgpu_device_evict_resources(adev);
 	if (r)
-		return r;
+		goto SRET;
 
 	amdgpu_fence_driver_hw_fini(adev);
 
@@ -4411,10 +4411,17 @@ int amdgpu_device_suspend(struct drm_device *dev, bool fbcon)
 		amdgpu_virt_release_full_gpu(adev, false);
 
 	r = amdgpu_dpm_set_rlc_state(adev, false);
-	if (r)
+	if (r) {
 		dev_err(adev->dev, "Failed to notify RLC to be OFF.\n");
+		r = 0;
+	}
+SRET:
+	if (pm_panic & PM_PANIC_SUSPEND_0) {
+		pr_err("pm_panic triggered at: %s (ret=%d)\n", __func__, r);
+		BUG();
+	}
 
-	return 0;
+	return r;
 }
 
 /**
@@ -4432,14 +4439,19 @@ int amdgpu_device_resume(struct drm_device *dev, bool fbcon)
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	int r = 0;
 
+	if (pm_panic & PM_PANIC_RESUME_3) {
+		pr_err("pm_panic triggered at: %s [begin]\n", __func__);
+		BUG();
+	}
+
 	if (amdgpu_sriov_vf(adev)) {
 		r = amdgpu_virt_request_full_gpu(adev, true);
 		if (r)
-			return r;
+			goto RRET;
 	}
 
 	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
+		goto RRET;
 
 	if (adev->in_s0ix)
 		amdgpu_dpm_gfx_state_change(adev, sGpuChangeState_D0Entry);
@@ -4479,7 +4491,7 @@ exit:
 	}
 
 	if (r)
-		return r;
+		goto RRET;
 
 	/* Make sure IB tests flushed */
 	flush_delayed_work(&adev->delayed_init_work);
@@ -4517,8 +4529,12 @@ exit:
 
 	if (amdgpu_acpi_smart_shift_update(dev, AMDGPU_SS_DEV_D0))
 		DRM_WARN("smart shift update failed\n");
-
-	return 0;
+RRET:
+	if (pm_panic & PM_PANIC_RESUME_4) {
+		pr_err("pm_panic triggered at: %s [end] (ret=%d)\n", __func__, r);
+		BUG();
+	}
+	return r;
 }
 
 /**
