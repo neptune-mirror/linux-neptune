@@ -295,17 +295,34 @@ static void uinput_destroy_device(struct uinput_device *udev)
 	udev->state = UIST_NEW_DEVICE;
 
 	if (dev) {
+		udev->dev = NULL;
 		name = dev->name;
 		phys = dev->phys;
 		if (old_state == UIST_CREATED) {
 			uinput_flush_requests(udev);
+
+			/*
+			 * Any pending requests may be holding a mutex from its
+			 * own subsystem, e.g. evdev, while waiting to be able
+			 * to claim the uinput device mutex. However,
+			 * unregistering the device may try to claim that
+			 * mutex, leading to a deadlock. To prevent this from
+			 * happening, we need to temporarily give up the lock.
+			 *
+			 * Since this function is only called immediately
+			 * before the caller exits the critical section without
+			 * doing any further operations on the device, this
+			 * is safe and we can immediately reclaim the mutex
+			 * when done so the unlock is still balanced.
+			 */
+			mutex_unlock(&udev->mutex);
 			input_unregister_device(dev);
+			mutex_lock(&udev->mutex);
 		} else {
 			input_free_device(dev);
 		}
 		kfree(name);
 		kfree(phys);
-		udev->dev = NULL;
 	}
 }
 
@@ -711,7 +728,16 @@ static int uinput_release(struct inode *inode, struct file *file)
 {
 	struct uinput_device *udev = file->private_data;
 
+	int retval;
+
+	retval = mutex_lock_interruptible(&udev->mutex);
+	if (retval)
+		return retval;
+
 	uinput_destroy_device(udev);
+
+	mutex_unlock(&udev->mutex);
+
 	kfree(udev);
 
 	return 0;
