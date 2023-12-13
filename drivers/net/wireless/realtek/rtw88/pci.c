@@ -5,6 +5,7 @@
 #include <linux/dmi.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/suspend.h>
 #include "main.h"
 #include "pci.h"
 #include "reg.h"
@@ -1519,8 +1520,13 @@ static int __maybe_unused rtw_pci_suspend(struct device *dev)
 	struct rtw_chip_info *chip = rtwdev->chip;
 	struct rtw_efuse *efuse = &rtwdev->efuse;
 
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
+
 	if (chip->id == RTW_CHIP_TYPE_8822C && efuse->rfe_option == 6)
 		rtw_pci_clkreq_pad_low(rtwdev, true);
+
 	return 0;
 }
 
@@ -1530,6 +1536,11 @@ static int __maybe_unused rtw_pci_resume(struct device *dev)
 	struct rtw_dev *rtwdev = hw->priv;
 	struct rtw_chip_info *chip = rtwdev->chip;
 	struct rtw_efuse *efuse = &rtwdev->efuse;
+
+
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
 
 	if (chip->id == RTW_CHIP_TYPE_8822C && efuse->rfe_option == 6)
 		rtw_pci_clkreq_pad_low(rtwdev, false);
