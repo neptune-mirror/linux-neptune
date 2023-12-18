@@ -581,6 +581,9 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 			he_rx_nss = min(rx_mcs_80, rx_mcs_160);
 		else
 			he_rx_nss = rx_mcs_80;
+		printk("bqiang: %s %d: he_rx_nss %u support_160 %s rx_mcs_80 %u rx_mcs_160 %u mcs_80_map 0x%x mcs_160_map 0x%x", __func__, __LINE__,
+				he_rx_nss, support_160 ? "YES" :"NO",
+				rx_mcs_80, rx_mcs_160, mcs_80_map, mcs_160_map);
 	}
 
 	if (link_sta->pub->ht_cap.ht_supported) {
@@ -592,6 +595,12 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 			ht_rx_nss++;
 		if (link_sta->pub->ht_cap.mcs.rx_mask[3])
 			ht_rx_nss++;
+		printk("bqiang: %s %d: ht_rx_nss %u rx_mask %u %u %u %u\n", __func__, __LINE__,
+				ht_rx_nss,
+				link_sta->pub->ht_cap.mcs.rx_mask[0],
+				link_sta->pub->ht_cap.mcs.rx_mask[1],
+				link_sta->pub->ht_cap.mcs.rx_mask[2],
+				link_sta->pub->ht_cap.mcs.rx_mask[3]);
 		/* FIXME: consider rx_highest? */
 	}
 
@@ -605,6 +614,8 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 			u8 mcs = (rx_mcs_map >> (2 * i)) & 3;
 
 			if (mcs != IEEE80211_VHT_MCS_NOT_SUPPORTED) {
+				printk("bqiang: %s %d: i %d rx_mcs_map 0x%x\n", __func__, __LINE__,
+						i, rx_mcs_map);
 				vht_rx_nss = i + 1;
 				break;
 			}
@@ -616,6 +627,8 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 	rx_nss = max(he_rx_nss, rx_nss);
 	rx_nss = max(eht_rx_nss, rx_nss);
 	link_sta->pub->rx_nss = max_t(u8, 1, rx_nss);
+	printk("bqiang: %s %d: link_sta->pub->rx_nss %u ht_rx_nss %u vht_rx_nss %u he_rx_nss %u eht_rx_nss %u\n", __func__, __LINE__,
+			link_sta->pub->rx_nss, ht_rx_nss, vht_rx_nss, he_rx_nss, eht_rx_nss);
 }
 
 u32 __ieee80211_vht_handle_opmode(struct ieee80211_sub_if_data *sdata,
@@ -637,6 +650,8 @@ u32 __ieee80211_vht_handle_opmode(struct ieee80211_sub_if_data *sdata,
 
 	if (link_sta->pub->rx_nss != nss) {
 		link_sta->pub->rx_nss = nss;
+		printk("bqiang: %s %d: link_sta->pub->rx_nss %u opmode %u\n", __func__, __LINE__,
+				link_sta->pub->rx_nss, opmode);
 		sta_opmode.rx_nss = nss;
 		changed |= IEEE80211_RC_NSS_CHANGED;
 		sta_opmode.changed |= STA_OPMODE_N_SS_CHANGED;
