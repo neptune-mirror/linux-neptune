@@ -4188,8 +4188,6 @@ static bool ieee80211_assoc_config_link(struct ieee80211_link_data *link,
 		nss >>= IEEE80211_OPMODE_NOTIF_RX_NSS_SHIFT;
 		nss += 1;
 		link_sta->pub->rx_nss = nss;
-		printk("bqiang: %s %d: link_sta->pub->rx_nss %u *elems->opmode_notif %u\n", __func__, __LINE__,
-				link_sta->pub->rx_nss, *elems->opmode_notif);
 	}
 
 	/*
