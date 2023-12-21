@@ -2304,7 +2304,7 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 		    he_mcs_mask[i])
 			max_nss = i + 1;
 	}
-	arg->peer_nss = min(arg->peer_nss, max_nss);
+	arg->peer_nss = min(sta->deflink.rx_nss, max_nss);
 
 	if (arg->peer_phymode == MODE_11AX_HE160 ||
 	    arg->peer_phymode == MODE_11AX_HE80_80) {
