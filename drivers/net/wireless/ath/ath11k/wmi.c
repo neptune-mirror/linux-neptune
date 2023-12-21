@@ -1158,6 +1158,8 @@ int ath11k_wmi_set_peer_param(struct ath11k *ar, const u8 *peer_addr,
 	struct sk_buff *skb;
 	int ret;
 
+	dump_stack();
+
 	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, sizeof(*cmd));
 	if (!skb)
 		return -ENOMEM;
@@ -1176,7 +1178,7 @@ int ath11k_wmi_set_peer_param(struct ath11k *ar, const u8 *peer_addr,
 		dev_kfree_skb(skb);
 	}
 
-	ath11k_dbg(ar->ab, ATH11K_DBG_WMI,
+	ath11k_info(ar->ab,
 		   "WMI vdev %d peer 0x%pM set param %d value %d\n",
 		   vdev_id, peer_addr, param_id, param_val);
 
@@ -1565,6 +1567,11 @@ int ath11k_wmi_vdev_set_param_cmd(struct ath11k *ar, u32 vdev_id,
 	struct wmi_vdev_set_param_cmd *cmd;
 	struct sk_buff *skb;
 	int ret;
+
+	if (param_id == WMI_VDEV_PARAM_NSS) {
+		ath11k_info(ar->ab, "param id %u value %u\n", param_id, param_value);
+		dump_stack();
+	}
 
 	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, sizeof(*cmd));
 	if (!skb)

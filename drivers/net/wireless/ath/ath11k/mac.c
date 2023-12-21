@@ -2304,7 +2304,7 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 		    he_mcs_mask[i])
 			max_nss = i + 1;
 	}
-	arg->peer_nss = min(sta->deflink.rx_nss, max_nss);
+	arg->peer_nss = min(arg->peer_nss, (u32)max_nss);
 
 	if (arg->peer_phymode == MODE_11AX_HE160 ||
 	    arg->peer_phymode == MODE_11AX_HE80_80) {
@@ -2325,7 +2325,7 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 		arg->peer_bw_rxnss_override |= nss_160;
 	}
 
-	ath11k_dbg(ar->ab, ATH11K_DBG_MAC,
+	ath11k_info(ar->ab,
 		   "mac he peer %pM nss %d mcs cnt %d nss_override 0x%x\n",
 		   sta->addr, arg->peer_nss,
 		   arg->peer_he_mcs_count,
@@ -4443,6 +4443,7 @@ static void ath11k_sta_rc_update_wk(struct work_struct *wk)
 	nss = min(nss, max(max(ath11k_mac_max_ht_nss(ht_mcs_mask),
 			       ath11k_mac_max_vht_nss(vht_mcs_mask)),
 			   ath11k_mac_max_he_nss(he_mcs_mask)));
+	nss = min(nss, (u32)ar->num_tx_chains);
 
 	if (changed & IEEE80211_RC_BW_CHANGED) {
 		/* Get the peer phymode */
@@ -4500,7 +4501,7 @@ static void ath11k_sta_rc_update_wk(struct work_struct *wk)
 	}
 
 	if (changed & IEEE80211_RC_NSS_CHANGED) {
-		ath11k_dbg(ar->ab, ATH11K_DBG_MAC, "mac update sta %pM nss %d\n",
+		ath11k_info(ar->ab, "mac update sta %pM nss %d\n",
 			   sta->addr, nss);
 
 		err = ath11k_wmi_set_peer_param(ar, sta->addr, arvif->vdev_id,
