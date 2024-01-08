@@ -4175,11 +4175,6 @@ static bool ieee80211_assoc_config_link(struct ieee80211_link_data *link,
 	 * next beacon and update then.
 	 */
 
-	/*
-	 * If an operating mode notification IE is present, override the
-	 * NSS calculation (that would be done in rate_control_rate_init())
-	 * and use the # of streams from that element.
-	 */
 	if (elems->opmode_notif &&
 	    !(*elems->opmode_notif & IEEE80211_OPMODE_NOTIF_RX_NSS_TYPE_BF)) {
 		u8 nss;
@@ -4188,6 +4183,8 @@ static bool ieee80211_assoc_config_link(struct ieee80211_link_data *link,
 		nss >>= IEEE80211_OPMODE_NOTIF_RX_NSS_SHIFT;
 		nss += 1;
 		link_sta->pub->rx_nss = nss;
+		printk("bqiang: %s %d: link_sta->pub->rx_nss %u *elems->opmode_notif %u\n", __func__, __LINE__,
+				link_sta->pub->rx_nss, *elems->opmode_notif);
 	}
 
 	/*

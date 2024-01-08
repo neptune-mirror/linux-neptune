@@ -122,6 +122,8 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 	u8 he_total_size;
 	bool own_160, peer_160, own_80p80, peer_80p80;
 
+	dump_stack();
+
 	memset(he_cap, 0, sizeof(*he_cap));
 
 	if (!he_cap_ie)
@@ -171,6 +173,12 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 				      &he_cap->he_mcs_nss_supp.rx_mcs_80,
 				      &own_he_cap.he_mcs_nss_supp.tx_mcs_80,
 				      &he_cap->he_mcs_nss_supp.tx_mcs_80);
+	printk("bqiang: %s %d: own he_cap rx_mcs_80 0x%x tx_mcs_80 0x%x peer he_cap rx_mcs_80 0x%x tx_mcs_80 0x%x\n",
+			__func__, __LINE__,
+			own_he_cap.he_mcs_nss_supp.rx_mcs_80,
+			own_he_cap.he_mcs_nss_supp.tx_mcs_80,
+			he_cap->he_mcs_nss_supp.rx_mcs_80,
+			he_cap->he_mcs_nss_supp.tx_mcs_80);
 
 	own_160 = own_he_cap.he_cap_elem.phy_cap_info[0] &
 		  IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
@@ -188,6 +196,12 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 		he_cap->he_cap_elem.phy_cap_info[0] &=
 			~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
 	}
+	printk("bqiang: %s %d: own he_cap rx_mcs_160 0x%x tx_mcs_160 0x%x peer he_cap rx_mcs_160 0x%x tx_mcs_160 0x%x\n",
+			__func__, __LINE__,
+			own_he_cap.he_mcs_nss_supp.rx_mcs_160,
+			own_he_cap.he_mcs_nss_supp.tx_mcs_160,
+			he_cap->he_mcs_nss_supp.rx_mcs_160,
+			he_cap->he_mcs_nss_supp.tx_mcs_160);
 
 	own_80p80 = own_he_cap.he_cap_elem.phy_cap_info[0] &
 		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
@@ -205,6 +219,12 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 		he_cap->he_cap_elem.phy_cap_info[0] &=
 			~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G;
 	}
+	printk("bqiang: %s %d: own he_cap rx_mcs_80p80 0x%x tx_mcs_80p80 0x%x peer he_cap rx_mcs_80p80 0x%x tx_mcs_80p80 0x%x\n",
+			__func__, __LINE__,
+			own_he_cap.he_mcs_nss_supp.rx_mcs_80p80,
+			own_he_cap.he_mcs_nss_supp.tx_mcs_80p80,
+			he_cap->he_mcs_nss_supp.rx_mcs_80p80,
+			he_cap->he_mcs_nss_supp.tx_mcs_80p80);
 }
 
 void

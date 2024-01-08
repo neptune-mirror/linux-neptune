@@ -2110,6 +2110,8 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 	u16 mcs_160_map, mcs_80_map;
 	bool support_160;
 
+	dump_stack();
+
 	if (WARN_ON(ath11k_mac_vif_chan(vif, &def)))
 		return;
 
@@ -2130,6 +2132,8 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 	/* Supported HE-MCS and NSS Set of peer he_cap is intersection with self he_cp */
 	mcs_160_map = le16_to_cpu(he_cap->he_mcs_nss_supp.rx_mcs_160);
 	mcs_80_map = le16_to_cpu(he_cap->he_mcs_nss_supp.rx_mcs_80);
+	printk("bqiang: %s %d: mcs_80_map 0x%x mcs_160_map 0x%x\n", __func__, __LINE__,
+		mcs_80_map, mcs_160_map);
 
 	if (support_160) {
 		for (i = 7; i >= 0; i--) {
@@ -2137,6 +2141,8 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 
 			if (mcs_160 != IEEE80211_VHT_MCS_NOT_SUPPORTED) {
 				rx_mcs_160 = i + 1;
+				printk("bqiang: %s %d: i %d mcs_160_map 0x%x mcs_160 %u\n",
+						__func__, __LINE__, i, mcs_160_map, mcs_160);
 				break;
 			}
 		}
@@ -2147,16 +2153,23 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 
 		if (mcs_80 != IEEE80211_VHT_MCS_NOT_SUPPORTED) {
 			rx_mcs_80 = i + 1;
+			printk("bqiang: %s %d: i %d mcs_80_map 0x%x mcs_80 %u\n",
+					__func__, __LINE__, i, mcs_80_map, mcs_80);
 			break;
 		}
 	}
 
+	printk("bqiang: %s %d: support_160 %s, rx_mcs_80 %u rx_mcs_160 %u\n", __func__, __LINE__,
+			support_160 ? "yes" : "no",
+			rx_mcs_80, rx_mcs_160);
 	if (support_160)
 		max_nss = min(rx_mcs_80, rx_mcs_160);
 	else
 		max_nss = rx_mcs_80;
 
 	arg->peer_nss = min(sta->deflink.rx_nss, max_nss);
+	printk("bqiang: %s %d: arg->peer_nss %u sta->deflink.rx_nss %u max_nss %u\n", __func__, __LINE__,
+			arg->peer_nss, sta->deflink.rx_nss, max_nss);
 
 	memcpy_and_pad(&arg->peer_he_cap_macinfo,
 		       sizeof(arg->peer_he_cap_macinfo),
@@ -2301,10 +2314,15 @@ static void ath11k_peer_assoc_h_he(struct ath11k *ar,
 		 * to find nss.
 		 */
 		if (he_mcs != IEEE80211_HE_MCS_NOT_SUPPORTED ||
-		    he_mcs_mask[i])
+		    he_mcs_mask[i]) {
+			printk("bqiang: %s %d: i %d he_mcs %u he_mcs_mask %u\n", __func__, __LINE__,
+					i, he_mcs, he_mcs_mask[i]);
 			max_nss = i + 1;
+		}
 	}
 	arg->peer_nss = min(sta->deflink.rx_nss, max_nss);
+	printk("bqiang: %s %d: arg->peer_nss %u sta->deflink.rx_nss %u max_nss %u\n", __func__, __LINE__,
+			arg->peer_nss, sta->deflink.rx_nss, max_nss);
 
 	if (arg->peer_phymode == MODE_11AX_HE160 ||
 	    arg->peer_phymode == MODE_11AX_HE80_80) {
@@ -4977,8 +4995,13 @@ static void ath11k_mac_op_sta_rc_update(struct ieee80211_hw *hw,
 		arsta->bw = bw;
 	}
 
-	if (changed & IEEE80211_RC_NSS_CHANGED)
+	if (changed & IEEE80211_RC_NSS_CHANGED) {
 		arsta->nss = sta->deflink.rx_nss;
+		printk("bqiang: %s %d: arsta->nss %u\n", __func__, __LINE__, arsta->nss);
+		printk("------------------------dumping stack----------------------------------\n");
+		dump_stack();
+		printk("------------------------------done----------------------------------\n");
+	}
 
 	if (changed & IEEE80211_RC_SMPS_CHANGED) {
 		smps = WMI_PEER_SMPS_PS_NONE;
