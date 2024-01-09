@@ -534,7 +534,8 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 	u8 ht_rx_nss = 0, vht_rx_nss = 0, he_rx_nss = 0, eht_rx_nss = 0, rx_nss;
 	bool support_160;
 
-	printk("bqiang: %s %d: enter\n");
+	printk("bqiang: %s %d: link_sta->pub->rx_nss %u\n", __func__, __LINE__,
+							link_sta->pub->rx_nss);
 
 	if (link_sta->pub->eht_cap.has_eht) {
 		int i;
@@ -625,9 +626,9 @@ void ieee80211_sta_set_rx_nss(struct link_sta_info *link_sta)
 	rx_nss = max(he_rx_nss, rx_nss);
 	rx_nss = max(eht_rx_nss, rx_nss);
 	rx_nss = max_t(u8, 1, rx_nss);
-	link_sta->pub->rx_nss = min(link_sta->pub->rx_nss, rx_nss);
-	printk("bqiang: %s %d: link_sta->pub->rx_nss %u ht_rx_nss %u vht_rx_nss %u he_rx_nss %u eht_rx_nss %u\n", __func__, __LINE__,
-			link_sta->pub->rx_nss, ht_rx_nss, vht_rx_nss, he_rx_nss, eht_rx_nss);
+	link_sta->pub->rx_nss = min_not_zero(link_sta->pub->rx_nss, rx_nss);
+	printk("bqiang: %s %d: link_sta->pub->rx_nss %u rx_nss %u ht_rx_nss %u vht_rx_nss %u he_rx_nss %u eht_rx_nss %u\n", __func__, __LINE__,
+			link_sta->pub->rx_nss, rx_nss, ht_rx_nss, vht_rx_nss, he_rx_nss, eht_rx_nss);
 }
 
 u32 __ieee80211_vht_handle_opmode(struct ieee80211_sub_if_data *sdata,
