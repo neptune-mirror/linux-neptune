@@ -7,25 +7,30 @@ fail() {
 }
 
 start_test() {
-    echo -e "\t\t\t\t Starting futex Tests"
-    cd /mnt/ && make -C tools/testing/selftests TARGETS=futex || {
+    echo -e "\t\t\t\t Preparing testing environment"
+    # Install kernel headers
+    cd /mnt/ && make headers || {
         fail
         return
     }
-    cd /mnt/tools/testing/selftests/futex/ && ./run.sh
+    # Build required tests
+    make -C tools/testing/selftests TARGETS="futex syscall_user_dispatch" || {
+        fail
+        return
+    }
+
+    echo -e "\t\t\t\t Starting futex Tests"
+    make -C tools/testing/selftests TARGETS=futex run_tests
     echo -e "\t\t\t\t Completed futex Tests"
 
-    echo -e "\t\t\t\t Starting syscall_user_dispatch:sud_test Tests"
-    cd /mnt/ && make -C tools/testing/selftests TARGETS=syscall_user_dispatch || {
+    echo -e "\t\t\t\t Starting syscall_user_dispatch Tests"
+    cd /mnt/tools/testing/selftests/syscall_user_dispatch || {
         fail
         return
     }
-    cd /mnt/tools/testing/selftests/syscall_user_dispatch && ./sud_test
-    echo -e "\t\t\t\t Completed syscall_user_dispatch:sud_test Tests"
-
-    echo -e "\t\t\t\t Starting syscall_user_dispatch:sud_benchmark Tests"
+    ./sud_test
     ./sud_benchmark
-    echo -e "\t\t\t\t Completed syscall_user_dispatch:sud_benchmark Tests"
+    echo -e "\t\t\t\t Completed syscall_user_dispatch Tests"
 }
 
 start_test 2>&1 | tee -a /mnt/kernel_results.log
