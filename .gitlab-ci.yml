@@ -52,8 +52,8 @@ kernel build:
     - QEMU_PID=$!
     - echo "QEMU pid is $QEMU_PID"
     # Dump kernel test results
-    - sleep 90
-    - tail --pid=$QEMU_PID -f kernel_results.log
+    - touch kernel_results.log
+    - tail --pid=$QEMU_PID -n +1 -f kernel_results.log
     # Notify
     - test -f "fail.txt" && exit 1
     - echo "All tests passed."
