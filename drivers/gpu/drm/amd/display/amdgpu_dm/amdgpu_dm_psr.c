@@ -51,6 +51,9 @@ static bool link_supports_psrsu(struct dc_link *link)
 	    !link->dpcd_caps.psr_info.psr2_su_y_granularity_cap)
 		return false;
 
+	if (amdgpu_dc_debug_mask & DC_DISABLE_PSR_SU)
+		return false;
+
 	return dc_dmub_check_min_version(dc->ctx->dmub_srv->dmub);
 }
 
@@ -166,6 +169,7 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
 	 */
 	if (vsync_rate_hz != 0) {
 		unsigned int frame_time_microsec = 1000000 / vsync_rate_hz;
+
 		num_frames_static = (30000 / frame_time_microsec) + 1;
 	}
 
