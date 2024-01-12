@@ -85,7 +85,7 @@ void amdgpu_dm_init_color_mod(void)
 	setup_x_points_distribution();
 }
 
-#ifdef AMD_PRIVATE_COLOR
+#ifdef CONFIG_DRM_AMD_COLOR_STEAMDECK
 /* Pre-defined Transfer Functions (TF)
  *
  * AMD driver supports pre-defined mathematical functions for transferring
@@ -151,36 +151,31 @@ void amdgpu_dm_init_color_mod(void)
 static const char * const
 amdgpu_transfer_function_names[] = {
 	[AMDGPU_TRANSFER_FUNCTION_DEFAULT]		= "Default",
-	[AMDGPU_TRANSFER_FUNCTION_IDENTITY]		= "Identity",
-	[AMDGPU_TRANSFER_FUNCTION_SRGB_EOTF]		= "sRGB EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_BT709_INV_OETF]	= "BT.709 inv_OETF",
-	[AMDGPU_TRANSFER_FUNCTION_PQ_EOTF]		= "PQ EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA22_EOTF]		= "Gamma 2.2 EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA24_EOTF]		= "Gamma 2.4 EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA26_EOTF]		= "Gamma 2.6 EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_SRGB_INV_EOTF]	= "sRGB inv_EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_BT709_OETF]		= "BT.709 OETF",
-	[AMDGPU_TRANSFER_FUNCTION_PQ_INV_EOTF]		= "PQ inv_EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA22_INV_EOTF]	= "Gamma 2.2 inv_EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA24_INV_EOTF]	= "Gamma 2.4 inv_EOTF",
-	[AMDGPU_TRANSFER_FUNCTION_GAMMA26_INV_EOTF]	= "Gamma 2.6 inv_EOTF",
+	[AMDGPU_TRANSFER_FUNCTION_LINEAR]		= "Linear",
+	[AMDGPU_TRANSFER_FUNCTION_UNITY]		= "Unity",
+	[AMDGPU_TRANSFER_FUNCTION_SRGB]			= "sRGB",
+	[AMDGPU_TRANSFER_FUNCTION_BT709]		= "BT.709",
+	[AMDGPU_TRANSFER_FUNCTION_PQ]			= "PQ (Perceptual Quantizer)",
+	[AMDGPU_TRANSFER_FUNCTION_GAMMA22]		= "Gamma 2.2",
+	[AMDGPU_TRANSFER_FUNCTION_GAMMA24]		= "Gamma 2.4",
+	[AMDGPU_TRANSFER_FUNCTION_GAMMA26]		= "Gamma 2.6",
 };
 
 static const u32 amdgpu_eotf =
-	BIT(AMDGPU_TRANSFER_FUNCTION_SRGB_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_BT709_INV_OETF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_PQ_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA22_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA24_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA26_EOTF);
+	BIT(AMDGPU_TRANSFER_FUNCTION_SRGB) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_BT709) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_PQ) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA22) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA24) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA26);
 
 static const u32 amdgpu_inv_eotf =
-	BIT(AMDGPU_TRANSFER_FUNCTION_SRGB_INV_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_BT709_OETF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_PQ_INV_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA22_INV_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA24_INV_EOTF) |
-	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA26_INV_EOTF);
+	BIT(AMDGPU_TRANSFER_FUNCTION_SRGB) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_BT709) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_PQ) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA22) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA24) |
+	BIT(AMDGPU_TRANSFER_FUNCTION_GAMMA26);
 
 static struct drm_property *
 amdgpu_create_tf_property(struct drm_device *dev,
@@ -189,7 +184,8 @@ amdgpu_create_tf_property(struct drm_device *dev,
 {
 	u32 transfer_functions = supported_tf |
 				 BIT(AMDGPU_TRANSFER_FUNCTION_DEFAULT) |
-				 BIT(AMDGPU_TRANSFER_FUNCTION_IDENTITY);
+				 BIT(AMDGPU_TRANSFER_FUNCTION_LINEAR) |
+				 BIT(AMDGPU_TRANSFER_FUNCTION_UNITY);
 	struct drm_prop_enum_list enum_list[AMDGPU_TRANSFER_FUNCTION_COUNT];
 	int i, len;
 
@@ -214,7 +210,7 @@ amdgpu_dm_create_color_properties(struct amdgpu_device *adev)
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_DEGAMMA_LUT", 0);
+				   "VALVE1_PLANE_DEGAMMA_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_degamma_lut_property = prop;
@@ -228,41 +224,41 @@ amdgpu_dm_create_color_properties(struct amdgpu_device *adev)
 	adev->mode_info.plane_degamma_lut_size_property = prop;
 
 	prop = amdgpu_create_tf_property(adev_to_drm(adev),
-					 "AMD_PLANE_DEGAMMA_TF",
+					 "VALVE1_PLANE_DEGAMMA_TF",
 					 amdgpu_eotf);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_degamma_tf_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
-					 0, "AMD_PLANE_HDR_MULT", 0, U64_MAX);
+					 0, "VALVE1_PLANE_HDR_MULT", 0, U64_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_hdr_mult_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_CTM", 0);
+				   "VALVE1_PLANE_CTM", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_ctm_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_SHAPER_LUT", 0);
+				   "VALVE1_PLANE_SHAPER_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_shaper_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_SHAPER_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_SHAPER_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_shaper_lut_size_property = prop;
 
 	prop = amdgpu_create_tf_property(adev_to_drm(adev),
-					 "AMD_PLANE_SHAPER_TF",
+					 "VALVE1_PLANE_SHAPER_TF",
 					 amdgpu_inv_eotf);
 	if (!prop)
 		return -ENOMEM;
@@ -270,41 +266,41 @@ amdgpu_dm_create_color_properties(struct amdgpu_device *adev)
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_LUT3D", 0);
+				   "VALVE1_PLANE_LUT3D", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_lut3d_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_LUT3D_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_LUT3D_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_lut3d_size_property = prop;
 
 	prop = drm_property_create(adev_to_drm(adev),
 				   DRM_MODE_PROP_BLOB,
-				   "AMD_PLANE_BLEND_LUT", 0);
+				   "VALVE1_PLANE_BLEND_LUT", 0);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_blend_lut_property = prop;
 
 	prop = drm_property_create_range(adev_to_drm(adev),
 					 DRM_MODE_PROP_IMMUTABLE,
-					 "AMD_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
+					 "VALVE1_PLANE_BLEND_LUT_SIZE", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_blend_lut_size_property = prop;
 
 	prop = amdgpu_create_tf_property(adev_to_drm(adev),
-					 "AMD_PLANE_BLEND_TF",
+					 "VALVE1_PLANE_BLEND_TF",
 					 amdgpu_eotf);
 	if (!prop)
 		return -ENOMEM;
 	adev->mode_info.plane_blend_tf_property = prop;
 
 	prop = amdgpu_create_tf_property(adev_to_drm(adev),
-					 "AMD_CRTC_REGAMMA_TF",
+					 "VALVE1_CRTC_REGAMMA_TF",
 					 amdgpu_inv_eotf);
 	if (!prop)
 		return -ENOMEM;
@@ -634,25 +630,20 @@ amdgpu_tf_to_dc_tf(enum amdgpu_transfer_function tf)
 	{
 	default:
 	case AMDGPU_TRANSFER_FUNCTION_DEFAULT:
-	case AMDGPU_TRANSFER_FUNCTION_IDENTITY:
+	case AMDGPU_TRANSFER_FUNCTION_LINEAR:
+	case AMDGPU_TRANSFER_FUNCTION_UNITY:
 		return TRANSFER_FUNCTION_LINEAR;
-	case AMDGPU_TRANSFER_FUNCTION_SRGB_EOTF:
-	case AMDGPU_TRANSFER_FUNCTION_SRGB_INV_EOTF:
+	case AMDGPU_TRANSFER_FUNCTION_SRGB:
 		return TRANSFER_FUNCTION_SRGB;
-	case AMDGPU_TRANSFER_FUNCTION_BT709_OETF:
-	case AMDGPU_TRANSFER_FUNCTION_BT709_INV_OETF:
+	case AMDGPU_TRANSFER_FUNCTION_BT709:
 		return TRANSFER_FUNCTION_BT709;
-	case AMDGPU_TRANSFER_FUNCTION_PQ_EOTF:
-	case AMDGPU_TRANSFER_FUNCTION_PQ_INV_EOTF:
+	case AMDGPU_TRANSFER_FUNCTION_PQ:
 		return TRANSFER_FUNCTION_PQ;
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA22_EOTF:
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA22_INV_EOTF:
+	case AMDGPU_TRANSFER_FUNCTION_GAMMA22:
 		return TRANSFER_FUNCTION_GAMMA22;
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA24_EOTF:
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA24_INV_EOTF:
+	case AMDGPU_TRANSFER_FUNCTION_GAMMA24:
 		return TRANSFER_FUNCTION_GAMMA24;
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA26_EOTF:
-	case AMDGPU_TRANSFER_FUNCTION_GAMMA26_INV_EOTF:
+	case AMDGPU_TRANSFER_FUNCTION_GAMMA26:
 		return TRANSFER_FUNCTION_GAMMA26;
 	}
 }
