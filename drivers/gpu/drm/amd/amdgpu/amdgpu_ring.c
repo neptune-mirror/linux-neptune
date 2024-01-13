@@ -425,14 +425,13 @@ void amdgpu_ring_emit_reg_write_reg_wait_helper(struct amdgpu_ring *ring,
  * amdgpu_ring_soft_recovery - try to soft recover a ring lockup
  *
  * @ring: ring to try the recovery on
- * @vmid: VMID we try to get going again
- * @fence: timedout fence
+ * @job: the culptit job
  *
  * Tries to get a ring proceeding again when it is stuck.
  */
-bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, unsigned int vmid,
-			       struct dma_fence *fence)
+bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, struct amdgpu_job *job)
 {
+	struct dma_fence *fence = job->base.s_fence->parent;
 	unsigned long flags;
 	ktime_t deadline;
 
@@ -452,7 +451,7 @@ bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, unsigned int vmid,
 	atomic_inc(&ring->adev->gpu_reset_counter);
 	while (!dma_fence_is_signaled(fence) &&
 	       ktime_to_ns(ktime_sub(deadline, ktime_get())) > 0)
-		ring->funcs->soft_recovery(ring, vmid);
+		ring->funcs->soft_recovery(ring, job->vmid);
 
 	return dma_fence_is_signaled(fence);
 }

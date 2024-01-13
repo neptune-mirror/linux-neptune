@@ -354,8 +354,7 @@ void amdgpu_ring_fini(struct amdgpu_ring *ring);
 void amdgpu_ring_emit_reg_write_reg_wait_helper(struct amdgpu_ring *ring,
 						uint32_t reg0, uint32_t val0,
 						uint32_t reg1, uint32_t val1);
-bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, unsigned int vmid,
-			       struct dma_fence *fence);
+bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, struct amdgpu_job *job);
 
 static inline void amdgpu_ring_set_preempt_cond_exec(struct amdgpu_ring *ring,
 							bool cond_exec)

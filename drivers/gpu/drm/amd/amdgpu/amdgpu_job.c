@@ -52,7 +52,7 @@ static enum drm_gpu_sched_stat amdgpu_job_timedout(struct drm_sched_job *s_job)
 	adev->job_hang = true;
 
 	if (amdgpu_gpu_recovery &&
-	    amdgpu_ring_soft_recovery(ring, job->vmid, s_job->s_fence->parent)) {
+	    amdgpu_ring_soft_recovery(ring, job)) {
 		DRM_ERROR("ring %s timeout, but soft recovered\n",
 			  s_job->sched->name);
 		goto exit;
