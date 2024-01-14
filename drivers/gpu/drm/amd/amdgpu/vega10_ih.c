@@ -372,6 +372,7 @@ static u32 vega10_ih_get_wptr(struct amdgpu_device *adev,
 	tmp = RREG32_NO_KIQ(ih_regs->ih_rb_cntl);
 	tmp = REG_SET_FIELD(tmp, IH_RB_CNTL, WPTR_OVERFLOW_CLEAR, 1);
 	WREG32_NO_KIQ(ih_regs->ih_rb_cntl, tmp);
+	ih->overflow = true;
 
 out:
 	return (wptr & ih->ptr_mask);
@@ -413,6 +414,7 @@ static void vega10_ih_irq_rearm(struct amdgpu_device *adev,
 static void vega10_ih_set_rptr(struct amdgpu_device *adev,
 			       struct amdgpu_ih_ring *ih)
 {
+	u32 tmp;
 	struct amdgpu_ih_regs *ih_regs;
 
 	if (ih == &adev->irq.ih_soft)
@@ -429,6 +431,16 @@ static void vega10_ih_set_rptr(struct amdgpu_device *adev,
 		ih_regs = &ih->ih_regs;
 		WREG32(ih_regs->ih_rb_rptr, ih->rptr);
 	}
+
+	/* If we overflowed previously (and thus set the OVERFLOW_CLEAR bit),
+         * reset it here to detect more overflows if they occur.
+         */
+        if (ih->overflow) {
+                tmp = RREG32_NO_KIQ(ih->ih_regs.ih_rb_cntl);
+                tmp = REG_SET_FIELD(tmp, IH_RB_CNTL, WPTR_OVERFLOW_CLEAR, 0);
+                WREG32_NO_KIQ(ih->ih_regs.ih_rb_cntl, tmp);
+                ih->overflow = false;
+        }
 }
 
 /**
