@@ -204,6 +204,7 @@ static u32 cik_ih_get_wptr(struct amdgpu_device *adev,
 		tmp = RREG32(mmIH_RB_CNTL);
 		tmp |= IH_RB_CNTL__WPTR_OVERFLOW_CLEAR_MASK;
 		WREG32(mmIH_RB_CNTL, tmp);
+		ih->overflow = true;
 	}
 	return (wptr & ih->ptr_mask);
 }
@@ -274,7 +275,19 @@ static void cik_ih_decode_iv(struct amdgpu_device *adev,
 static void cik_ih_set_rptr(struct amdgpu_device *adev,
 			    struct amdgpu_ih_ring *ih)
 {
+	u32 tmp;
+
 	WREG32(mmIH_RB_RPTR, ih->rptr);
+
+	/* If we overflowed previously (and thus set the OVERFLOW_CLEAR bit),
+         * reset it here to detect more overflows if they occur.
+         */
+        if (ih->overflow) {
+		tmp = RREG32(mmIH_RB_CNTL);
+		tmp &= ~IH_RB_CNTL__WPTR_OVERFLOW_CLEAR_MASK;
+		WREG32(mmIH_RB_CNTL, tmp);
+		ih->overflow = false;
+        }
 }
 
 static int cik_ih_early_init(void *handle)

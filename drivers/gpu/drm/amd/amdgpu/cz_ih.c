@@ -215,7 +215,7 @@ static u32 cz_ih_get_wptr(struct amdgpu_device *adev,
 	tmp = RREG32(mmIH_RB_CNTL);
 	tmp = REG_SET_FIELD(tmp, IH_RB_CNTL, WPTR_OVERFLOW_CLEAR, 1);
 	WREG32(mmIH_RB_CNTL, tmp);
-
+	ih->overflow = true;
 
 out:
 	return (wptr & ih->ptr_mask);
@@ -266,7 +266,19 @@ static void cz_ih_decode_iv(struct amdgpu_device *adev,
 static void cz_ih_set_rptr(struct amdgpu_device *adev,
 			   struct amdgpu_ih_ring *ih)
 {
+	u32 tmp;
+
 	WREG32(mmIH_RB_RPTR, ih->rptr);
+
+	/* If we overflowed previously (and thus set the OVERFLOW_CLEAR bit),
+         * reset it here to detect more overflows if they occur.
+         */
+        if (ih->overflow) {
+		tmp = RREG32(mmIH_RB_CNTL);
+		tmp = REG_SET_FIELD(tmp, IH_RB_CNTL, WPTR_OVERFLOW_CLEAR, 0);
+		WREG32(mmIH_RB_CNTL, tmp);
+                ih->overflow = false;
+        }
 }
 
 static int cz_ih_early_init(void *handle)
