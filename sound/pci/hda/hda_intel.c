@@ -37,6 +37,7 @@
 #include <linux/completion.h>
 #include <linux/acpi.h>
 #include <linux/pgtable.h>
+#include <linux/suspend.h>
 
 #ifdef CONFIG_X86
 /* for snoop control */
@@ -1023,6 +1024,10 @@ static int azx_suspend(struct device *dev)
 	struct azx *chip;
 	struct hdac_bus *bus;
 
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
+
 	if (!azx_is_pm_ready(card))
 		return 0;
 
@@ -1046,6 +1051,10 @@ static int azx_resume(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
 	struct azx *chip;
+
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
 
 	if (!azx_is_pm_ready(card))
 		return 0;

@@ -11,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
+#include <linux/suspend.h>
 
 #include "acp5x.h"
 
@@ -259,6 +260,10 @@ static int __maybe_unused snd_acp5x_suspend(struct device *dev)
 	int ret;
 	struct acp5x_dev_data *adata;
 
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
+
 	adata = dev_get_drvdata(dev);
 	ret = acp5x_deinit(adata->acp5x_base);
 	if (ret)
@@ -273,6 +278,10 @@ static int __maybe_unused snd_acp5x_resume(struct device *dev)
 {
 	int ret;
 	struct acp5x_dev_data *adata;
+
+	/* Reject s2idle */
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		return 0;
 
 	adata = dev_get_drvdata(dev);
 	ret = acp5x_init(adata->acp5x_base);
