@@ -362,39 +362,6 @@ static s32 __user *get_out_fence_for_connector(struct drm_atomic_state *state,
 	return fence_ptr;
 }
 
-static int
-drm_atomic_replace_property_blob_from_id(struct drm_device *dev,
-					 struct drm_property_blob **blob,
-					 uint64_t blob_id,
-					 ssize_t expected_size,
-					 ssize_t expected_elem_size,
-					 bool *replaced)
-{
-	struct drm_property_blob *new_blob = NULL;
-
-	if (blob_id != 0) {
-		new_blob = drm_property_lookup_blob(dev, blob_id);
-		if (new_blob == NULL)
-			return -EINVAL;
-
-		if (expected_size > 0 &&
-		    new_blob->length != expected_size) {
-			drm_property_blob_put(new_blob);
-			return -EINVAL;
-		}
-		if (expected_elem_size > 0 &&
-		    new_blob->length % expected_elem_size != 0) {
-			drm_property_blob_put(new_blob);
-			return -EINVAL;
-		}
-	}
-
-	*replaced |= drm_property_replace_blob(blob, new_blob);
-	drm_property_blob_put(new_blob);
-
-	return 0;
-}
-
 static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		struct drm_crtc_state *state, struct drm_property *property,
 		uint64_t val)
@@ -415,7 +382,7 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 	} else if (property == config->prop_vrr_enabled) {
 		state->vrr_enabled = val;
 	} else if (property == config->degamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		ret = drm_property_replace_blob_from_id(dev,
 					&state->degamma_lut,
 					val,
 					-1, sizeof(struct drm_color_lut),
@@ -423,7 +390,7 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		state->color_mgmt_changed |= replaced;
 		return ret;
 	} else if (property == config->ctm_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		ret = drm_property_replace_blob_from_id(dev,
 					&state->ctm,
 					val,
 					sizeof(struct drm_color_ctm), -1,
@@ -431,7 +398,7 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		state->color_mgmt_changed |= replaced;
 		return ret;
 	} else if (property == config->gamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		ret = drm_property_replace_blob_from_id(dev,
 					&state->gamma_lut,
 					val,
 					-1, sizeof(struct drm_color_lut),
@@ -454,7 +421,7 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		return crtc->funcs->atomic_set_property(crtc, state, property, val);
 	} else {
 		drm_dbg_atomic(crtc->dev,
-			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]]\n",
+			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]\n",
 			       crtc->base.id, crtc->name,
 			       property->base.id, property->name);
 		return -EINVAL;
@@ -489,8 +456,13 @@ drm_atomic_crtc_get_property(struct drm_crtc *crtc,
 		*val = state->scaling_filter;
 	else if (crtc->funcs->atomic_get_property)
 		return crtc->funcs->atomic_get_property(crtc, state, property, val);
-	else
+	else {
+		drm_dbg_atomic(dev,
+			       "[CRTC:%d:%s] unknown property [PROP:%d:%s]\n",
+			       crtc->base.id, crtc->name,
+			       property->base.id, property->name);
 		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -525,8 +497,12 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == config->prop_crtc_id) {
 		struct drm_crtc *crtc = drm_crtc_find(dev, file_priv, val);
 
-		if (val && !crtc)
+		if (val && !crtc) {
+			drm_dbg_atomic(dev,
+				       "[PROP:%d:%s] cannot find CRTC with ID %llu\n",
+				       property->base.id, property->name, val);
 			return -EACCES;
+		}
 		return drm_atomic_set_crtc_for_plane(state, crtc);
 	} else if (property == config->prop_crtc_x) {
 		state->crtc_x = U642I64(val);
@@ -563,7 +539,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->color_range_property) {
 		state->color_range = val;
 	} else if (property == config->prop_fb_damage_clips) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		ret = drm_property_replace_blob_from_id(dev,
 					&state->fb_damage_clips,
 					val,
 					-1,
@@ -577,7 +553,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 				property, val);
 	} else {
 		drm_dbg_atomic(plane->dev,
-			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]]\n",
+			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]\n",
 			       plane->base.id, plane->name,
 			       property->base.id, property->name);
 		return -EINVAL;
@@ -636,6 +612,10 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else {
+		drm_dbg_atomic(dev,
+			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]\n",
+			       plane->base.id, plane->name,
+			       property->base.id, property->name);
 		return -EINVAL;
 	}
 
@@ -677,14 +657,21 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 	if (property == config->prop_crtc_id) {
 		struct drm_crtc *crtc = drm_crtc_find(dev, file_priv, val);
 
-		if (val && !crtc)
+		if (val && !crtc) {
+			drm_dbg_atomic(dev,
+				       "[PROP:%d:%s] cannot find CRTC with ID %llu\n",
+				       property->base.id, property->name, val);
 			return -EACCES;
+		}
 		return drm_atomic_set_crtc_for_connector(state, crtc);
 	} else if (property == config->dpms_property) {
 		/* setting DPMS property requires special handling, which
 		 * is done in legacy setprop path for us.  Disallow (for
 		 * now?) atomic writes to DPMS property:
 		 */
+		drm_dbg_atomic(dev,
+			       "legacy [PROP:%d:%s] can only be set via legacy uAPI\n",
+			       property->base.id, property->name);
 		return -EINVAL;
 	} else if (property == config->tv_select_subconnector_property) {
 		state->tv.select_subconnector = val;
@@ -729,7 +716,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 		if (state->link_status != DRM_LINK_STATUS_GOOD)
 			state->link_status = val;
 	} else if (property == config->hdr_output_metadata_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		ret = drm_property_replace_blob_from_id(dev,
 				&state->hdr_output_metadata,
 				val,
 				sizeof(struct hdr_output_metadata), -1,
@@ -774,7 +761,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 				state, property, val);
 	} else {
 		drm_dbg_atomic(connector->dev,
-			       "[CONNECTOR:%d:%s] unknown property [PROP:%d:%s]]\n",
+			       "[CONNECTOR:%d:%s] unknown property [PROP:%d:%s]\n",
 			       connector->base.id, connector->name,
 			       property->base.id, property->name);
 		return -EINVAL;
@@ -856,6 +843,10 @@ drm_atomic_connector_get_property(struct drm_connector *connector,
 		return connector->funcs->atomic_get_property(connector,
 				state, property, val);
 	} else {
+		drm_dbg_atomic(dev,
+			       "[CONNECTOR:%d:%s] unknown property [PROP:%d:%s]\n",
+			       connector->base.id, connector->name,
+			       property->base.id, property->name);
 		return -EINVAL;
 	}
 
@@ -894,6 +885,7 @@ int drm_atomic_get_property(struct drm_mode_object *obj,
 		break;
 	}
 	default:
+		drm_dbg_atomic(dev, "[OBJECT:%d] has no properties\n", obj->id);
 		ret = -EINVAL;
 		break;
 	}
@@ -1030,6 +1022,7 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 		break;
 	}
 	default:
+		drm_dbg_atomic(prop->dev, "[OBJECT:%d] has no properties\n", obj->id);
 		ret = -EINVAL;
 		break;
 	}
@@ -1230,8 +1223,10 @@ static int prepare_signaling(struct drm_device *dev,
 	 * Having this flag means user mode pends on event which will never
 	 * reach due to lack of at least one CRTC for signaling
 	 */
-	if (c == 0 && (arg->flags & DRM_MODE_PAGE_FLIP_EVENT))
+	if (c == 0 && (arg->flags & DRM_MODE_PAGE_FLIP_EVENT)) {
+		drm_dbg_atomic(dev, "need at least one CRTC for DRM_MODE_PAGE_FLIP_EVENT");
 		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1364,11 +1359,13 @@ retry:
 
 		obj = drm_mode_object_find(dev, file_priv, obj_id, DRM_MODE_OBJECT_ANY);
 		if (!obj) {
+			drm_dbg_atomic(dev, "cannot find object ID %d", obj_id);
 			ret = -ENOENT;
 			goto out;
 		}
 
 		if (!obj->properties) {
+			drm_dbg_atomic(dev, "[OBJECT:%d] has no properties", obj_id);
 			drm_mode_object_put(obj);
 			ret = -ENOENT;
 			goto out;
@@ -1395,6 +1392,9 @@ retry:
 
 			prop = drm_mode_obj_find_prop_id(obj, prop_id);
 			if (!prop) {
+				drm_dbg_atomic(dev,
+					       "[OBJECT:%d] cannot find property ID %d",
+					       obj_id, prop_id);
 				drm_mode_object_put(obj);
 				ret = -ENOENT;
 				goto out;
