@@ -1,0 +1,36 @@
+6.5/features/backport-cs35l41:
+    bd78db32c34ab9076c41c75dc7dae998239b414f ("ALSA: hda: cs35l41: Consistently use dev_err_probe()")
+6.5/features/amd-staging-drm-next:
+    bf901afac5d5f36f706a119bb7054da13264f4e7 ("drm/amdkfd: Fix type of 'dbg_flags' in 'struct kfd_process'")
+6.5/features/acpi:
+    93962ea97e940b0a60cc2c8f8867b5f0beff9f68 ("ACPI: utils: Dynamically determine acpi_handle_list size")
+6.5/features/amd-drm-extra:
+    6381f39953eebf608ce35027f1439f79cebb9c1e ("Disable modes with >1200 MHz Pixel clocks when connected via dock")
+6.5/features/backlight-notif:
+    3e2b05d80cc41ba66f9c36a02188e0bb2c249e82 ("drivers: video: backlight: Disable backlight notification events.")
+6.5/features/btrfs-temp-fsid:
+    e399383a0dcf4dacb457c46f2e68210865247d74 ("btrfs: disable the seed feature for temp-fsid")
+6.5/features/gpu-reset:
+    5c6db04a3d4e36b35d6c056f0723957df8585f88 ("drm/amdgpu: schedule GPU reset event work function")
+6.5/features/hacks:
+    0453a88134c7f784702784e113a9c77de44c8138 ("(NOT-FOR-UPSTREAM) PM: suspend: Disable s2idle on Steam Deck")
+6.5/features/iio:
+    ad998aa236c74407960dd05979b9662f8e3b3573 ("iio: light: ltrf216a: Return floating point values")
+6.5/features/mm-soft-dirty-file:
+    c6a581f9afcd076c65a77578dd0d918df06a6ac7 ("mm: Use UFFD_WP to make per-pte soft dirty tracking work reliably.")
+6.5/features/quirks:
+    98708db22e362eeac00c0c9a6c3093d347b48993 ("PCI: Prevent xHCI driver from claiming AMD VanGogh USB3 DRD device")
+6.5/features/setup-gitlabci:
+    1668833408423cf5736b53d6f715e41830a827ba ("gitlab-ci: Enable hid-steam driver")
+6.5/features/steamdeck-mfd:
+    b1100d769da107ed920406d26dc40588e36bb79a ("mfd: steamdeck: Expose controller board power in sysfs")
+6.5/features/tcp-timewait:
+    1f28927d613dbfb470f3f26544ad086568481b83 ("tcp: Also use tcp_fin_timeout as TCP TIME_WAIT timeout for loopback connections")
+6.5/features/tsc:
+    64f90f6205a1344dd688bec423e62fdfad566a3a ("x86: revert extra time added to check for tsc wraps")
+6.5/features/usb:
+    6a15b681d69c81d9fc11080a8587e1725cde0c74 ("usb: dwc3: Fix "linux,extcon-name"")
+6.5/features/hid:
+    c97dea20840cfea4647ca82f0189edb0a778a67a ("HID: hid-steam: Make sure rumble work is canceled on removal")
+6.5/features/amd-color-mgmt:
+    90e3a855c922d0b8c4b18c886c5cf73223d69475 ("HACK: add KConfig to enable driver-specific color mgmt props")
